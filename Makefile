@@ -22,3 +22,5 @@ nageru: $(OBJS)
 
 mainwindow.o: mainwindow.cpp ui_mainwindow.cpp
 
+clean:
+	$(RM) $(OBJS) nageru ui_mainwindow.cpp chain-*.frag *.dot
