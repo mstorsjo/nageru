@@ -213,48 +213,17 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 #endif
 
 	eglBindAPI(EGL_OPENGL_API);
-	//QSurface *surface = create_surface();
 	QOpenGLContext *context = create_context();
 	if (!make_current(context, surface)) {
 		printf("oops\n");
 		exit(1);
 	}
-	printf("egl=%p\n", eglGetCurrentContext());
 
 	CHECK(init_movit("/usr/share/movit", MOVIT_DEBUG_ON));
-	printf("GPU texture subpixel precision: about %.1f bits\n",
-		log2(1.0f / movit_texel_subpixel_precision));
-	printf("Wrongly rounded x+0.48 or x+0.52 values: %d/510\n",
-		movit_num_wrongly_rounded);
-	if (movit_num_wrongly_rounded > 0) {
-		if (movit_shader_rounding_supported) {
-			printf("Rounding off in the shader to compensate.\n");
-		} else {
-			printf("No shader roundoff available; cannot compensate.\n");
-		}
-	}
-
-	//printf("egl_api=%d EGL_OPENGL_API=%d\n", epoxy_egl_get_current_gl_context_api(), EGL_OPENGL_API);
-	//exit(0);
-
 	check_error();
 
 	EffectChain chain(WIDTH, HEIGHT);
 	check_error();
-#if 0
-	glViewport(0, 0, WIDTH, HEIGHT);
-	check_error();
-
-	glMatrixMode(GL_PROJECTION);
-	check_error();
-	glLoadIdentity();
-	check_error();
-	glOrtho(0.0, 1.0, 0.0, 1.0, 0.0, 1.0);
-	check_error();
-
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-#endif
 
 	ImageFormat inout_format;
 	inout_format.color_space = COLORSPACE_sRGB;
@@ -274,18 +243,13 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 
 	input[0] = new YCbCrInput(inout_format, ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
 	chain.add_input(input[0]);
-	//if (NUM_CARDS == 2) {
-		input[1] = new YCbCrInput(inout_format, ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
-		chain.add_input(input[1]);
-	//}
-	//YCbCr422InterleavedInput *input = new YCbCr422InterleavedInput(inout_format, ycbcr_format, WIDTH, HEIGHT);
-	//YCbCr422InterleavedInput *input = new YCbCr422InterleavedInput(inout_format, ycbcr_format, 2, 1);
+	input[1] = new YCbCrInput(inout_format, ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
+	chain.add_input(input[1]);
 	Effect *resample_effect = chain.add_effect(new ResampleEffect(), input[0]);
 	Effect *padding_effect = chain.add_effect(new IntegralPaddingEffect());
 	float border_color[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 	CHECK(padding_effect->set_vec4("border_color", border_color));
 
-	//Effect *resample2_effect = chain.add_effect(new ResampleEffect(), input[1 % NUM_CARDS]);
 	Effect *resample2_effect = chain.add_effect(new ResampleEffect(), input[1]);
 	Effect *saturation_effect = chain.add_effect(new SaturationEffect());
 	CHECK(saturation_effect->set_float("saturation", 0.3f));
@@ -302,18 +266,6 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 	chain.set_output_origin(OUTPUT_ORIGIN_TOP_LEFT);
 	chain.finalize();
 
-#if 0
-	// generate a PBO to hold the data we read back with glReadPixels()
-	// (Intel/DRI goes into a slow path if we don't read to PBO)
-	GLuint pbo;
-	glGenBuffers(1, &pbo);
-	glBindBuffer(GL_PIXEL_PACK_BUFFER_ARB, pbo);
-	glBufferData(GL_PIXEL_PACK_BUFFER_ARB, WIDTH * HEIGHT * 4, NULL, GL_STREAM_READ);
-#endif
-
-	//make_hsv_wheel_texture();
-
-//	QSurface *create_surface(const QSurfaceFormat &format);
 	H264Encoder h264_encoder(surface2, WIDTH, HEIGHT, "test.mp4");
 
 	printf("Configuring first card...\n");
@@ -361,41 +313,19 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 	//chain.enable_phase_timing(true);
 
 	// Set up stuff for NV12 conversion.
-#if 0
-	PBOFrameAllocator nv12_frame_pool(WIDTH * HEIGHT * 3 / 2, /*num_frames=*/24,
-		GL_PIXEL_PACK_BUFFER_ARB, GL_MAP_READ_BIT | GL_MAP_COHERENT_BIT, 0);
-#endif
 	ResourcePool *resource_pool = chain.get_resource_pool();
-	//GLuint ycbcr_tex = resource_pool->create_2d_texture(GL_RGBA8, WIDTH, HEIGHT);
 	GLuint chroma_tex = resource_pool->create_2d_texture(GL_RG8, WIDTH, HEIGHT);
 
-#if 0
-	// Y shader.
-	string y_vert_shader = read_version_dependent_file("vs-y", "vert");
-	string y_frag_shader =
-		"#version 130 \n"
-		"in vec2 tc; \n"
-		"uniform sampler2D ycbcr_tex; \n"
-		"void main() { \n"
-		"    gl_FragColor = texture2D(ycbcr_tex, tc); \n"
-		"} \n";
-	GLuint y_program_num = resource_pool->compile_glsl_program(y_vert_shader, y_frag_shader);
-#endif
-
-#if 1
 	// Cb/Cr shader.
 	string cbcr_vert_shader = read_file("vs-cbcr.130.vert");
 	string cbcr_frag_shader =
 		"#version 130 \n"
 		"in vec2 tc0; \n"
-//		"in vec2 tc1; \n"
 		"uniform sampler2D cbcr_tex; \n"
 		"void main() { \n"
 		"    gl_FragColor = texture2D(cbcr_tex, tc0); \n"
-//		"    gl_FragColor.ba = texture2D(cbcr_tex, tc1).gb; \n"
 		"} \n";
 	GLuint cbcr_program_num = resource_pool->compile_glsl_program(cbcr_vert_shader, cbcr_frag_shader);
-#endif
 
 	GLuint vao;
 	glGenVertexArrays(1, &vao);
@@ -499,18 +429,6 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 			chain.render_to_fbo(ycbcr_fbo, WIDTH, HEIGHT);
 			resource_pool->release_fbo(ycbcr_fbo);
 		}
-		if (false) {
-			glViewport(0, 0, WIDTH, HEIGHT);
-			chain.render_to_screen();
-		}
-
-#if 0
-		PBOFrameAllocator::Frame nv12_frame = nv12_frame_pool.alloc_frame();
-		assert(nv12_frame.data != nullptr);  // should never happen... maybe?
-		GLuint pbo = (GLuint)(intptr_t)nv12_frame.userdata;
-		glBindBuffer(GL_PIXEL_PACK_BUFFER_ARB, pbo);
-		check_error();
-#endif
 
 		// Set up for extraction.
 		float vertices[] = {
@@ -521,41 +439,6 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 
 		glBindVertexArray(vao);
 		check_error();
-
-#if 0
-		// Extract Y.
-		GLuint y_fbo = resource_pool->create_fbo(y_tex);
-		glBindFramebuffer(GL_FRAMEBUFFER, y_fbo);
-		glViewport(0, 0, WIDTH, HEIGHT);
-		check_error();
-		{
-			glUseProgram(y_program_num);
-			check_error();
-		        glActiveTexture(GL_TEXTURE0);
-			check_error();
-			glBindTexture(GL_TEXTURE_2D, ycbcr_tex);
-			check_error();
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-			check_error();
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-			check_error();
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-			check_error();
-
-			GLuint position_vbo = fill_vertex_attribute(y_program_num, "position", 2, GL_FLOAT, sizeof(vertices), vertices);
-			GLuint texcoord_vbo = fill_vertex_attribute(y_program_num, "texcoord", 2, GL_FLOAT, sizeof(vertices), vertices);  // Same as vertices.
-
-			glDrawArrays(GL_TRIANGLES, 0, 3);
-			check_error();
-
-			cleanup_vertex_attribute(y_program_num, "position", position_vbo);
-			check_error();
-			cleanup_vertex_attribute(y_program_num, "texcoord", texcoord_vbo);
-			check_error();
-
-			resource_pool->release_fbo(y_fbo);
-		}
-#endif
 
 		// Extract Cb/Cr.
 		GLuint cbcr_fbo = resource_pool->create_fbo(cbcr_tex);
@@ -579,9 +462,7 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 			check_error();
 
 			float chroma_offset_0[] = { -0.5f / WIDTH, 0.0f };
-//			float chroma_offset_1[] = { +0.5f / WIDTH, 0.0f };
 			set_uniform_vec2(cbcr_program_num, "foo", "chroma_offset_0", chroma_offset_0);
-//			set_uniform_vec2(cbcr_program_num, "foo", "chroma_offset_1", chroma_offset_1);
 
 			GLuint position_vbo = fill_vertex_attribute(cbcr_program_num, "position", 2, GL_FLOAT, sizeof(vertices), vertices);
 			GLuint texcoord_vbo = fill_vertex_attribute(cbcr_program_num, "texcoord", 2, GL_FLOAT, sizeof(vertices), vertices);  // Same as vertices.
@@ -595,28 +476,13 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 			glUseProgram(0);
 			check_error();
 
-#if 0	
-			glReadPixels(0, 0, WIDTH/4, HEIGHT/2, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, BUFFER_OFFSET(WIDTH * HEIGHT));
-			check_error();
-#endif
-
 			fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);              
 			check_error();
 
 			resource_pool->release_fbo(cbcr_fbo);
 		}
 
-#if 0
-		glBindBuffer(GL_PIXEL_PACK_BUFFER_ARB, 0);
-#endif
-
-#if 1
 		h264_encoder.end_frame(fence);
-#else
-		nv12_frame_pool.release_frame(nv12_frame);
-#endif
-
-		//eglSwapBuffers(egl_display, egl_surface);
 
 
 #if 1
@@ -647,7 +513,6 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 #endif
 	}
 	glDeleteVertexArrays(1, &vao);
-	//resource_pool->release_glsl_program(y_program_num);
 	resource_pool->release_glsl_program(cbcr_program_num);
 	resource_pool->release_2d_texture(chroma_tex);
 	BMUSBCapture::stop_bm_thread();
