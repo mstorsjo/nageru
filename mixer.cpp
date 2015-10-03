@@ -202,11 +202,11 @@ void place_rectangle(Effect *resample_effect, Effect *padding_effect, float x0, 
 	CHECK(padding_effect->set_float("border_offset_top", y_subpixel_offset));
 	CHECK(padding_effect->set_float("border_offset_bottom", y1 - (floor(y0) + height)));
 }
-
-void mixer_thread(QSurface *surface, QSurface *surface2, QSurface *surface3, QSurface *surface4)
+	
+static bool quit = false;
+	
+void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3, QSurface *surface4)
 {
-	bool quit = false;
-
 	cards[0].surface = surface3;
 #if NUM_CARDS == 2
 	cards[1].surface = surface4;
@@ -651,4 +651,19 @@ void mixer_thread(QSurface *surface, QSurface *surface2, QSurface *surface3, QSu
 	resource_pool->release_glsl_program(cbcr_program_num);
 	resource_pool->release_2d_texture(chroma_tex);
 	BMUSBCapture::stop_bm_thread();
+}
+
+std::thread mixer_thread;
+
+void start_mixer(QSurface *surface, QSurface *surface2, QSurface *surface3, QSurface *surface4)
+{
+	mixer_thread = std::thread([surface, surface2, surface3, surface4]{
+		mixer_thread_func(surface, surface2, surface3, surface4);
+	});
+}
+
+void mixer_quit()
+{
+	quit = true;
+	mixer_thread.join();
 }

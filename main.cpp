@@ -4,6 +4,7 @@
 #include <QtGui/QOpenGLContext>
 
 #include "mainwindow.h"
+#include "mixer.h"
 
 int main(int argc, char *argv[])
 {
@@ -24,5 +25,7 @@ int main(int argc, char *argv[])
 	mainWindow.resize(mainWindow.sizeHint());
 	mainWindow.show();
 
-	return app.exec();
+	int rc = app.exec();
+	mixer_quit();
+	return rc;
 }

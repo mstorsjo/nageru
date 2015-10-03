@@ -37,9 +37,7 @@ void GLWidget::initializeGL()
 	QSurface *surface2 = create_surface(format());
 	QSurface *surface3 = create_surface(format());
 	QSurface *surface4 = create_surface(format());
-	std::thread([surface, surface2, surface3, surface4]{
-		mixer_thread(surface, surface2, surface3, surface4);
-	}).detach();
+	start_mixer(surface, surface2, surface3, surface4);
 }
 
 void GLWidget::paintGL()
