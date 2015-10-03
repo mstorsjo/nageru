@@ -15,9 +15,6 @@ public:
 	GLWidget(QWidget *parent = 0);
 	~GLWidget();
 
-	QSize minimumSizeHint() const Q_DECL_OVERRIDE;
-	QSize sizeHint() const Q_DECL_OVERRIDE;
-
 protected:
 	void initializeGL() Q_DECL_OVERRIDE;
 	void paintGL() Q_DECL_OVERRIDE;

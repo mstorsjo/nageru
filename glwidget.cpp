@@ -18,16 +18,6 @@ GLWidget::~GLWidget()
 {
 }
 
-QSize GLWidget::minimumSizeHint() const
-{
-	return QSize(50, 50);
-}
-
-QSize GLWidget::sizeHint() const
-{
-	return QSize(400, 400);
-}
-
 void GLWidget::initializeGL()
 {
 	printf("egl=%p glx=%p\n", eglGetCurrentContext(), glXGetCurrentContext());

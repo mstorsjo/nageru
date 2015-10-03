@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
 	QSurfaceFormat::setDefaultFormat(fmt);
 
 	MainWindow mainWindow;
-	mainWindow.resize(mainWindow.sizeHint());
+	mainWindow.resize(QSize(1280, 720));
 	mainWindow.show();
 
 	int rc = app.exec();
