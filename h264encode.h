@@ -63,7 +63,7 @@ public:
 	void 
 #endif
 	bool begin_frame(GLuint *y_tex, GLuint *cbcr_tex);
-	void end_frame(GLsync fence);
+	void end_frame(GLsync fence, const std::vector<FrameAllocator::Frame> &input_frames_to_release);
 
 private:
 	struct storage_task {
@@ -92,10 +92,12 @@ private:
 	//int frame_width, frame_height;
 	//int ;
 	int current_storage_frame;
-#if 0
-	std::map<int, std::pair<FrameAllocator::Frame, GLsync>> pending_frames;
-#endif
-	std::map<int, GLsync> pending_frames;
+
+	struct PendingFrame {
+		GLsync fence;
+		std::vector<FrameAllocator::Frame> input_frames_to_release;
+	};
+	std::map<int, PendingFrame> pending_frames;
 	QSurface *surface;
 
 	AVFormatContext *avctx;

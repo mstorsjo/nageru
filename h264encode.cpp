@@ -1875,11 +1875,11 @@ bool H264Encoder::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 	return true;
 }
 
-void H264Encoder::end_frame(GLsync fence)
+void H264Encoder::end_frame(GLsync fence, const std::vector<FrameAllocator::Frame> &input_frames_to_release)
 {
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
-		pending_frames[current_storage_frame++] = fence;
+		pending_frames[current_storage_frame++] = PendingFrame{ fence, input_frames_to_release };
 	}
 	frame_queue_nonempty.notify_one();
 }
@@ -1887,7 +1887,7 @@ void H264Encoder::end_frame(GLsync fence)
 void H264Encoder::copy_thread_func()
 {
 	for ( ;; ) {
-		GLsync fence;
+		PendingFrame frame;
 		encoding2display_order(current_frame_encoding, intra_period, intra_idr_period, ip_period,
 				       &current_frame_display, &current_frame_type);
 		if (current_frame_type == FRAME_IDR) {
@@ -1900,13 +1900,19 @@ void H264Encoder::copy_thread_func()
 			unique_lock<mutex> lock(frame_queue_mutex);
 			frame_queue_nonempty.wait(lock, [this]{ return copy_thread_should_quit || pending_frames.count(current_frame_display) != 0; });
 			if (copy_thread_should_quit) return;
-			fence = pending_frames[current_frame_display];
+			frame = pending_frames[current_frame_display];
 			pending_frames.erase(current_frame_display);
 		}
 
 		// Wait for the GPU to be done with the frame.
-		glClientWaitSync(fence, 0, 0);
-		glDeleteSync(fence);
+		glClientWaitSync(frame.fence, 0, 0);
+		glDeleteSync(frame.fence);
+
+		// Release back any input frames we needed to render this frame.
+		// (Actually, those that were needed one output frame ago.)
+		for (FrameAllocator::Frame input_frame : frame.input_frames_to_release) {
+			input_frame.owner->release_frame(input_frame);
+		}
 
 		// Unmap the image.
 		GLSurface *surf = &gl_surfaces[current_frame_display % SURFACE_NUM];

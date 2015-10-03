@@ -391,14 +391,19 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 				card->new_data_ready_changed.notify_all();
 			}
 		}
+
+		vector<FrameAllocator::Frame> input_frames_to_release;
 	
 		for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
 			CaptureCard *card = &card_copy[card_index];
 			if (!card->new_data_ready)
 				continue;
 
-			// FIXME: We could still be rendering from it! 
-			card->usb->get_video_frame_allocator()->release_frame(bmusb_current_rendering_frame[card_index]);
+			// Now we're done with the previous frame, so we can definitely
+			// release it when this is done rendering. (Actually, we could do
+			// it one frame earlier, but before we have a new one, there's no
+			// knowing when the current one is released.)
+			input_frames_to_release.push_back(bmusb_current_rendering_frame[card_index]);
 			bmusb_current_rendering_frame[card_index] = card->new_frame;
 
 			// The new texture might still be uploaded,
@@ -408,7 +413,7 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 			check_error();
 			glDeleteSync(card->new_data_ready_fence);
 			check_error();
-			GLint input_tex_pbo = (GLint)(intptr_t)bmusb_current_rendering_frame[card_index].userdata;
+			GLint input_tex_pbo = (GLint)(intptr_t)card->new_frame.userdata;
 			input[card_index]->set_pixel_data(0, (unsigned char *)BUFFER_OFFSET((1280 * 750 * 2 + 44) / 2 + 1280 * 25 + 22), input_tex_pbo);
 			input[card_index]->set_pixel_data(1, (unsigned char *)BUFFER_OFFSET(1280 * 25 + 22), input_tex_pbo);
 
@@ -482,7 +487,7 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 			resource_pool->release_fbo(cbcr_fbo);
 		}
 
-		h264_encoder.end_frame(fence);
+		h264_encoder.end_frame(fence, input_frames_to_release);
 
 
 #if 1
