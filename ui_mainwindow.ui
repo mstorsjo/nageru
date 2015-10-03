@@ -58,21 +58,21 @@
         <item>
          <layout class="QVBoxLayout" name="verticalLayout_2">
           <item>
-           <widget class="QPushButton" name="pushButton_4">
+           <widget class="QPushButton" name="cut_btn">
             <property name="text">
              <string>Cut</string>
             </property>
            </widget>
           </item>
           <item>
-           <widget class="QPushButton" name="pushButton_6">
+           <widget class="QPushButton" name="fade_btn">
             <property name="text">
              <string>Fade</string>
             </property>
            </widget>
           </item>
           <item>
-           <widget class="QPushButton" name="pushButton_5">
+           <widget class="QPushButton" name="wipe_btn">
             <property name="text">
              <string>Wipe</string>
             </property>
@@ -204,8 +204,6 @@
      </layout>
     </item>
    </layout>
-   <zorder>verticalLayoutWidget</zorder>
-   <zorder>me_preview</zorder>
   </widget>
   <widget class="QMenuBar" name="menuBar">
    <property name="geometry">
@@ -220,11 +218,11 @@
     <property name="title">
      <string>Video</string>
     </property>
-    <addaction name="actionExit"/>
+    <addaction name="exit_action"/>
    </widget>
    <addaction name="menuWhat"/>
   </widget>
-  <action name="actionExit">
+  <action name="exit_action">
    <property name="text">
     <string>Exit</string>
    </property>
