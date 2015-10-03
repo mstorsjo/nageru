@@ -384,7 +384,7 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 
 #if 1
 	// Cb/Cr shader.
-	string cbcr_vert_shader = read_version_dependent_file("vs-cbcr", "vert");
+	string cbcr_vert_shader = read_file("vs-cbcr.130.vert");
 	string cbcr_frag_shader =
 		"#version 130 \n"
 		"in vec2 tc0; \n"
