@@ -1740,10 +1740,9 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, const char *o
 		fprintf(stderr, "%s: avformat_new_stream() failed\n", output_filename);
 		exit(1);
 	}
-	avstream->time_base = AVRational{1, frame_rate};  // TODO
+	avstream->time_base = AVRational{1, frame_rate};
 	avstream->codec->width = width;
 	avstream->codec->height = height;
-	//avstream->codec->time_base = AVRational{1, 60};  // TODO
 	avstream->codec->time_base = AVRational{1, frame_rate};
 	avstream->codec->ticks_per_frame = 1;  // or 2?
 
