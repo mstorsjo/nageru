@@ -55,20 +55,6 @@ using namespace movit;
 using namespace std;
 using namespace std::placeholders;
 
-// shared between all EGL contexts
-EGLDisplay egl_display;
-EGLSurface egl_surface;
-EGLConfig ecfg;
-EGLint ctxattr[] = {
-	EGL_CONTEXT_CLIENT_VERSION, 2,
-	EGL_CONTEXT_MAJOR_VERSION_KHR, 3,
-	EGL_CONTEXT_MINOR_VERSION_KHR, 1,
-	//EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT_KHR,
-	EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR, EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT,
-	EGL_NONE
-};
-
-EGLConfig pbuffer_ecfg;
 
 std::mutex bmusb_mutex;  // protects <cards>
 
