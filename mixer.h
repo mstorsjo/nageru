@@ -54,8 +54,6 @@ private:
 	void place_rectangle(movit::Effect *resample_effect, movit::Effect *padding_effect, float x0, float y0, float x1, float y1);
 	void thread_func();
 
-	std::unique_ptr<PBOFrameAllocator> pbo_allocator1, pbo_allocator2;
-
 	QSurface *surface1, *surface2, *surface3, *surface4;
 	std::unique_ptr<movit::EffectChain> chain;
 	movit::ResourcePool *resource_pool;  // Owned by <chain>.
@@ -77,6 +75,7 @@ private:
 	std::mutex bmusb_mutex;
 	struct CaptureCard {
 		BMUSBCapture *usb;
+		std::unique_ptr<PBOFrameAllocator> frame_allocator;
 
 		// Threading stuff
 		bool thread_initialized = false;

@@ -103,18 +103,17 @@ Mixer::Mixer(QSurface *surface1, QSurface *surface2, QSurface *surface3, QSurfac
 
 	printf("Configuring first card...\n");
 	cards[0].usb = new BMUSBCapture(0x1edb, 0xbd3b);  // 0xbd4f
-	//cards[0].usb = new BMUSBCapture(0x1edb, 0xbd4f);
 	cards[0].usb->set_frame_callback(std::bind(&Mixer::bm_frame, this, 0, _1, _2, _3, _4, _5, _6, _7));
-	pbo_allocator1.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44));
-	cards[0].usb->set_video_frame_allocator(pbo_allocator1.get());
+	cards[0].frame_allocator.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44));
+	cards[0].usb->set_video_frame_allocator(cards[0].frame_allocator.get());
 	cards[0].usb->configure_card();
 
-	pbo_allocator2.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44));
 	if (NUM_CARDS == 2) {
 		printf("Configuring second card...\n");
 		cards[1].usb = new BMUSBCapture(0x1edb, 0xbd4f);
 		cards[1].usb->set_frame_callback(std::bind(&Mixer::bm_frame, this, 1, _1, _2, _3, _4, _5, _6, _7));
-		cards[1].usb->set_video_frame_allocator(pbo_allocator2.get());
+		cards[1].frame_allocator.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44));
+		cards[1].usb->set_video_frame_allocator(cards[1].frame_allocator.get());
 		cards[1].usb->configure_card();
 	}
 
