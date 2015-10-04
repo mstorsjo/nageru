@@ -121,14 +121,8 @@ Mixer::Mixer(QSurface *surface1, QSurface *surface2, QSurface *surface3, QSurfac
 
 	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
 		cards[card_index].usb->start_bm_capture();
-	}
-
-	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
-		bmusb_current_rendering_frame[card_index] =
-			cards[card_index].usb->get_video_frame_allocator()->alloc_frame();
-		GLint input_tex_pbo = (GLint)(intptr_t)bmusb_current_rendering_frame[card_index].userdata;
-		input[card_index]->set_pixel_data(0, nullptr, input_tex_pbo);
-		input[card_index]->set_pixel_data(1, nullptr, input_tex_pbo);
+		input[card_index]->set_pixel_data(0, nullptr, 0);
+		input[card_index]->set_pixel_data(1, nullptr, 0);
 	}
 
 	//chain->enable_phase_timing(true);
@@ -384,7 +378,9 @@ void Mixer::thread_func()
 			// release it when this is done rendering. (Actually, we could do
 			// it one frame earlier, but before we have a new one, there's no
 			// knowing when the current one is released.)
-			input_frames_to_release.push_back(bmusb_current_rendering_frame[card_index]);
+			if (bmusb_current_rendering_frame[card_index].owner != nullptr) {
+				input_frames_to_release.push_back(bmusb_current_rendering_frame[card_index]);
+			}
 			bmusb_current_rendering_frame[card_index] = card->new_frame;
 			check_error();
 
