@@ -18,7 +18,7 @@
 #include <movit/util.h>
 
 GLWidget::GLWidget(QWidget *parent)
-    : QOpenGLWidget(parent),
+    : QGLWidget(parent, global_share_widget),
       resource_pool(new movit::ResourcePool)
 {
 }
@@ -37,10 +37,11 @@ void GLWidget::initializeGL()
 		QMetaObject::invokeMethod(t, "update", Qt::AutoConnection);
 	});
 
-	QSurface *surface = create_surface(format());
-	QSurface *surface2 = create_surface(format());
-	QSurface *surface3 = create_surface(format());
-	QSurface *surface4 = create_surface(format());
+	QSurfaceFormat fmt = QGLFormat::toSurfaceFormat(format());
+	QSurface *surface = create_surface(fmt);
+	QSurface *surface2 = create_surface(fmt);
+	QSurface *surface3 = create_surface(fmt);
+	QSurface *surface4 = create_surface(fmt);
 	start_mixer(surface, surface2, surface3, surface4);
 
 	// Prepare the shaders to actually get the texture shown (ick).
@@ -87,6 +88,11 @@ void GLWidget::initializeGL()
 	glDeleteVertexArrays(1, &vao);
 	nheck_error();
 #endif
+}
+
+void GLWidget::resizeGL(int width, int height)
+{
+	glViewport(0, 0, width, height);
 }
 
 void GLWidget::paintGL()

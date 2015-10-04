@@ -1,13 +1,17 @@
 #ifndef GLWIDGET_H
 #define GLWIDGET_H
 
-#include <QOpenGLWidget>
+#include <QGLWidget>
 
 namespace movit {
 class ResourcePool;
 }
 
-class GLWidget : public QOpenGLWidget
+// Note: We use the older QGLWidget instead of QOpenGLWidget as it is
+// much faster (does not go through a separate offscreen rendering step).
+//
+// TODO: Consider if QOpenGLWindow could do what we want.
+class GLWidget : public QGLWidget
 {
 	Q_OBJECT
 
@@ -17,6 +21,7 @@ public:
 
 protected:
 	void initializeGL() override;
+	void resizeGL(int width, int height) override;
 	void paintGL() override;
 
 private:

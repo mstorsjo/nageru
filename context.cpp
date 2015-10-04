@@ -4,6 +4,9 @@
 #include <QOpenGLContext>
 #include <QOffscreenSurface>
 #include <QWindow>
+#include <QGLWidget>
+
+QGLWidget *global_share_widget = nullptr;
 
 QSurface *create_surface(const QSurfaceFormat &format)
 {
@@ -21,7 +24,7 @@ QSurface *create_surface(const QSurfaceFormat &format)
 QOpenGLContext *create_context()
 {
 	QOpenGLContext *context = new QOpenGLContext;
-	context->setShareContext(QOpenGLContext::globalShareContext());
+	context->setShareContext(global_share_widget->context()->contextHandle());
 	context->create();
 	return context;
 }

@@ -34,7 +34,7 @@
            <number>0</number>
           </property>
           <item>
-           <widget class="QOpenGLWidget" name="me_preview">
+           <widget class="QGLWidget" name="me_preview">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
               <horstretch>1</horstretch>
@@ -140,7 +140,7 @@
          <number>0</number>
         </property>
         <item>
-         <widget class="QOpenGLWidget" name="preview2">
+         <widget class="QGLWidget" name="preview2">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
             <horstretch>1</horstretch>
@@ -150,7 +150,7 @@
          </widget>
         </item>
         <item>
-         <widget class="QOpenGLWidget" name="preview1">
+         <widget class="QGLWidget" name="preview1">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
             <horstretch>1</horstretch>
@@ -160,7 +160,7 @@
          </widget>
         </item>
         <item>
-         <widget class="QOpenGLWidget" name="preview3">
+         <widget class="QGLWidget" name="preview3">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
             <horstretch>1</horstretch>
@@ -170,7 +170,7 @@
          </widget>
         </item>
         <item>
-         <widget class="QOpenGLWidget" name="preview4">
+         <widget class="QGLWidget" name="preview4">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
             <horstretch>1</horstretch>
@@ -232,7 +232,7 @@
  <customwidgets>
   <customwidget>
    <class>GLWidget</class>
-   <extends>QOpenGLWidget</extends>
+   <extends>QGLWidget</extends>
    <header>glwidget.h</header>
   </customwidget>
  </customwidgets>
