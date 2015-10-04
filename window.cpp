@@ -1,8 +1,9 @@
-#include "glwidget.h"
 #include "window.h"
-#include "mainwindow.h"
-#include <QApplication>
+
 #include <QBoxLayout>
+#include <QString>
+
+#include "glwidget.h"
 
 Window::Window(MainWindow *mw)
 	: main_window(mw)

@@ -8,6 +8,9 @@
 #include <functional>
 #include <mutex>
 #include <thread>
+#include <vector>
+
+struct libusb_transfer;
 
 // An interface for frame allocators; if you do not specify one
 // (using set_video_frame_allocator), a default one that pre-allocates

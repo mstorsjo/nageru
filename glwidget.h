@@ -1,7 +1,10 @@
 #ifndef GLWIDGET_H
 #define GLWIDGET_H
 
+#include <epoxy/gl.h>
 #include <QGLWidget>
+
+class QWidget;
 
 namespace movit {
 class ResourcePool;

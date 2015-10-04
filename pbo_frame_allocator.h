@@ -1,9 +1,9 @@
 #ifndef _PBO_FRAME_ALLOCATOR 
 #define _PBO_FRAME_ALLOCATOR 1
 
+#include <epoxy/gl.h>
 #include <mutex>
 #include <queue>
-#include <epoxy/gl.h>
 
 #include "bmusb.h"
 

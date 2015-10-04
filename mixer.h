@@ -1,9 +1,13 @@
 #ifndef _MIXER_H
 #define _MIXER_H 1
 
+#include <epoxy/gl.h>
+#include <functional>
+
 #include "ref_counted_gl_sync.h"
 
 class QSurface;
+
 void start_mixer(QSurface *surface, QSurface *surface2, QSurface *surface3, QSurface *surface4);
 void mixer_quit();
 

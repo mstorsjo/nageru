@@ -1,4 +1,9 @@
 #include "pbo_frame_allocator.h"
+
+#include <stdint.h>
+#include <stdio.h>
+#include <cstddef>
+
 #include "util.h"
 
 using namespace std;

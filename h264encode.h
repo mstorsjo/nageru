@@ -29,17 +29,22 @@
 extern "C" {
 #include <libavformat/avformat.h>
 }
-#include <epoxy/egl.h>
+#include <epoxy/gl.h>
 #include <atomic>
+#include <condition_variable>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <queue>
 #include <thread>
-#include <condition_variable>
+#include <vector>
 
-#include "pbo_frame_allocator.h"
+#include "bmusb.h"
 #include "context.h"
+#include "pbo_frame_allocator.h"
 #include "ref_counted_gl_sync.h"
+
+class QSurface;
 
 #define SURFACE_NUM 16 /* 16 surfaces for source YUV */
 

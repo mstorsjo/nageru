@@ -5,53 +5,48 @@
 #define WIDTH 1280
 #define HEIGHT 720
 
-#include <epoxy/gl.h>
-#include <epoxy/egl.h>
-
 #undef Success
 
+#include "mixer.h"
+
 #include <assert.h>
+#include <effect.h>
+#include <effect_chain.h>
+#include <effect_util.h>
+#include <epoxy/egl.h>
 #include <features.h>
-#include <math.h>
-#include <png.h>
-#include <pngconf.h>
-#include <setjmp.h>
+#include <image_format.h>
+#include <init.h>
+#include <overlay_effect.h>
+#include <padding_effect.h>
+#include <resample_effect.h>
+#include <resource_pool.h>
+#include <saturation_effect.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
 #include <time.h>
-#include <mutex>
-#include <queue>
-#include <condition_variable>
-
-#include <diffusion_effect.h>
-#include <effect.h>
-#include <effect_chain.h>
-#include <flat_input.h>
-#include <image_format.h>
-#include <init.h>
-#include <lift_gamma_gain_effect.h>
-#include <saturation_effect.h>
 #include <util.h>
-#include <ycbcr_input.h>
-#include <vignette_effect.h>
-#include <resample_effect.h>
-#include <resize_effect.h>
-#include <overlay_effect.h>
-#include <padding_effect.h>
 #include <white_balance_effect.h>
 #include <ycbcr.h>
-#include <resource_pool.h>
-#include <effect_util.h>
+#include <ycbcr_input.h>
+#include <cmath>
+#include <condition_variable>
+#include <cstddef>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
 
-#include <EGL/egl.h>
-
-#include "h264encode.h"
-#include "context.h"
 #include "bmusb.h"
+#include "context.h"
+#include "h264encode.h"
 #include "pbo_frame_allocator.h"
-#include "mixer.h"
 #include "ref_counted_gl_sync.h"
+
+class QOpenGLContext;
 
 using namespace movit;
 using namespace std;

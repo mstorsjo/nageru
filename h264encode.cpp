@@ -1,28 +1,34 @@
 //#include "sysdeps.h"
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <getopt.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/mman.h>
-#include <fcntl.h>
+#include "h264encode.h"
+
+#include <EGL/eglplatform.h>
+#include <X11/X.h>
+#include <X11/Xlib.h>
 #include <assert.h>
-#include <pthread.h>
-#include <errno.h>
-#include <math.h>
-#include <va/va.h>
-#include <va/va_x11.h>
-#include <va/va_enc_h264.h>
-#include <va/va_drmcommon.h>
+#include <epoxy/egl.h>
+#include <libavcodec/avcodec.h>
+#include <libavformat/avio.h>
+#include <libavutil/mathematics.h>
+#include <libavutil/rational.h>
 #include <libdrm/drm_fourcc.h>
-#include <thread>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <va/va.h>
+#include <va/va_drmcommon.h>
+#include <va/va_enc_h264.h>
+#include <va/va_x11.h>
+#include <condition_variable>
 #include <mutex>
 #include <queue>
-#include <condition_variable>
-#include "h264encode.h"
+#include <string>
+#include <thread>
+
+#include "context.h"
+
+class QOpenGLContext;
+class QSurface;
 
 #define CHECK_VASTATUS(va_status, func)                                 \
     if (va_status != VA_STATUS_SUCCESS) {                               \

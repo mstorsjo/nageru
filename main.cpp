@@ -1,13 +1,15 @@
+#include <stdlib.h>
 #include <epoxy/gl.h>
-#include <QApplication>
-#include <QDesktopWidget>
-#include <QSurfaceFormat>
-#include <QtGui/QOpenGLContext>
-#include <QGLFormat>
 
+#include <QApplication>
+#include <QCoreApplication>
+#include <QGL>
+#include <QSize>
+#include <QSurfaceFormat>
+
+#include "context.h"
 #include "mainwindow.h"
 #include "mixer.h"
-#include "context.h"
 
 int main(int argc, char *argv[])
 {

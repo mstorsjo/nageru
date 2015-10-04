@@ -6,29 +6,31 @@
 // 576p60/720p60/1080i60 works, 1080p60 does not work (firmware limitation)
 // Audio comes out as 8-channel 24-bit raw audio.
 
+#include <assert.h>
+#include <errno.h>
+#include <libusb.h>
+#include <netinet/in.h>
+#include <sched.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <libusb.h>
-#include <arpa/inet.h>
-#include <unistd.h>
 #include <string.h>
-#include <fcntl.h>
-#include <stdint.h>
-#include <assert.h>
 #ifdef __SSE2__
 #include <immintrin.h>
 #endif
+#include "bmusb.h"
+
 #include <algorithm>
+#include <atomic>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
-#include <deque>
-#include <utility>
 #include <mutex>
-#include <condition_variable>
-#include <thread>
 #include <stack>
-#include <atomic>
-#include "bmusb.h"
+#include <thread>
 
 using namespace std;
 using namespace std::placeholders;

@@ -1,21 +1,27 @@
-#include <qmetatype.h>
-#include <qdatastream.h>
-#include <qtextstream.h>
-#include <qcursor.h>
-#include <qcoreevent.h>
+#include <qmetatype.h>  // Needs to come before egl.h.
+#include <qdatastream.h>  // Needs to come before egl.h.
+#include <qtextstream.h>  // Needs to come before egl.h.
+#include <qcursor.h>  // Needs to come before egl.h.
+#include <qcoreevent.h>  // Needs to come before egl.h.
 #include <epoxy/gl.h>
 #include <epoxy/egl.h>
-#include "context.h"
+#include <QSurfaceFormat>
+
 #include "glwidget.h"
-#include "mixer.h"
-#include <QCoreApplication>
-#include <QGuiApplication>
-#include <QThread>
-#include <math.h>
-#include <thread>
+
 #include <movit/resource_pool.h>
+#include <stdio.h>
+
+#include "context.h"
+#include "mixer.h"
+#include "ref_counted_gl_sync.h"
+
+class QSurface;
+class QWidget;
+
 #undef Success
 #include <movit/util.h>
+#include <string>
 
 GLWidget::GLWidget(QWidget *parent)
     : QGLWidget(parent, global_share_widget),
