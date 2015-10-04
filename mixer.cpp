@@ -50,6 +50,111 @@ using namespace std::placeholders;
 
 Mixer *global_mixer = nullptr;
 
+Mixer::Mixer(QSurface *surface1, QSurface *surface2, QSurface *surface3, QSurface *surface4)
+	: surface1(surface1), surface2(surface2), surface3(surface3), surface4(surface4)
+{
+	CHECK(init_movit(MOVIT_SHADER_DIR, MOVIT_DEBUG_OFF));
+	check_error();
+
+	chain.reset(new EffectChain(WIDTH, HEIGHT));
+	check_error();
+
+	ImageFormat inout_format;
+	inout_format.color_space = COLORSPACE_sRGB;
+	inout_format.gamma_curve = GAMMA_sRGB;
+
+	YCbCrFormat ycbcr_format;
+	ycbcr_format.chroma_subsampling_x = 2;
+	ycbcr_format.chroma_subsampling_y = 1;
+	ycbcr_format.cb_x_position = 0.0;
+	ycbcr_format.cr_x_position = 0.0;
+	ycbcr_format.cb_y_position = 0.5;
+	ycbcr_format.cr_y_position = 0.5;
+	ycbcr_format.luma_coefficients = YCBCR_REC_601;
+	ycbcr_format.full_range = false;
+
+	input[0] = new YCbCrInput(inout_format, ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
+	chain->add_input(input[0]);
+	input[1] = new YCbCrInput(inout_format, ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
+	chain->add_input(input[1]);
+	resample_effect = chain->add_effect(new ResampleEffect(), input[0]);
+	padding_effect = chain->add_effect(new IntegralPaddingEffect());
+	float border_color[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+	CHECK(padding_effect->set_vec4("border_color", border_color));
+
+	resample2_effect = chain->add_effect(new ResampleEffect(), input[1]);
+	Effect *saturation_effect = chain->add_effect(new SaturationEffect());
+	CHECK(saturation_effect->set_float("saturation", 0.3f));
+	Effect *wb_effect = chain->add_effect(new WhiteBalanceEffect());
+	CHECK(wb_effect->set_float("output_color_temperature", 3500.0));
+	padding2_effect = chain->add_effect(new IntegralPaddingEffect());
+
+	chain->add_effect(new OverlayEffect(), padding_effect, padding2_effect);
+
+	ycbcr_format.chroma_subsampling_x = 1;
+
+	chain->add_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED);
+	chain->add_ycbcr_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED, ycbcr_format, YCBCR_OUTPUT_SPLIT_Y_AND_CBCR);
+	chain->set_dither_bits(8);
+	chain->set_output_origin(OUTPUT_ORIGIN_TOP_LEFT);
+	chain->finalize();
+
+	h264_encoder.reset(new H264Encoder(surface2, WIDTH, HEIGHT, "test.mp4"));
+
+	printf("Configuring first card...\n");
+	cards[0].usb = new BMUSBCapture(0x1edb, 0xbd3b);  // 0xbd4f
+	//cards[0].usb = new BMUSBCapture(0x1edb, 0xbd4f);
+	cards[0].usb->set_frame_callback(std::bind(&Mixer::bm_frame, this, 0, _1, _2, _3, _4, _5, _6, _7));
+	pbo_allocator1.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44));
+	cards[0].usb->set_video_frame_allocator(pbo_allocator1.get());
+	cards[0].usb->configure_card();
+
+	pbo_allocator2.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44));
+	if (NUM_CARDS == 2) {
+		printf("Configuring second card...\n");
+		cards[1].usb = new BMUSBCapture(0x1edb, 0xbd4f);
+		cards[1].usb->set_frame_callback(std::bind(&Mixer::bm_frame, this, 1, _1, _2, _3, _4, _5, _6, _7));
+		cards[1].usb->set_video_frame_allocator(pbo_allocator2.get());
+		cards[1].usb->configure_card();
+	}
+
+	BMUSBCapture::start_bm_thread();
+
+	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
+		cards[card_index].usb->start_bm_capture();
+	}
+
+	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
+		bmusb_current_rendering_frame[card_index] =
+			cards[card_index].usb->get_video_frame_allocator()->alloc_frame();
+		GLint input_tex_pbo = (GLint)(intptr_t)bmusb_current_rendering_frame[card_index].userdata;
+		input[card_index]->set_pixel_data(0, nullptr, input_tex_pbo);
+		input[card_index]->set_pixel_data(1, nullptr, input_tex_pbo);
+	}
+
+	//chain->enable_phase_timing(true);
+
+	// Set up stuff for NV12 conversion.
+	resource_pool = chain->get_resource_pool();
+
+	// Cb/Cr shader.
+	string cbcr_vert_shader = read_file("vs-cbcr.130.vert");
+	string cbcr_frag_shader =
+		"#version 130 \n"
+		"in vec2 tc0; \n"
+		"uniform sampler2D cbcr_tex; \n"
+		"void main() { \n"
+		"    gl_FragColor = texture2D(cbcr_tex, tc0); \n"
+		"} \n";
+	cbcr_program_num = resource_pool->compile_glsl_program(cbcr_vert_shader, cbcr_frag_shader);
+}
+
+Mixer::~Mixer()
+{
+	resource_pool->release_glsl_program(cbcr_program_num);
+	BMUSBCapture::stop_bm_thread();
+}
+
 void Mixer::bm_frame(int card_index, uint16_t timecode,
                      FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,
 		     FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format)
@@ -166,7 +271,7 @@ void Mixer::place_rectangle(Effect *resample_effect, Effect *padding_effect, flo
 	CHECK(padding_effect->set_float("border_offset_bottom", y1 - (floor(y0) + height)));
 }
 	
-void Mixer::thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3, QSurface *surface4)
+void Mixer::thread_func()
 {
 	cards[0].surface = surface3;
 #if NUM_CARDS == 2
@@ -175,118 +280,13 @@ void Mixer::thread_func(QSurface *surface, QSurface *surface2, QSurface *surface
 
 	eglBindAPI(EGL_OPENGL_API);
 	QOpenGLContext *context = create_context();
-	if (!make_current(context, surface)) {
+	if (!make_current(context, surface1)) {
 		printf("oops\n");
 		exit(1);
 	}
 
-	CHECK(init_movit(MOVIT_SHADER_DIR, MOVIT_DEBUG_OFF));
-	check_error();
-
-	EffectChain chain(WIDTH, HEIGHT);
-	check_error();
-
-	ImageFormat inout_format;
-	inout_format.color_space = COLORSPACE_sRGB;
-	inout_format.gamma_curve = GAMMA_sRGB;
-
-	YCbCrFormat ycbcr_format;
-	ycbcr_format.chroma_subsampling_x = 2;
-	ycbcr_format.chroma_subsampling_y = 1;
-	ycbcr_format.cb_x_position = 0.0;
-	ycbcr_format.cr_x_position = 0.0;
-	ycbcr_format.cb_y_position = 0.5;
-	ycbcr_format.cr_y_position = 0.5;
-	ycbcr_format.luma_coefficients = YCBCR_REC_601;
-	ycbcr_format.full_range = false;
-
-	YCbCrInput *input[NUM_CARDS];
-
-	input[0] = new YCbCrInput(inout_format, ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
-	chain.add_input(input[0]);
-	input[1] = new YCbCrInput(inout_format, ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
-	chain.add_input(input[1]);
-	Effect *resample_effect = chain.add_effect(new ResampleEffect(), input[0]);
-	Effect *padding_effect = chain.add_effect(new IntegralPaddingEffect());
-	float border_color[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-	CHECK(padding_effect->set_vec4("border_color", border_color));
-
-	Effect *resample2_effect = chain.add_effect(new ResampleEffect(), input[1]);
-	Effect *saturation_effect = chain.add_effect(new SaturationEffect());
-	CHECK(saturation_effect->set_float("saturation", 0.3f));
-	Effect *wb_effect = chain.add_effect(new WhiteBalanceEffect());
-	CHECK(wb_effect->set_float("output_color_temperature", 3500.0));
-	Effect *padding2_effect = chain.add_effect(new IntegralPaddingEffect());
-
-	chain.add_effect(new OverlayEffect(), padding_effect, padding2_effect);
-
-	ycbcr_format.chroma_subsampling_x = 1;
-
-	chain.add_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED);
-	chain.add_ycbcr_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED, ycbcr_format, YCBCR_OUTPUT_SPLIT_Y_AND_CBCR);
-	chain.set_dither_bits(8);
-	chain.set_output_origin(OUTPUT_ORIGIN_TOP_LEFT);
-	chain.finalize();
-
-	H264Encoder h264_encoder(surface2, WIDTH, HEIGHT, "test.mp4");
-
-	printf("Configuring first card...\n");
-	cards[0].usb = new BMUSBCapture(0x1edb, 0xbd3b);  // 0xbd4f
-	//cards[0].usb = new BMUSBCapture(0x1edb, 0xbd4f);
-	cards[0].usb->set_frame_callback(std::bind(&Mixer::bm_frame, this, 0, _1, _2, _3, _4, _5, _6, _7));
-	std::unique_ptr<PBOFrameAllocator> pbo_allocator1(new PBOFrameAllocator(1280 * 750 * 2 + 44));
-	cards[0].usb->set_video_frame_allocator(pbo_allocator1.get());
-	cards[0].usb->configure_card();
-
-	std::unique_ptr<PBOFrameAllocator> pbo_allocator2(new PBOFrameAllocator(1280 * 750 * 2 + 44));
-	if (NUM_CARDS == 2) {
-		printf("Configuring second card...\n");
-		cards[1].usb = new BMUSBCapture(0x1edb, 0xbd4f);
-		cards[1].usb->set_frame_callback(std::bind(&Mixer::bm_frame, this, 1, _1, _2, _3, _4, _5, _6, _7));
-		cards[1].usb->set_video_frame_allocator(pbo_allocator2.get());
-		cards[1].usb->configure_card();
-	}
-
-	BMUSBCapture::start_bm_thread();
-
-	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
-		cards[card_index].usb->start_bm_capture();
-	}
-
-	int frame = 0;
-#if _POSIX_C_SOURCE >= 199309L
 	struct timespec start, now;
 	clock_gettime(CLOCK_MONOTONIC, &start);
-#else
-	struct timeval start, now;
-	gettimeofday(&start, NULL);
-#endif
-
-	PBOFrameAllocator::Frame bmusb_current_rendering_frame[NUM_CARDS];
-	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
-		bmusb_current_rendering_frame[card_index] =
-			cards[card_index].usb->get_video_frame_allocator()->alloc_frame();
-		GLint input_tex_pbo = (GLint)(intptr_t)bmusb_current_rendering_frame[card_index].userdata;
-		input[card_index]->set_pixel_data(0, nullptr, input_tex_pbo);
-		input[card_index]->set_pixel_data(1, nullptr, input_tex_pbo);
-	}
-
-	//chain.enable_phase_timing(true);
-
-	// Set up stuff for NV12 conversion.
-	resource_pool = chain.get_resource_pool();
-	GLuint chroma_tex = resource_pool->create_2d_texture(GL_RG8, WIDTH, HEIGHT);
-
-	// Cb/Cr shader.
-	string cbcr_vert_shader = read_file("vs-cbcr.130.vert");
-	string cbcr_frag_shader =
-		"#version 130 \n"
-		"in vec2 tc0; \n"
-		"uniform sampler2D cbcr_tex; \n"
-		"void main() { \n"
-		"    gl_FragColor = texture2D(cbcr_tex, tc0); \n"
-		"} \n";
-	GLuint cbcr_program_num = resource_pool->compile_glsl_program(cbcr_vert_shader, cbcr_frag_shader);
 
 	GLuint vao;
 	glGenVertexArrays(1, &vao);
@@ -408,13 +408,15 @@ void Mixer::thread_func(QSurface *surface, QSurface *surface2, QSurface *surface
 		}
 
 		GLuint y_tex, cbcr_tex;
-		bool got_frame = h264_encoder.begin_frame(&y_tex, &cbcr_tex);
+		bool got_frame = h264_encoder->begin_frame(&y_tex, &cbcr_tex);
 		assert(got_frame);
+
+		GLuint chroma_tex = resource_pool->create_2d_texture(GL_RG8, WIDTH, HEIGHT);
 
 		// Render chain.
 		GLuint rgba_tex = resource_pool->create_2d_texture(GL_RGBA8, WIDTH, HEIGHT);
 		GLuint ycbcr_fbo = resource_pool->create_fbo(y_tex, chroma_tex, rgba_tex);
-		chain.render_to_fbo(ycbcr_fbo, WIDTH, HEIGHT);
+		chain->render_to_fbo(ycbcr_fbo, WIDTH, HEIGHT);
 		resource_pool->release_fbo(ycbcr_fbo);
 
 		// Set up for extraction.
@@ -466,8 +468,9 @@ void Mixer::thread_func(QSurface *surface, QSurface *surface2, QSurface *surface
 		check_error();
 
 		resource_pool->release_fbo(cbcr_fbo);
+		resource_pool->release_2d_texture(chroma_tex);
 
-		h264_encoder.end_frame(fence, input_frames_to_release);
+		h264_encoder->end_frame(fence, input_frames_to_release);
 
 		// Store this frame for display. Remove the ready frame if any
 		// (it was seemingly never used).
@@ -486,21 +489,14 @@ void Mixer::thread_func(QSurface *surface, QSurface *surface2, QSurface *surface
 			new_frame_ready_callback();
 		}
 
-#if 1
-#if _POSIX_C_SOURCE >= 199309L
 		clock_gettime(CLOCK_MONOTONIC, &now);
 		double elapsed = now.tv_sec - start.tv_sec +
 			1e-9 * (now.tv_nsec - start.tv_nsec);
-#else
-		gettimeofday(&now, NULL);
-		double elapsed = now.tv_sec - start.tv_sec +
-			1e-6 * (now.tv_usec - start.tv_usec);
-#endif
 		if (frame % 100 == 0) {
 			printf("%d frames in %.3f seconds = %.1f fps (%.1f ms/frame)\n",
 				frame, elapsed, frame / elapsed,
 				1e3 * elapsed / frame);
-		//	chain.print_phase_timing();
+		//	chain->print_phase_timing();
 		}
 
 		// Reset every 100 frames, so that local variations in frame times
@@ -511,13 +507,9 @@ void Mixer::thread_func(QSurface *surface, QSurface *surface2, QSurface *surface
 			frame = 0;
 			start = now;
 		}
-#endif
 		check_error();
 	}
 	glDeleteVertexArrays(1, &vao);
-	resource_pool->release_glsl_program(cbcr_program_num);
-	resource_pool->release_2d_texture(chroma_tex);
-	BMUSBCapture::stop_bm_thread();
 }
 
 bool Mixer::get_display_frame(DisplayFrame *frame)
@@ -551,11 +543,9 @@ void Mixer::set_frame_ready_fallback(new_frame_ready_callback_t callback)
 	has_new_frame_ready_callback = true;
 }
 
-void Mixer::start(QSurface *surface, QSurface *surface2, QSurface *surface3, QSurface *surface4)
+void Mixer::start()
 {
-	mixer_thread = std::thread([this, surface, surface2, surface3, surface4]{
-		thread_func(surface, surface2, surface3, surface4);
-	});
+	mixer_thread = std::thread(&Mixer::thread_func, this);
 }
 
 void Mixer::quit()

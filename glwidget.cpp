@@ -38,18 +38,16 @@ void GLWidget::initializeGL()
 	printf("egl context=%p\n", eglGetCurrentContext());
 	//printf("threads: %p %p\n", QThread::currentThread(), qGuiApp->thread());
 
-	GLWidget *t = this;
-	global_mixer->set_frame_ready_fallback([t]{
-		QMetaObject::invokeMethod(t, "update", Qt::AutoConnection);
-	});
-
 	QSurfaceFormat fmt = QGLFormat::toSurfaceFormat(format());
 	QSurface *surface = create_surface(fmt);
 	QSurface *surface2 = create_surface(fmt);
 	QSurface *surface3 = create_surface(fmt);
 	QSurface *surface4 = create_surface(fmt);
-	global_mixer = new Mixer;
-	global_mixer->start(surface, surface2, surface3, surface4);
+	global_mixer = new Mixer(surface, surface2, surface3, surface4);
+	global_mixer->set_frame_ready_fallback([this]{
+		QMetaObject::invokeMethod(this, "update", Qt::AutoConnection);
+	});
+	global_mixer->start();
 
 	// Prepare the shaders to actually get the texture shown (ick).
 	glDisable(GL_BLEND);
