@@ -205,7 +205,7 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 		exit(1);
 	}
 
-	CHECK(init_movit("/usr/share/movit", MOVIT_DEBUG_ON));
+	CHECK(init_movit(MOVIT_SHADER_DIR, MOVIT_DEBUG_OFF));
 	check_error();
 
 	EffectChain chain(WIDTH, HEIGHT);

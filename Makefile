@@ -1,5 +1,5 @@
 CXX=g++
-CXXFLAGS := -O2 -march=native -g -std=gnu++11 -Wall -Wno-deprecated-declarations -fPIC $(shell pkg-config --cflags Qt5Core Qt5Gui Qt5Widgets Qt5OpenGLExtensions libusb-1.0 movit) -pthread
+CXXFLAGS := -O2 -march=native -g -std=gnu++11 -Wall -Wno-deprecated-declarations -fPIC $(shell pkg-config --cflags Qt5Core Qt5Gui Qt5Widgets Qt5OpenGLExtensions libusb-1.0 movit) -pthread -DMOVIT_SHADER_DIR=\"$(shell pkg-config --variable=shaderdir movit)\"
 LDFLAGS=$(shell pkg-config --libs Qt5Core Qt5Gui Qt5Widgets Qt5OpenGLExtensions libusb-1.0 movit) -lEGL -lGL -pthread -lva -lva-drm -lva-x11 -lX11 -lavformat -lavcodec -lavutil
 
 # Qt objects
