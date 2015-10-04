@@ -38,12 +38,7 @@ void GLWidget::initializeGL()
 	printf("egl context=%p\n", eglGetCurrentContext());
 	//printf("threads: %p %p\n", QThread::currentThread(), qGuiApp->thread());
 
-	QSurfaceFormat fmt = QGLFormat::toSurfaceFormat(format());
-	QSurface *surface = create_surface(fmt);
-	QSurface *surface2 = create_surface(fmt);
-	QSurface *surface3 = create_surface(fmt);
-	QSurface *surface4 = create_surface(fmt);
-	global_mixer = new Mixer(surface, surface2, surface3, surface4);
+	global_mixer = new Mixer(QGLFormat::toSurfaceFormat(format()));
 	global_mixer->set_frame_ready_fallback([this]{
 		QMetaObject::invokeMethod(this, "update", Qt::AutoConnection);
 	});

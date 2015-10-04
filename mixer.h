@@ -19,13 +19,12 @@ namespace movit {
 class YCbCrInput;
 }
 class QOpenGLContext;
-class QSurface;
+class QSurfaceFormat;
 
 class Mixer {
 public:
-	// The surfaces are used for offscreen destinations for OpenGL contexts we need.
-	// TODO: Figure out something slightly more generic.
-	Mixer(QSurface *surface1, QSurface *surface2, QSurface *surface3, QSurface *surface4);
+	// The surface format is used for offscreen destinations for OpenGL contexts we need.
+	Mixer(const QSurfaceFormat &format);
 	~Mixer();
 	void start();
 	void quit();
@@ -55,7 +54,7 @@ private:
 	void thread_func();
 	void subsample_chroma(GLuint src_tex, GLuint dst_dst);
 
-	QSurface *surface1, *surface2, *surface3, *surface4;
+	QSurface *mixer_surface, *h264_encoder_surface;
 	std::unique_ptr<movit::EffectChain> chain;
 	movit::ResourcePool *resource_pool;  // Owned by <chain>.
 	GLuint cbcr_program_num;  // Owned by <resource_pool>.

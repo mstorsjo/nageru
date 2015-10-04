@@ -50,8 +50,9 @@ using namespace std::placeholders;
 
 Mixer *global_mixer = nullptr;
 
-Mixer::Mixer(QSurface *surface1, QSurface *surface2, QSurface *surface3, QSurface *surface4)
-	: surface1(surface1), surface2(surface2), surface3(surface3), surface4(surface4)
+Mixer::Mixer(const QSurfaceFormat &format)
+	: mixer_surface(create_surface(format)),
+	  h264_encoder_surface(create_surface(format))
 {
 	CHECK(init_movit(MOVIT_SHADER_DIR, MOVIT_DEBUG_OFF));
 	check_error();
@@ -99,7 +100,7 @@ Mixer::Mixer(QSurface *surface1, QSurface *surface2, QSurface *surface3, QSurfac
 	chain->set_output_origin(OUTPUT_ORIGIN_TOP_LEFT);
 	chain->finalize();
 
-	h264_encoder.reset(new H264Encoder(surface2, WIDTH, HEIGHT, "test.mp4"));
+	h264_encoder.reset(new H264Encoder(h264_encoder_surface, WIDTH, HEIGHT, "test.mp4"));
 
 	printf("Configuring first card...\n");
 	cards[0].usb = new BMUSBCapture(0x1edb, 0xbd3b);  // 0xbd4f
@@ -107,6 +108,10 @@ Mixer::Mixer(QSurface *surface1, QSurface *surface2, QSurface *surface3, QSurfac
 	cards[0].frame_allocator.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44));
 	cards[0].usb->set_video_frame_allocator(cards[0].frame_allocator.get());
 	cards[0].usb->configure_card();
+	cards[0].surface = create_surface(format);
+#if NUM_CARDS == 2
+	cards[1].surface = create_surface(format);
+#endif
 
 	if (NUM_CARDS == 2) {
 		printf("Configuring second card...\n");
@@ -266,14 +271,9 @@ void Mixer::place_rectangle(Effect *resample_effect, Effect *padding_effect, flo
 	
 void Mixer::thread_func()
 {
-	cards[0].surface = surface3;
-#if NUM_CARDS == 2
-	cards[1].surface = surface4;
-#endif
-
 	eglBindAPI(EGL_OPENGL_API);
 	QOpenGLContext *context = create_context();
-	if (!make_current(context, surface1)) {
+	if (!make_current(context, mixer_surface)) {
 		printf("oops\n");
 		exit(1);
 	}
