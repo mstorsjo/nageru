@@ -3,6 +3,10 @@
 
 #include <QOpenGLWidget>
 
+namespace movit {
+class ResourcePool;
+}
+
 class GLWidget : public QOpenGLWidget
 {
 	Q_OBJECT
@@ -12,8 +16,13 @@ public:
 	~GLWidget();
 
 protected:
-	void initializeGL() Q_DECL_OVERRIDE;
-	void paintGL() Q_DECL_OVERRIDE;
+	void initializeGL() override;
+	void paintGL() override;
+
+private:
+	movit::ResourcePool *resource_pool;
+	GLuint vao, program_num;
+
 };
 
 #endif

@@ -50,15 +50,22 @@
 #include "context.h"
 #include "bmusb.h"
 #include "pbo_frame_allocator.h"
+#include "mixer.h"
 #include "ref_counted_gl_sync.h"
 
 using namespace movit;
 using namespace std;
 using namespace std::placeholders;
 
+static float t = 0.0f;
 
-std::mutex bmusb_mutex;  // protects <cards>
+ResourcePool *resource_pool;
 
+std::mutex display_frame_mutex;
+DisplayFrame current_display_frame, ready_display_frame;  // protected by <frame_mutex>
+bool has_current_display_frame = false, has_ready_display_frame = false;  // protected by <frame_mutex>
+
+std::mutex bmusb_mutex;
 struct CaptureCard {
 	BMUSBCapture *usb;
 
@@ -72,7 +79,10 @@ struct CaptureCard {
 	GLsync new_data_ready_fence;  // Whether new_frame is ready for rendering.
 	std::condition_variable new_data_ready_changed;  // Set whenever new_data_ready is changed.
 };
-CaptureCard cards[NUM_CARDS];
+CaptureCard cards[NUM_CARDS];  // protected by <bmusb_mutex>
+
+new_frame_ready_callback_t new_frame_ready_callback;
+bool has_new_frame_ready_callback = false;
 
 void bm_frame(int card_index, uint16_t timecode,
               FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,
@@ -248,6 +258,7 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 
 	ycbcr_format.chroma_subsampling_x = 1;
 
+	chain.add_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED);
 	chain.add_ycbcr_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED, ycbcr_format, YCBCR_OUTPUT_SPLIT_Y_AND_CBCR);
 	chain.set_dither_bits(8);
 	chain.set_output_origin(OUTPUT_ORIGIN_TOP_LEFT);
@@ -300,7 +311,7 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 	//chain.enable_phase_timing(true);
 
 	// Set up stuff for NV12 conversion.
-	ResourcePool *resource_pool = chain.get_resource_pool();
+	resource_pool = chain.get_resource_pool();
 	GLuint chroma_tex = resource_pool->create_2d_texture(GL_RG8, WIDTH, HEIGHT);
 
 	// Cb/Cr shader.
@@ -416,11 +427,10 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 		assert(got_frame);
 
 		// Render chain.
-		{
-			GLuint ycbcr_fbo = resource_pool->create_fbo(y_tex, chroma_tex);
-			chain.render_to_fbo(ycbcr_fbo, WIDTH, HEIGHT);
-			resource_pool->release_fbo(ycbcr_fbo);
-		}
+		GLuint rgba_tex = resource_pool->create_2d_texture(GL_RGBA8, WIDTH, HEIGHT);
+		GLuint ycbcr_fbo = resource_pool->create_fbo(y_tex, chroma_tex, rgba_tex);
+		chain.render_to_fbo(ycbcr_fbo, WIDTH, HEIGHT);
+		resource_pool->release_fbo(ycbcr_fbo);
 
 		// Set up for extraction.
 		float vertices[] = {
@@ -461,19 +471,35 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 		check_error();
 
+		RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
+		check_error();
+
 		cleanup_vertex_attribute(cbcr_program_num, "position", position_vbo);
 		cleanup_vertex_attribute(cbcr_program_num, "texcoord", texcoord_vbo);
 
 		glUseProgram(0);
 		check_error();
 
-		RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
-		check_error();
-
 		resource_pool->release_fbo(cbcr_fbo);
 
 		h264_encoder.end_frame(fence, input_frames_to_release);
 
+		// Store this frame for display. Remove the ready frame if any
+		// (it was seemingly never used).
+		{
+			std::unique_lock<std::mutex> lock(display_frame_mutex);
+			if (has_ready_display_frame) {
+				resource_pool->release_2d_texture(ready_display_frame.texnum);
+				ready_display_frame.ready_fence.reset();
+			}
+			ready_display_frame.texnum = rgba_tex;
+			ready_display_frame.ready_fence = fence;
+			has_ready_display_frame = true;
+		}
+
+		if (has_new_frame_ready_callback) {
+			new_frame_ready_callback();
+		}
 
 #if 1
 #if _POSIX_C_SOURCE >= 199309L
@@ -506,6 +532,37 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 	resource_pool->release_glsl_program(cbcr_program_num);
 	resource_pool->release_2d_texture(chroma_tex);
 	BMUSBCapture::stop_bm_thread();
+}
+
+bool mixer_get_display_frame(DisplayFrame *frame)
+{
+	std::unique_lock<std::mutex> lock(display_frame_mutex);
+	if (!has_current_display_frame && !has_ready_display_frame) {
+		return false;
+	}
+
+	if (has_current_display_frame && has_ready_display_frame) {
+		// We have a new ready frame. Toss the current one.
+		resource_pool->release_2d_texture(current_display_frame.texnum);
+		current_display_frame.ready_fence.reset();
+		has_current_display_frame = false;
+	}
+	if (has_ready_display_frame) {
+		assert(!has_current_display_frame);
+		current_display_frame = ready_display_frame;
+		ready_display_frame.ready_fence.reset();  // Drop the refcount.
+		has_current_display_frame = true;
+		has_ready_display_frame = false;
+	}
+
+	*frame = current_display_frame;
+	return true;
+}
+
+void set_frame_ready_fallback(new_frame_ready_callback_t callback)
+{
+	new_frame_ready_callback = callback;
+	has_new_frame_ready_callback = true;
 }
 
 std::thread mixer_thread;
