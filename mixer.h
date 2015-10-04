@@ -36,15 +36,25 @@ public:
 	};
 	void cut(Source source);
 
+	enum Output {
+		OUTPUT_LIVE = 0,
+		NUM_OUTPUTS
+	};
+
 	struct DisplayFrame {
 		GLuint texnum;
 		RefCountedGLsync ready_fence;  // Asserted when the texture is done rendering.
 	};
 	// Implicitly frees the previous one if there's a new frame available.
-	bool get_display_frame(DisplayFrame *frame);
+	bool get_display_frame(Output output, DisplayFrame *frame) {
+		return output_channel[output].get_display_frame(frame);
+	}
 
 	typedef std::function<void()> new_frame_ready_callback_t;
-	void set_frame_ready_fallback(new_frame_ready_callback_t callback);
+	void set_frame_ready_callback(Output output, new_frame_ready_callback_t callback)
+	{
+		output_channel[output].set_frame_ready_callback(callback);
+	}
 
 private:
 	void bm_frame(int card_index, uint16_t timecode,
@@ -53,6 +63,7 @@ private:
 	void place_rectangle(movit::Effect *resample_effect, movit::Effect *padding_effect, float x0, float y0, float x1, float y1);
 	void thread_func();
 	void subsample_chroma(GLuint src_tex, GLuint dst_dst);
+	void release_display_frame(DisplayFrame *frame);
 
 	QSurface *mixer_surface, *h264_encoder_surface;
 	std::unique_ptr<movit::ResourcePool> resource_pool;
@@ -67,10 +78,6 @@ private:
 
 	Source current_source = SOURCE_INPUT1;
 	int frame = 0;
-
-	std::mutex display_frame_mutex;
-	DisplayFrame current_display_frame, ready_display_frame;  // protected by <frame_mutex>
-	bool has_current_display_frame = false, has_ready_display_frame = false;  // protected by <frame_mutex>
 
 	std::mutex bmusb_mutex;
 	struct CaptureCard {
@@ -91,8 +98,23 @@ private:
 
 	FrameAllocator::Frame bmusb_current_rendering_frame[NUM_CARDS];
 
-	new_frame_ready_callback_t new_frame_ready_callback;
-	bool has_new_frame_ready_callback = false;
+	class OutputChannel {
+	public:
+		void output_frame(GLuint tex, RefCountedGLsync fence);
+		bool get_display_frame(DisplayFrame *frame);
+		void set_frame_ready_callback(new_frame_ready_callback_t callback);
+
+	private:
+		friend class Mixer;
+
+		Mixer *parent = nullptr;  // Not owned.
+		std::mutex frame_mutex;
+		DisplayFrame current_frame, ready_frame;  // protected by <frame_mutex>
+		bool has_current_frame = false, has_ready_frame = false;  // protected by <frame_mutex>
+		new_frame_ready_callback_t new_frame_ready_callback;
+		bool has_new_frame_ready_callback = false;
+	};
+	OutputChannel output_channel[NUM_OUTPUTS];
 
 	std::thread mixer_thread;
 	bool should_quit = false;

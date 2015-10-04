@@ -58,26 +58,33 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	check_error();
 
 	resource_pool.reset(new ResourcePool);
-	chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
-	check_error();
+	output_channel[OUTPUT_LIVE].parent = this;
 
 	ImageFormat inout_format;
 	inout_format.color_space = COLORSPACE_sRGB;
 	inout_format.gamma_curve = GAMMA_sRGB;
 
-	YCbCrFormat ycbcr_format;
-	ycbcr_format.chroma_subsampling_x = 2;
-	ycbcr_format.chroma_subsampling_y = 1;
-	ycbcr_format.cb_x_position = 0.0;
-	ycbcr_format.cr_x_position = 0.0;
-	ycbcr_format.cb_y_position = 0.5;
-	ycbcr_format.cr_y_position = 0.5;
-	ycbcr_format.luma_coefficients = YCBCR_REC_601;
-	ycbcr_format.full_range = false;
+	YCbCrFormat input_ycbcr_format;
+	input_ycbcr_format.chroma_subsampling_x = 2;
+	input_ycbcr_format.chroma_subsampling_y = 1;
+	input_ycbcr_format.cb_x_position = 0.0;
+	input_ycbcr_format.cr_x_position = 0.0;
+	input_ycbcr_format.cb_y_position = 0.5;
+	input_ycbcr_format.cr_y_position = 0.5;
+	input_ycbcr_format.luma_coefficients = YCBCR_REC_601;
+	input_ycbcr_format.full_range = false;
 
-	input[0] = new YCbCrInput(inout_format, ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
+	YCbCrFormat output_ycbcr_format;
+	output_ycbcr_format.chroma_subsampling_x = 1;
+	output_ycbcr_format.chroma_subsampling_y = 1;
+	output_ycbcr_format.luma_coefficients = YCBCR_REC_601;
+	output_ycbcr_format.full_range = false;
+
+	chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
+	check_error();
+	input[0] = new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
 	chain->add_input(input[0]);
-	input[1] = new YCbCrInput(inout_format, ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
+	input[1] = new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
 	chain->add_input(input[1]);
 	resample_effect = chain->add_effect(new ResampleEffect(), input[0]);
 	padding_effect = chain->add_effect(new IntegralPaddingEffect());
@@ -93,10 +100,8 @@ Mixer::Mixer(const QSurfaceFormat &format)
 
 	chain->add_effect(new OverlayEffect(), padding_effect, padding2_effect);
 
-	ycbcr_format.chroma_subsampling_x = 1;
-
 	chain->add_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED);
-	chain->add_ycbcr_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED, ycbcr_format, YCBCR_OUTPUT_SPLIT_Y_AND_CBCR);
+	chain->add_ycbcr_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED, output_ycbcr_format, YCBCR_OUTPUT_SPLIT_Y_AND_CBCR);
 	chain->set_dither_bits(8);
 	chain->set_output_origin(OUTPUT_ORIGIN_TOP_LEFT);
 	chain->finalize();
@@ -416,22 +421,7 @@ void Mixer::thread_func()
 		check_error();
 		h264_encoder->end_frame(fence, input_frames_to_release);
 
-		// Store this frame for display. Remove the ready frame if any
-		// (it was seemingly never used).
-		{
-			std::unique_lock<std::mutex> lock(display_frame_mutex);
-			if (has_ready_display_frame) {
-				resource_pool->release_2d_texture(ready_display_frame.texnum);
-				ready_display_frame.ready_fence.reset();
-			}
-			ready_display_frame.texnum = rgba_tex;
-			ready_display_frame.ready_fence = fence;
-			has_ready_display_frame = true;
-		}
-
-		if (has_new_frame_ready_callback) {
-			new_frame_ready_callback();
-		}
+		output_channel[OUTPUT_LIVE].output_frame(rgba_tex, fence);
 
 		clock_gettime(CLOCK_MONOTONIC, &now);
 		double elapsed = now.tv_sec - start.tv_sec +
@@ -509,35 +499,11 @@ void Mixer::subsample_chroma(GLuint src_tex, GLuint dst_tex)
 	glDeleteVertexArrays(1, &vao);
 }
 
-bool Mixer::get_display_frame(DisplayFrame *frame)
+void Mixer::release_display_frame(DisplayFrame *frame)
 {
-	std::unique_lock<std::mutex> lock(display_frame_mutex);
-	if (!has_current_display_frame && !has_ready_display_frame) {
-		return false;
-	}
-
-	if (has_current_display_frame && has_ready_display_frame) {
-		// We have a new ready frame. Toss the current one.
-		resource_pool->release_2d_texture(current_display_frame.texnum);
-		current_display_frame.ready_fence.reset();
-		has_current_display_frame = false;
-	}
-	if (has_ready_display_frame) {
-		assert(!has_current_display_frame);
-		current_display_frame = ready_display_frame;
-		ready_display_frame.ready_fence.reset();  // Drop the refcount.
-		has_current_display_frame = true;
-		has_ready_display_frame = false;
-	}
-
-	*frame = current_display_frame;
-	return true;
-}
-
-void Mixer::set_frame_ready_fallback(new_frame_ready_callback_t callback)
-{
-	new_frame_ready_callback = callback;
-	has_new_frame_ready_callback = true;
+	resource_pool->release_2d_texture(frame->texnum);
+	frame->texnum = 0;
+	frame->ready_fence.reset();
 }
 
 void Mixer::start()
@@ -555,3 +521,53 @@ void Mixer::cut(Source source)
 {
 	current_source = source;
 }
+
+void Mixer::OutputChannel::output_frame(GLuint tex, RefCountedGLsync fence)
+{
+	// Store this frame for display. Remove the ready frame if any
+	// (it was seemingly never used).
+	{
+		std::unique_lock<std::mutex> lock(frame_mutex);
+		if (has_ready_frame) {
+			parent->release_display_frame(&ready_frame);
+		}
+		ready_frame.texnum = tex;
+		ready_frame.ready_fence = fence;
+		has_ready_frame = true;
+	}
+
+	if (has_new_frame_ready_callback) {
+		new_frame_ready_callback();
+	}
+}
+
+bool Mixer::OutputChannel::get_display_frame(DisplayFrame *frame)
+{
+	std::unique_lock<std::mutex> lock(frame_mutex);
+	if (!has_current_frame && !has_ready_frame) {
+		return false;
+	}
+
+	if (has_current_frame && has_ready_frame) {
+		// We have a new ready frame. Toss the current one.
+		parent->release_display_frame(&current_frame);
+		has_current_frame = false;
+	}
+	if (has_ready_frame) {
+		assert(!has_current_frame);
+		current_frame = ready_frame;
+		ready_frame.ready_fence.reset();  // Drop the refcount.
+		has_current_frame = true;
+		has_ready_frame = false;
+	}
+
+	*frame = current_frame;
+	return true;
+}
+
+void Mixer::OutputChannel::set_frame_ready_callback(Mixer::new_frame_ready_callback_t callback)
+{
+	new_frame_ready_callback = callback;
+	has_new_frame_ready_callback = true;
+}
+
