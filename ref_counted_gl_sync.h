@@ -6,7 +6,7 @@
 // places. (We could set two fences at the same time, but they are not an
 // unlimited hardware resource, so it would be a bit wasteful.)
 
-#include <GL/gl.h>
+#include <epoxy/gl.h>
 #include <memory>
 
 typedef std::shared_ptr<__GLsync> RefCountedGLsyncBase;

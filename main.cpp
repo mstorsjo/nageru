@@ -1,3 +1,4 @@
+#include <epoxy/gl.h>
 #include <QApplication>
 #include <QDesktopWidget>
 #include <QSurfaceFormat>
