@@ -55,8 +55,8 @@ private:
 	void subsample_chroma(GLuint src_tex, GLuint dst_dst);
 
 	QSurface *mixer_surface, *h264_encoder_surface;
+	std::unique_ptr<movit::ResourcePool> resource_pool;
 	std::unique_ptr<movit::EffectChain> chain;
-	movit::ResourcePool *resource_pool;  // Owned by <chain>.
 	GLuint cbcr_program_num;  // Owned by <resource_pool>.
 	std::unique_ptr<H264Encoder> h264_encoder;
 

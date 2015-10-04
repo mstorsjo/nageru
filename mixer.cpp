@@ -57,7 +57,8 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	CHECK(init_movit(MOVIT_SHADER_DIR, MOVIT_DEBUG_OFF));
 	check_error();
 
-	chain.reset(new EffectChain(WIDTH, HEIGHT));
+	resource_pool.reset(new ResourcePool);
+	chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
 	check_error();
 
 	ImageFormat inout_format;
@@ -133,7 +134,6 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	//chain->enable_phase_timing(true);
 
 	// Set up stuff for NV12 conversion.
-	resource_pool = chain->get_resource_pool();
 
 	// Cb/Cr shader.
 	string cbcr_vert_shader = read_file("vs-cbcr.130.vert");
