@@ -281,10 +281,6 @@ void Mixer::thread_func()
 	struct timespec start, now;
 	clock_gettime(CLOCK_MONOTONIC, &start);
 
-	GLuint vao;
-	glGenVertexArrays(1, &vao);
-	check_error();
-
 	while (!should_quit) {
 		++frame;
 
@@ -406,65 +402,18 @@ void Mixer::thread_func()
 		bool got_frame = h264_encoder->begin_frame(&y_tex, &cbcr_tex);
 		assert(got_frame);
 
-		GLuint chroma_tex = resource_pool->create_2d_texture(GL_RG8, WIDTH, HEIGHT);
-
 		// Render chain.
+		GLuint cbcr_full_tex = resource_pool->create_2d_texture(GL_RG8, WIDTH, HEIGHT);
 		GLuint rgba_tex = resource_pool->create_2d_texture(GL_RGBA8, WIDTH, HEIGHT);
-		GLuint ycbcr_fbo = resource_pool->create_fbo(y_tex, chroma_tex, rgba_tex);
-		chain->render_to_fbo(ycbcr_fbo, WIDTH, HEIGHT);
-		resource_pool->release_fbo(ycbcr_fbo);
+		GLuint fbo = resource_pool->create_fbo(y_tex, cbcr_full_tex, rgba_tex);
+		chain->render_to_fbo(fbo, WIDTH, HEIGHT);
+		resource_pool->release_fbo(fbo);
 
-		// Set up for extraction.
-		float vertices[] = {
-			0.0f, 2.0f,
-			0.0f, 0.0f,
-			2.0f, 0.0f
-		};
-
-		glBindVertexArray(vao);
-		check_error();
-
-		// Extract Cb/Cr.
-		GLuint cbcr_fbo = resource_pool->create_fbo(cbcr_tex);
-		glBindFramebuffer(GL_FRAMEBUFFER, cbcr_fbo);
-		glViewport(0, 0, WIDTH/2, HEIGHT/2);
-		check_error();
-
-		glUseProgram(cbcr_program_num);
-		check_error();
-
-		glActiveTexture(GL_TEXTURE0);
-		check_error();
-		glBindTexture(GL_TEXTURE_2D, chroma_tex);
-		check_error();
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		check_error();
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		check_error();
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		check_error();
-
-		float chroma_offset_0[] = { -0.5f / WIDTH, 0.0f };
-		set_uniform_vec2(cbcr_program_num, "foo", "chroma_offset_0", chroma_offset_0);
-
-		GLuint position_vbo = fill_vertex_attribute(cbcr_program_num, "position", 2, GL_FLOAT, sizeof(vertices), vertices);
-		GLuint texcoord_vbo = fill_vertex_attribute(cbcr_program_num, "texcoord", 2, GL_FLOAT, sizeof(vertices), vertices);  // Same as vertices.
-
-		glDrawArrays(GL_TRIANGLES, 0, 3);
-		check_error();
+		subsample_chroma(cbcr_full_tex, cbcr_tex);
+		resource_pool->release_2d_texture(cbcr_full_tex);
 
 		RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
 		check_error();
-
-		cleanup_vertex_attribute(cbcr_program_num, "position", position_vbo);
-		cleanup_vertex_attribute(cbcr_program_num, "texcoord", texcoord_vbo);
-
-		glUseProgram(0);
-		check_error();
-
-		resource_pool->release_fbo(cbcr_fbo);
-		resource_pool->release_2d_texture(chroma_tex);
-
 		h264_encoder->end_frame(fence, input_frames_to_release);
 
 		// Store this frame for display. Remove the ready frame if any
@@ -504,6 +453,59 @@ void Mixer::thread_func()
 		}
 		check_error();
 	}
+}
+
+void Mixer::subsample_chroma(GLuint src_tex, GLuint dst_tex)
+{
+	GLuint vao;
+	glGenVertexArrays(1, &vao);
+	check_error();
+
+	float vertices[] = {
+		0.0f, 2.0f,
+		0.0f, 0.0f,
+		2.0f, 0.0f
+	};
+
+	glBindVertexArray(vao);
+	check_error();
+
+	// Extract Cb/Cr.
+	GLuint fbo = resource_pool->create_fbo(dst_tex);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glViewport(0, 0, WIDTH/2, HEIGHT/2);
+	check_error();
+
+	glUseProgram(cbcr_program_num);
+	check_error();
+
+	glActiveTexture(GL_TEXTURE0);
+	check_error();
+	glBindTexture(GL_TEXTURE_2D, src_tex);
+	check_error();
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	check_error();
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	check_error();
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	check_error();
+
+	float chroma_offset_0[] = { -0.5f / WIDTH, 0.0f };
+	set_uniform_vec2(cbcr_program_num, "foo", "chroma_offset_0", chroma_offset_0);
+
+	GLuint position_vbo = fill_vertex_attribute(cbcr_program_num, "position", 2, GL_FLOAT, sizeof(vertices), vertices);
+	GLuint texcoord_vbo = fill_vertex_attribute(cbcr_program_num, "texcoord", 2, GL_FLOAT, sizeof(vertices), vertices);  // Same as vertices.
+
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	check_error();
+
+	cleanup_vertex_attribute(cbcr_program_num, "position", position_vbo);
+	cleanup_vertex_attribute(cbcr_program_num, "texcoord", texcoord_vbo);
+
+	glUseProgram(0);
+	check_error();
+
+	resource_pool->release_fbo(fbo);
 	glDeleteVertexArrays(1, &vao);
 }
 

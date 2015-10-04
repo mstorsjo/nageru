@@ -53,6 +53,7 @@ private:
 		FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format);
 	void place_rectangle(movit::Effect *resample_effect, movit::Effect *padding_effect, float x0, float y0, float x1, float y1);
 	void thread_func();
+	void subsample_chroma(GLuint src_tex, GLuint dst_dst);
 
 	QSurface *surface1, *surface2, *surface3, *surface4;
 	std::unique_ptr<movit::EffectChain> chain;
