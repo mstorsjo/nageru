@@ -19,5 +19,5 @@ MainWindow::MainWindow()
 void MainWindow::cut()
 {
 	static int i = 0;
-	mixer_cut(Source((++i) % 3));
+	global_mixer->cut(Mixer::Source((++i) % 3));
 }

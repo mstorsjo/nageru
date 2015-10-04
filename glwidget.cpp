@@ -39,7 +39,7 @@ void GLWidget::initializeGL()
 	//printf("threads: %p %p\n", QThread::currentThread(), qGuiApp->thread());
 
 	GLWidget *t = this;
-	set_frame_ready_fallback([t]{
+	global_mixer->set_frame_ready_fallback([t]{
 		QMetaObject::invokeMethod(t, "update", Qt::AutoConnection);
 	});
 
@@ -48,7 +48,8 @@ void GLWidget::initializeGL()
 	QSurface *surface2 = create_surface(fmt);
 	QSurface *surface3 = create_surface(fmt);
 	QSurface *surface4 = create_surface(fmt);
-	start_mixer(surface, surface2, surface3, surface4);
+	global_mixer = new Mixer;
+	global_mixer->start(surface, surface2, surface3, surface4);
 
 	// Prepare the shaders to actually get the texture shown (ick).
 	glDisable(GL_BLEND);
@@ -103,8 +104,8 @@ void GLWidget::resizeGL(int width, int height)
 
 void GLWidget::paintGL()
 {
-	DisplayFrame frame;
-	if (!mixer_get_display_frame(&frame)) {
+	Mixer::DisplayFrame frame;
+	if (!global_mixer->get_display_frame(&frame)) {
 		glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		return;

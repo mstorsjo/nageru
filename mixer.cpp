@@ -1,7 +1,3 @@
-#define GL_GLEXT_PROTOTYPES 1
-#define NO_SDL_GLEXT 1
-#define NUM_CARDS 2
-
 #define WIDTH 1280
 #define HEIGHT 720
 
@@ -52,36 +48,11 @@ using namespace movit;
 using namespace std;
 using namespace std::placeholders;
 
-Source current_source = SOURCE_INPUT1;
+Mixer *global_mixer = nullptr;
 
-ResourcePool *resource_pool;
-
-std::mutex display_frame_mutex;
-DisplayFrame current_display_frame, ready_display_frame;  // protected by <frame_mutex>
-bool has_current_display_frame = false, has_ready_display_frame = false;  // protected by <frame_mutex>
-
-std::mutex bmusb_mutex;
-struct CaptureCard {
-	BMUSBCapture *usb;
-
-	// Threading stuff
-	bool thread_initialized;
-	QSurface *surface;
-	QOpenGLContext *context;
-
-	bool new_data_ready;  // Whether new_frame contains anything.
-	PBOFrameAllocator::Frame new_frame;
-	GLsync new_data_ready_fence;  // Whether new_frame is ready for rendering.
-	std::condition_variable new_data_ready_changed;  // Set whenever new_data_ready is changed.
-};
-CaptureCard cards[NUM_CARDS];  // protected by <bmusb_mutex>
-
-new_frame_ready_callback_t new_frame_ready_callback;
-bool has_new_frame_ready_callback = false;
-
-void bm_frame(int card_index, uint16_t timecode,
-              FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,
-	      FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format)
+void Mixer::bm_frame(int card_index, uint16_t timecode,
+                     FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,
+		     FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format)
 {
 	CaptureCard *card = &cards[card_index];
 	if (!card->thread_initialized) {
@@ -133,7 +104,7 @@ void bm_frame(int card_index, uint16_t timecode,
         card->usb->get_audio_frame_allocator()->release_frame(audio_frame);
 }
 	
-void place_rectangle(Effect *resample_effect, Effect *padding_effect, float x0, float y0, float x1, float y1)
+void Mixer::place_rectangle(Effect *resample_effect, Effect *padding_effect, float x0, float y0, float x1, float y1)
 {
 	float srcx0 = 0.0f;
 	float srcx1 = 1.0f;
@@ -195,9 +166,7 @@ void place_rectangle(Effect *resample_effect, Effect *padding_effect, float x0, 
 	CHECK(padding_effect->set_float("border_offset_bottom", y1 - (floor(y0) + height)));
 }
 	
-static bool quit = false;
-	
-void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3, QSurface *surface4)
+void Mixer::thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3, QSurface *surface4)
 {
 	cards[0].surface = surface3;
 #if NUM_CARDS == 2
@@ -264,7 +233,7 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 	printf("Configuring first card...\n");
 	cards[0].usb = new BMUSBCapture(0x1edb, 0xbd3b);  // 0xbd4f
 	//cards[0].usb = new BMUSBCapture(0x1edb, 0xbd4f);
-	cards[0].usb->set_frame_callback(std::bind(bm_frame, 0, _1, _2, _3, _4, _5, _6, _7));
+	cards[0].usb->set_frame_callback(std::bind(&Mixer::bm_frame, this, 0, _1, _2, _3, _4, _5, _6, _7));
 	std::unique_ptr<PBOFrameAllocator> pbo_allocator1(new PBOFrameAllocator(1280 * 750 * 2 + 44));
 	cards[0].usb->set_video_frame_allocator(pbo_allocator1.get());
 	cards[0].usb->configure_card();
@@ -273,7 +242,7 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 	if (NUM_CARDS == 2) {
 		printf("Configuring second card...\n");
 		cards[1].usb = new BMUSBCapture(0x1edb, 0xbd4f);
-		cards[1].usb->set_frame_callback(std::bind(bm_frame, 1, _1, _2, _3, _4, _5, _6, _7));
+		cards[1].usb->set_frame_callback(std::bind(&Mixer::bm_frame, this, 1, _1, _2, _3, _4, _5, _6, _7));
 		cards[1].usb->set_video_frame_allocator(pbo_allocator2.get());
 		cards[1].usb->configure_card();
 	}
@@ -323,7 +292,7 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 	glGenVertexArrays(1, &vao);
 	check_error();
 
-	while (!quit) {
+	while (!should_quit) {
 		++frame;
 
 		//int width0 = lrintf(848 * (1.0 + 0.2 * sin(frame * 0.02)));
@@ -392,7 +361,7 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 
 			// The first card is the master timer, so wait for it to have a new frame.
 			// TODO: Make configurable, and with a timeout.
-			cards[0].new_data_ready_changed.wait(lock, []{ return cards[0].new_data_ready; });
+			cards[0].new_data_ready_changed.wait(lock, [this]{ return cards[0].new_data_ready; });
 
 			for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
 				CaptureCard *card = &cards[card_index];
@@ -551,7 +520,7 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 	BMUSBCapture::stop_bm_thread();
 }
 
-bool mixer_get_display_frame(DisplayFrame *frame)
+bool Mixer::get_display_frame(DisplayFrame *frame)
 {
 	std::unique_lock<std::mutex> lock(display_frame_mutex);
 	if (!has_current_display_frame && !has_ready_display_frame) {
@@ -576,28 +545,26 @@ bool mixer_get_display_frame(DisplayFrame *frame)
 	return true;
 }
 
-void set_frame_ready_fallback(new_frame_ready_callback_t callback)
+void Mixer::set_frame_ready_fallback(new_frame_ready_callback_t callback)
 {
 	new_frame_ready_callback = callback;
 	has_new_frame_ready_callback = true;
 }
 
-std::thread mixer_thread;
-
-void start_mixer(QSurface *surface, QSurface *surface2, QSurface *surface3, QSurface *surface4)
+void Mixer::start(QSurface *surface, QSurface *surface2, QSurface *surface3, QSurface *surface4)
 {
-	mixer_thread = std::thread([surface, surface2, surface3, surface4]{
-		mixer_thread_func(surface, surface2, surface3, surface4);
+	mixer_thread = std::thread([this, surface, surface2, surface3, surface4]{
+		thread_func(surface, surface2, surface3, surface4);
 	});
 }
 
-void mixer_quit()
+void Mixer::quit()
 {
-	quit = true;
+	should_quit = true;
 	mixer_thread.join();
 }
 
-void mixer_cut(Source source)
+void Mixer::cut(Source source)
 {
 	current_source = source;
 }
