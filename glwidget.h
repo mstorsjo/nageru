@@ -22,7 +22,7 @@ protected:
 private:
 	movit::ResourcePool *resource_pool;
 	GLuint vao, program_num;
-
+	GLuint position_vbo, texcoord_vbo;
 };
 
 #endif

@@ -76,8 +76,8 @@ void GLWidget::initializeGL()
 	};
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
-	GLuint position_vbo = movit::fill_vertex_attribute(program_num, "position", 2, GL_FLOAT, sizeof(vertices), vertices);
-	GLuint texcoord_vbo = movit::fill_vertex_attribute(program_num, "texcoord", 2, GL_FLOAT, sizeof(vertices), vertices);  // Same as vertices.
+	position_vbo = movit::fill_vertex_attribute(program_num, "position", 2, GL_FLOAT, sizeof(vertices), vertices);
+	texcoord_vbo = movit::fill_vertex_attribute(program_num, "texcoord", 2, GL_FLOAT, sizeof(vertices), vertices);  // Same as vertices.
 
 #if 0
 	// Cleanup.
