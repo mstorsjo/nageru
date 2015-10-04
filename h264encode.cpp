@@ -1874,7 +1874,7 @@ bool H264Encoder::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 	return true;
 }
 
-void H264Encoder::end_frame(GLsync fence, const std::vector<FrameAllocator::Frame> &input_frames_to_release)
+void H264Encoder::end_frame(RefCountedGLsync fence, const std::vector<FrameAllocator::Frame> &input_frames_to_release)
 {
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
@@ -1904,8 +1904,7 @@ void H264Encoder::copy_thread_func()
 		}
 
 		// Wait for the GPU to be done with the frame.
-		glClientWaitSync(frame.fence, 0, 0);
-		glDeleteSync(frame.fence);
+		glClientWaitSync(frame.fence.get(), 0, 0);
 
 		// Release back any input frames we needed to render this frame.
 		// (Actually, those that were needed one output frame ago.)

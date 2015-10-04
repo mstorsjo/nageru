@@ -35,13 +35,11 @@ extern "C" {
 #include <memory>
 #include <mutex>
 #include <thread>
-#include <thread>
-#include <thread>
-#include <thread>
 #include <condition_variable>
 
 #include "pbo_frame_allocator.h"
 #include "context.h"
+#include "ref_counted_gl_sync.h"
 
 #define SURFACE_NUM 16 /* 16 surfaces for source YUV */
 
@@ -63,7 +61,7 @@ public:
 	void 
 #endif
 	bool begin_frame(GLuint *y_tex, GLuint *cbcr_tex);
-	void end_frame(GLsync fence, const std::vector<FrameAllocator::Frame> &input_frames_to_release);
+	void end_frame(RefCountedGLsync fence, const std::vector<FrameAllocator::Frame> &input_frames_to_release);
 
 private:
 	struct storage_task {
@@ -94,7 +92,7 @@ private:
 	int current_storage_frame;
 
 	struct PendingFrame {
-		GLsync fence;
+		RefCountedGLsync fence;
 		std::vector<FrameAllocator::Frame> input_frames_to_release;
 	};
 	std::map<int, PendingFrame> pending_frames;

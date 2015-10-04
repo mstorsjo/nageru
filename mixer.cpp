@@ -50,6 +50,7 @@
 #include "context.h"
 #include "bmusb.h"
 #include "pbo_frame_allocator.h"
+#include "ref_counted_gl_sync.h"
 
 using namespace movit;
 using namespace std;
@@ -436,42 +437,40 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 		glBindFramebuffer(GL_FRAMEBUFFER, cbcr_fbo);
 		glViewport(0, 0, WIDTH/2, HEIGHT/2);
 		check_error();
-		GLsync fence;
-		{
-			glUseProgram(cbcr_program_num);
-			check_error();
 
-		        glActiveTexture(GL_TEXTURE0);
-			check_error();
-			glBindTexture(GL_TEXTURE_2D, chroma_tex);
-			check_error();
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-			check_error();
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-			check_error();
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-			check_error();
+		glUseProgram(cbcr_program_num);
+		check_error();
 
-			float chroma_offset_0[] = { -0.5f / WIDTH, 0.0f };
-			set_uniform_vec2(cbcr_program_num, "foo", "chroma_offset_0", chroma_offset_0);
+		glActiveTexture(GL_TEXTURE0);
+		check_error();
+		glBindTexture(GL_TEXTURE_2D, chroma_tex);
+		check_error();
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		check_error();
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		check_error();
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		check_error();
 
-			GLuint position_vbo = fill_vertex_attribute(cbcr_program_num, "position", 2, GL_FLOAT, sizeof(vertices), vertices);
-			GLuint texcoord_vbo = fill_vertex_attribute(cbcr_program_num, "texcoord", 2, GL_FLOAT, sizeof(vertices), vertices);  // Same as vertices.
+		float chroma_offset_0[] = { -0.5f / WIDTH, 0.0f };
+		set_uniform_vec2(cbcr_program_num, "foo", "chroma_offset_0", chroma_offset_0);
 
-			glDrawArrays(GL_TRIANGLES, 0, 3);
-			check_error();
+		GLuint position_vbo = fill_vertex_attribute(cbcr_program_num, "position", 2, GL_FLOAT, sizeof(vertices), vertices);
+		GLuint texcoord_vbo = fill_vertex_attribute(cbcr_program_num, "texcoord", 2, GL_FLOAT, sizeof(vertices), vertices);  // Same as vertices.
 
-			cleanup_vertex_attribute(cbcr_program_num, "position", position_vbo);
-			cleanup_vertex_attribute(cbcr_program_num, "texcoord", texcoord_vbo);
+		glDrawArrays(GL_TRIANGLES, 0, 3);
+		check_error();
 
-			glUseProgram(0);
-			check_error();
+		cleanup_vertex_attribute(cbcr_program_num, "position", position_vbo);
+		cleanup_vertex_attribute(cbcr_program_num, "texcoord", texcoord_vbo);
 
-			fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);              
-			check_error();
+		glUseProgram(0);
+		check_error();
 
-			resource_pool->release_fbo(cbcr_fbo);
-		}
+		RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
+		check_error();
+
+		resource_pool->release_fbo(cbcr_fbo);
 
 		h264_encoder.end_frame(fence, input_frames_to_release);
 
