@@ -1,3 +1,10 @@
+#include <qmetatype.h>
+#include <qdatastream.h>
+#include <qtextstream.h>
+#include <qcursor.h>
+#include <qcoreevent.h>
+#include <epoxy/gl.h>
+#include <epoxy/egl.h>
 #include "context.h"
 #include "glwidget.h"
 #include "mixer.h"
@@ -5,8 +12,6 @@
 #include <QGuiApplication>
 #include <QThread>
 #include <math.h>
-#include <EGL/egl.h>
-#include <GL/glx.h>
 #include <thread>
 
 GLWidget::GLWidget(QWidget *parent)
@@ -20,7 +25,7 @@ GLWidget::~GLWidget()
 
 void GLWidget::initializeGL()
 {
-	printf("egl=%p glx=%p\n", eglGetCurrentContext(), glXGetCurrentContext());
+	printf("egl context=%p\n", eglGetCurrentContext());
 	//printf("threads: %p %p\n", QThread::currentThread(), qGuiApp->thread());
 
 	QSurface *surface = create_surface(format());
