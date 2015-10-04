@@ -7,6 +7,13 @@ class QSurface;
 void start_mixer(QSurface *surface, QSurface *surface2, QSurface *surface3, QSurface *surface4);
 void mixer_quit();
 
+enum Source {
+	SOURCE_INPUT1,
+	SOURCE_INPUT2,
+	SOURCE_SBS,
+};
+void mixer_cut(Source source);
+
 struct DisplayFrame {
 	GLuint texnum;
 	RefCountedGLsync ready_fence;  // Asserted when the texture is done rendering.

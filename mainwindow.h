@@ -5,10 +5,13 @@
 
 class MainWindow : public QMainWindow
 {
-    Q_OBJECT
+	Q_OBJECT
 
 public:
-    MainWindow();
+	MainWindow();
+
+public slots:
+	void cut();
 };
 
 #endif

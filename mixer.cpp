@@ -57,7 +57,7 @@ using namespace movit;
 using namespace std;
 using namespace std::placeholders;
 
-static float t = 0.0f;
+Source current_source = SOURCE_INPUT1;
 
 ResourcePool *resource_pool;
 
@@ -305,7 +305,6 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 		GLint input_tex_pbo = (GLint)(intptr_t)bmusb_current_rendering_frame[card_index].userdata;
 		input[card_index]->set_pixel_data(0, nullptr, input_tex_pbo);
 		input[card_index]->set_pixel_data(1, nullptr, input_tex_pbo);
-		check_error();
 	}
 
 	//chain.enable_phase_timing(true);
@@ -350,22 +349,43 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 		float right1 = 1280 - 16;
 		float top1 = bottom1 - height1;
 		float left1 = right1 - width1;
-		
-		float t = 0.5 + 0.5 * cos(frame * 0.006);
-		//float t = 0.0;
-		float scale0 = 1.0 + t * (1280.0 / 848.0 - 1.0);
-		float tx0 = 0.0 + t * (-16.0 * scale0);
-		float ty0 = 0.0 + t * (-48.0 * scale0);
+	
+		if (current_source == SOURCE_INPUT1) {
+			top0 = 0.0;
+			bottom0 = HEIGHT;
+			left0 = 0.0;
+			right0 = WIDTH;
 
-		top0 = top0 * scale0 + ty0;
-		bottom0 = bottom0 * scale0 + ty0;
-		left0 = left0 * scale0 + tx0;
-		right0 = right0 * scale0 + tx0;
+			top1 = HEIGHT + 10;
+			bottom1 = HEIGHT + 20;
+			left1 = WIDTH + 10;
+			right1 = WIDTH + 20;
+		} else if (current_source == SOURCE_INPUT2) {
+			top1 = 0.0;
+			bottom1 = HEIGHT;
+			left1 = 0.0;
+			right1 = WIDTH;
 
-		top1 = top1 * scale0 + ty0;
-		bottom1 = bottom1 * scale0 + ty0;
-		left1 = left1 * scale0 + tx0;
-		right1 = right1 * scale0 + tx0;
+			top0 = HEIGHT + 10;
+			bottom0 = HEIGHT + 20;
+			left0 = WIDTH + 10;
+			right0 = WIDTH + 20;
+		} else {
+			float t = 0.5 + 0.5 * cos(frame * 0.006);
+			float scale0 = 1.0 + t * (1280.0 / 848.0 - 1.0);
+			float tx0 = 0.0 + t * (-16.0 * scale0);
+			float ty0 = 0.0 + t * (-48.0 * scale0);
+
+			top0 = top0 * scale0 + ty0;
+			bottom0 = bottom0 * scale0 + ty0;
+			left0 = left0 * scale0 + tx0;
+			right0 = right0 * scale0 + tx0;
+
+			top1 = top1 * scale0 + ty0;
+			bottom1 = bottom1 * scale0 + ty0;
+			left1 = left1 * scale0 + tx0;
+			right1 = right1 * scale0 + tx0;
+		}
 
 		place_rectangle(resample_effect, padding_effect, left0, top0, right0, bottom0);
 		place_rectangle(resample2_effect, padding2_effect, left1, top1, right1, bottom1);
@@ -403,6 +423,7 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 			// knowing when the current one is released.)
 			input_frames_to_release.push_back(bmusb_current_rendering_frame[card_index]);
 			bmusb_current_rendering_frame[card_index] = card->new_frame;
+			check_error();
 
 			// The new texture might still be uploaded,
 			// tell the GPU to wait until it's there.
@@ -527,6 +548,7 @@ void mixer_thread_func(QSurface *surface, QSurface *surface2, QSurface *surface3
 			start = now;
 		}
 #endif
+		check_error();
 	}
 	glDeleteVertexArrays(1, &vao);
 	resource_pool->release_glsl_program(cbcr_program_num);
@@ -578,4 +600,9 @@ void mixer_quit()
 {
 	quit = true;
 	mixer_thread.join();
+}
+
+void mixer_cut(Source source)
+{
+	current_source = source;
 }
