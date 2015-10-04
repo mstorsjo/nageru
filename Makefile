@@ -1,6 +1,7 @@
 CXX=g++
-CXXFLAGS := -O2 -march=native -g -std=gnu++11 -Wall -Wno-deprecated-declarations -fPIC $(shell pkg-config --cflags Qt5Core Qt5Gui Qt5Widgets Qt5OpenGLExtensions Qt5OpenGL libusb-1.0 movit) -pthread -DMOVIT_SHADER_DIR=\"$(shell pkg-config --variable=shaderdir movit)\"
-LDFLAGS=$(shell pkg-config --libs Qt5Core Qt5Gui Qt5Widgets Qt5OpenGLExtensions Qt5OpenGL libusb-1.0 movit) -lEGL -lGL -pthread -lva -lva-drm -lva-x11 -lX11 -lavformat -lavcodec -lavutil
+PKG_MODULES = Qt5Core Qt5Gui Qt5Widgets Qt5OpenGLExtensions Qt5OpenGL libusb-1.0 movit
+CXXFLAGS := -O2 -march=native -g -std=gnu++11 -Wall -Wno-deprecated-declarations -fPIC $(shell pkg-config --cflags $(PKG_MODULES)) -pthread -DMOVIT_SHADER_DIR=\"$(shell pkg-config --variable=shaderdir movit)\"
+LDFLAGS=$(shell pkg-config --libs $(PKG_MODULES)) -lEGL -lGL -pthread -lva -lva-drm -lva-x11 -lX11 -lavformat -lavcodec -lavutil
 
 # Qt objects
 OBJS=glwidget.o main.o mainwindow.o window.o
@@ -8,6 +9,9 @@ OBJS += glwidget.moc.o mainwindow.moc.o window.moc.o
 
 # Mixer objects
 OBJS += h264encode.o mixer.o bmusb.o pbo_frame_allocator.o context.o
+
+%.o: %.cpp
+	$(CXX) -MMD -MP $(CPPFLAGS) $(CXXFLAGS) -o $@ -c $<
 
 %.cpp: %.ui
 	uic $< -o $@
@@ -22,5 +26,8 @@ nageru: $(OBJS)
 
 mainwindow.o: mainwindow.cpp ui_mainwindow.cpp
 
+DEPS=$(OBJS:.o=.d)
+-include $(DEPS)
+
 clean:
-	$(RM) $(OBJS) nageru ui_mainwindow.cpp chain-*.frag *.dot
+	$(RM) $(OBJS) $(DEPS) nageru ui_mainwindow.cpp chain-*.frag *.dot
