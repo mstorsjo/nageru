@@ -59,6 +59,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 
 	resource_pool.reset(new ResourcePool);
 	output_channel[OUTPUT_LIVE].parent = this;
+	output_channel[OUTPUT_PREVIEW].parent = this;
 
 	ImageFormat inout_format;
 	inout_format.color_space = COLORSPACE_sRGB;
@@ -80,6 +81,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	output_ycbcr_format.luma_coefficients = YCBCR_REC_601;
 	output_ycbcr_format.full_range = false;
 
+	// Main chain.
 	chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
 	check_error();
 	input[0] = new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
@@ -105,6 +107,16 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	chain->set_dither_bits(8);
 	chain->set_output_origin(OUTPUT_ORIGIN_TOP_LEFT);
 	chain->finalize();
+
+	// Preview chain (always shows just first input for now).
+	preview_chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
+	check_error();
+	preview_input = new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
+	preview_chain->add_input(preview_input);
+	preview_chain->add_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED);
+	preview_chain->set_dither_bits(0);  // Don't bother.
+	preview_chain->set_output_origin(OUTPUT_ORIGIN_TOP_LEFT);
+	preview_chain->finalize();
 
 	h264_encoder.reset(new H264Encoder(h264_encoder_surface, WIDTH, HEIGHT, "test.mp4"));
 
@@ -401,13 +413,18 @@ void Mixer::thread_func()
 				input[1]->set_pixel_data(0, (unsigned char *)BUFFER_OFFSET((1280 * 750 * 2 + 44) / 2 + 1280 * 25 + 22), input_tex_pbo);
 				input[1]->set_pixel_data(1, (unsigned char *)BUFFER_OFFSET(1280 * 25 + 22), input_tex_pbo);
 			}
+
+			if (card_index == 0) {
+				preview_input->set_pixel_data(0, (unsigned char *)BUFFER_OFFSET((1280 * 750 * 2 + 44) / 2 + 1280 * 25 + 22), input_tex_pbo);
+				preview_input->set_pixel_data(1, (unsigned char *)BUFFER_OFFSET(1280 * 25 + 22), input_tex_pbo);
+			}
 		}
 
 		GLuint y_tex, cbcr_tex;
 		bool got_frame = h264_encoder->begin_frame(&y_tex, &cbcr_tex);
 		assert(got_frame);
 
-		// Render chain.
+		// Render main chain.
 		GLuint cbcr_full_tex = resource_pool->create_2d_texture(GL_RG8, WIDTH, HEIGHT);
 		GLuint rgba_tex = resource_pool->create_2d_texture(GL_RGBA8, WIDTH, HEIGHT);
 		GLuint fbo = resource_pool->create_fbo(y_tex, cbcr_full_tex, rgba_tex);
@@ -417,11 +434,18 @@ void Mixer::thread_func()
 		subsample_chroma(cbcr_full_tex, cbcr_tex);
 		resource_pool->release_2d_texture(cbcr_full_tex);
 
+		// Render preview chain.
+		GLuint preview_rgba_tex = resource_pool->create_2d_texture(GL_RGBA8, output_channel[OUTPUT_PREVIEW].width, output_channel[OUTPUT_PREVIEW].height);
+		fbo = resource_pool->create_fbo(preview_rgba_tex);
+		preview_chain->render_to_fbo(fbo, output_channel[OUTPUT_PREVIEW].width, output_channel[OUTPUT_PREVIEW].height);
+		resource_pool->release_fbo(fbo);
+
 		RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
 		check_error();
 		h264_encoder->end_frame(fence, input_frames_to_release);
 
 		output_channel[OUTPUT_LIVE].output_frame(rgba_tex, fence);
+		output_channel[OUTPUT_PREVIEW].output_frame(preview_rgba_tex, fence);
 
 		clock_gettime(CLOCK_MONOTONIC, &now);
 		double elapsed = now.tv_sec - start.tv_sec +
@@ -571,3 +595,8 @@ void Mixer::OutputChannel::set_frame_ready_callback(Mixer::new_frame_ready_callb
 	has_new_frame_ready_callback = true;
 }
 
+void Mixer::OutputChannel::set_size(int width, int height)
+{
+	this->width = width;
+	this->height = height;
+}

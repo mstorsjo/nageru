@@ -14,6 +14,9 @@ MainWindow::MainWindow()
 	Ui::MainWindow *ui = new Ui::MainWindow;
 	ui->setupUi(this);
 	connect(ui->cut_btn, SIGNAL(clicked()), this, SLOT(cut()));
+
+	ui->me_live->set_output(Mixer::OUTPUT_LIVE);
+	ui->me_preview->set_output(Mixer::OUTPUT_PREVIEW);
 }
 
 void MainWindow::cut()

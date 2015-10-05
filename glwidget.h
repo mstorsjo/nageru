@@ -4,6 +4,8 @@
 #include <epoxy/gl.h>
 #include <QGLWidget>
 
+#include "mixer.h"
+
 class QWidget;
 
 namespace movit {
@@ -22,12 +24,18 @@ public:
 	GLWidget(QWidget *parent = 0);
 	~GLWidget();
 
+	void set_output(Mixer::Output output)
+	{
+		this->output = output;
+	}
+
 protected:
 	void initializeGL() override;
 	void resizeGL(int width, int height) override;
 	void paintGL() override;
 
 private:
+	Mixer::Output output;
 	movit::ResourcePool *resource_pool;
 	GLuint vao, program_num;
 	GLuint position_vbo, texcoord_vbo;

@@ -11,6 +11,7 @@
 
 #include <movit/resource_pool.h>
 #include <stdio.h>
+#include <mutex>
 
 #include "context.h"
 #include "mixer.h"
@@ -38,11 +39,14 @@ void GLWidget::initializeGL()
 	printf("egl context=%p\n", eglGetCurrentContext());
 	//printf("threads: %p %p\n", QThread::currentThread(), qGuiApp->thread());
 
-	global_mixer = new Mixer(QGLFormat::toSurfaceFormat(format()));
-	global_mixer->set_frame_ready_callback(Mixer::OUTPUT_LIVE, [this]{
+	static std::once_flag flag;
+	std::call_once(flag, [this]{
+		global_mixer = new Mixer(QGLFormat::toSurfaceFormat(format()));
+		global_mixer->start();
+	});
+	global_mixer->set_frame_ready_callback(output, [this]{
 		QMetaObject::invokeMethod(this, "update", Qt::AutoConnection);
 	});
-	global_mixer->start();
 
 	// Prepare the shaders to actually get the texture shown (ick).
 	glDisable(GL_BLEND);
@@ -93,12 +97,13 @@ void GLWidget::initializeGL()
 void GLWidget::resizeGL(int width, int height)
 {
 	glViewport(0, 0, width, height);
+	global_mixer->set_preview_size(output, width, height);
 }
 
 void GLWidget::paintGL()
 {
 	Mixer::DisplayFrame frame;
-	if (!global_mixer->get_display_frame(Mixer::OUTPUT_LIVE, &frame)) {
+	if (!global_mixer->get_display_frame(output, &frame)) {
 		glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		return;

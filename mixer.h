@@ -38,6 +38,7 @@ public:
 
 	enum Output {
 		OUTPUT_LIVE = 0,
+		OUTPUT_PREVIEW,
 		NUM_OUTPUTS
 	};
 
@@ -56,6 +57,12 @@ public:
 		output_channel[output].set_frame_ready_callback(callback);
 	}
 
+	// Ignored for OUTPUT_LIVE.
+	void set_preview_size(Output output, int width, int height)
+	{
+		output_channel[output].set_size(width, height);
+	}
+
 private:
 	void bm_frame(int card_index, uint16_t timecode,
 		FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,
@@ -68,6 +75,7 @@ private:
 	QSurface *mixer_surface, *h264_encoder_surface;
 	std::unique_ptr<movit::ResourcePool> resource_pool;
 	std::unique_ptr<movit::EffectChain> chain;
+	std::unique_ptr<movit::EffectChain> preview_chain;
 	GLuint cbcr_program_num;  // Owned by <resource_pool>.
 	std::unique_ptr<H264Encoder> h264_encoder;
 
@@ -75,6 +83,9 @@ private:
 	movit::YCbCrInput *input[NUM_CARDS];
 	movit::Effect *resample_effect, *resample2_effect;
 	movit::Effect *padding_effect, *padding2_effect;
+
+	// Effects part of <preview_chain>. Owned by <preview_chain>.
+	movit::YCbCrInput *preview_input;
 
 	Source current_source = SOURCE_INPUT1;
 	int frame = 0;
@@ -103,6 +114,7 @@ private:
 		void output_frame(GLuint tex, RefCountedGLsync fence);
 		bool get_display_frame(DisplayFrame *frame);
 		void set_frame_ready_callback(new_frame_ready_callback_t callback);
+		void set_size(int width, int height);  // Ignored for OUTPUT_LIVE.
 
 	private:
 		friend class Mixer;
@@ -113,6 +125,8 @@ private:
 		bool has_current_frame = false, has_ready_frame = false;  // protected by <frame_mutex>
 		new_frame_ready_callback_t new_frame_ready_callback;
 		bool has_new_frame_ready_callback = false;
+
+		int width = 1280, height = 720;
 	};
 	OutputChannel output_channel[NUM_OUTPUTS];
 
