@@ -876,7 +876,7 @@ void BMUSBCapture::configure_card()
 					size &= ~1023;
 					size += 1024;
 				}
-				num_iso_pack = (2 << 20) / size;  // 512 kB.
+				num_iso_pack = (2 << 18) / size;  // 512 kB.
 				printf("Picking %d packets of 0x%x bytes each\n", num_iso_pack, size);
 			} else {
 				size = 0xc0;
