@@ -439,7 +439,7 @@ void Mixer::thread_func()
 
 		// Render main chain.
 		GLuint cbcr_full_tex = resource_pool->create_2d_texture(GL_RG8, WIDTH, HEIGHT);
-		GLuint rgba_tex = resource_pool->create_2d_texture(GL_RGBA8, WIDTH, HEIGHT);
+		GLuint rgba_tex = resource_pool->create_2d_texture(GL_RGB565, WIDTH, HEIGHT);  // Saves texture bandwidth, although dithering gets messed up.
 		GLuint fbo = resource_pool->create_fbo(y_tex, cbcr_full_tex, rgba_tex);
 		chain->render_to_fbo(fbo, WIDTH, HEIGHT);
 		resource_pool->release_fbo(fbo);
@@ -448,7 +448,7 @@ void Mixer::thread_func()
 		resource_pool->release_2d_texture(cbcr_full_tex);
 
 		// Render preview chain.
-		GLuint preview_rgba_tex = resource_pool->create_2d_texture(GL_RGBA8, output_channel[OUTPUT_PREVIEW].width, output_channel[OUTPUT_PREVIEW].height);
+		GLuint preview_rgba_tex = resource_pool->create_2d_texture(GL_RGB565, output_channel[OUTPUT_PREVIEW].width, output_channel[OUTPUT_PREVIEW].height);  // Saves texture bandwidth, although dithering gets messed up.
 		fbo = resource_pool->create_fbo(preview_rgba_tex);
 		preview_chain->render_to_fbo(fbo, output_channel[OUTPUT_PREVIEW].width, output_channel[OUTPUT_PREVIEW].height);
 		resource_pool->release_fbo(fbo);
