@@ -103,7 +103,6 @@ static  int h264_maxref = (1<<16|1);
 static  int h264_entropy_mode = 1; /* cabac */
 
 static  char *coded_fn = NULL;
-static  FILE *coded_fp = NULL;
 
 static  int frame_width = 176;
 static  int frame_height = 144;
@@ -796,12 +795,6 @@ static int process_cmdline(int argc, char *argv[])
             coded_fn = strdup("./test.264");
     }
     
-    /* store coded data into a file */
-    coded_fp = fopen(coded_fn, "w+");
-    if (coded_fp == NULL) {
-        printf("Open file %s failed, exit\n", coded_fn);
-        exit(1);
-    }
 
     frame_width_mbaligned = (frame_width + 15) & (~15);
     frame_height_mbaligned = (frame_height + 15) & (~15);
@@ -1588,8 +1581,6 @@ int H264Encoder::save_codeddata(unsigned long long display_order, unsigned long 
     CHECK_VASTATUS(va_status, "vaMapBuffer");
     while (buf_list != NULL) {
         data.append(reinterpret_cast<const char *>(buf_list->buf), buf_list->size);
-        if (coded_fp != nullptr)
-            coded_size += fwrite(buf_list->buf, 1, buf_list->size, coded_fp);
         buf_list = (VACodedBufferSegment *) buf_list->next;
 
         frame_size += coded_size;
@@ -1756,9 +1747,6 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, const char *o
 		fprintf(stderr, "%s: avformat_write_header() failed\n", output_filename);
 		exit(1);
 	}
-
-	coded_fp = fopen("dump.h264", "wb");
-	assert(coded_fp != NULL);
 
 	frame_width = width;
 	frame_height = height;
