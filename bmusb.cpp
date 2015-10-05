@@ -54,7 +54,7 @@ atomic<bool> should_quit;
 
 FrameAllocator::~FrameAllocator() {}
 
-#define NUM_QUEUED_FRAMES 8
+#define NUM_QUEUED_FRAMES 16
 class MallocFrameAllocator : public FrameAllocator {
 public:
 	MallocFrameAllocator(size_t frame_size);
