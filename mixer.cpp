@@ -123,7 +123,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	printf("Configuring first card...\n");
 	cards[0].usb = new BMUSBCapture(0x1edb, 0xbd3b);  // 0xbd4f
 	cards[0].usb->set_frame_callback(std::bind(&Mixer::bm_frame, this, 0, _1, _2, _3, _4, _5, _6, _7));
-	cards[0].frame_allocator.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44));
+	cards[0].frame_allocator.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44, 1280, 720));
 	cards[0].usb->set_video_frame_allocator(cards[0].frame_allocator.get());
 	cards[0].usb->configure_card();
 	cards[0].surface = create_surface(format);
@@ -135,7 +135,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 		printf("Configuring second card...\n");
 		cards[1].usb = new BMUSBCapture(0x1edb, 0xbd4f);
 		cards[1].usb->set_frame_callback(std::bind(&Mixer::bm_frame, this, 1, _1, _2, _3, _4, _5, _6, _7));
-		cards[1].frame_allocator.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44));
+		cards[1].frame_allocator.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44, 1280, 720));
 		cards[1].usb->set_video_frame_allocator(cards[1].frame_allocator.get());
 		cards[1].usb->configure_card();
 	}
@@ -201,7 +201,8 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 		std::unique_lock<std::mutex> lock(bmusb_mutex);
 		card->new_data_ready_changed.wait(lock, [card]{ return !card->new_data_ready; });
 	}
-	GLuint pbo = (GLint)(intptr_t)video_frame.userdata;
+	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)video_frame.userdata;
+	GLuint pbo = userdata->pbo;
 	check_error();
 	glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, pbo);
 	check_error();
@@ -209,6 +210,18 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 	check_error();
 	//glMemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
 	//check_error();
+
+	// Upload the textures.
+	glBindTexture(GL_TEXTURE_2D, userdata->tex_y);
+	check_error();
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1280, 720, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET((1280 * 750 * 2 + 44) / 2 + 1280 * 25 + 22));
+	check_error();
+	glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr);
+	check_error();
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1280/2, 720, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(1280 * 25 + 22));
+	check_error();
+	glBindTexture(GL_TEXTURE_2D, 0);
+	check_error();
 	GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);              
 	check_error();
 	assert(fence != nullptr);
@@ -404,19 +417,19 @@ void Mixer::thread_func()
 			check_error();
 			glDeleteSync(card->new_data_ready_fence);
 			check_error();
-			GLint input_tex_pbo = (GLint)(intptr_t)card->new_frame.userdata;
-			input[card_index]->set_pixel_data(0, (unsigned char *)BUFFER_OFFSET((1280 * 750 * 2 + 44) / 2 + 1280 * 25 + 22), input_tex_pbo);
-			input[card_index]->set_pixel_data(1, (unsigned char *)BUFFER_OFFSET(1280 * 25 + 22), input_tex_pbo);
+			const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)card->new_frame.userdata;
+			input[card_index]->set_texture_num(0, userdata->tex_y);
+			input[card_index]->set_texture_num(1, userdata->tex_cbcr);
 
 			if (NUM_CARDS == 1) {
 				// Set to the other one, too.
-				input[1]->set_pixel_data(0, (unsigned char *)BUFFER_OFFSET((1280 * 750 * 2 + 44) / 2 + 1280 * 25 + 22), input_tex_pbo);
-				input[1]->set_pixel_data(1, (unsigned char *)BUFFER_OFFSET(1280 * 25 + 22), input_tex_pbo);
+				input[1]->set_texture_num(0, userdata->tex_y);
+				input[1]->set_texture_num(1, userdata->tex_cbcr);
 			}
 
 			if (card_index == 0) {
-				preview_input->set_pixel_data(0, (unsigned char *)BUFFER_OFFSET((1280 * 750 * 2 + 44) / 2 + 1280 * 25 + 22), input_tex_pbo);
-				preview_input->set_pixel_data(1, (unsigned char *)BUFFER_OFFSET(1280 * 25 + 22), input_tex_pbo);
+				preview_input->set_texture_num(0, userdata->tex_y);
+				preview_input->set_texture_num(1, userdata->tex_cbcr);
 			}
 		}
 

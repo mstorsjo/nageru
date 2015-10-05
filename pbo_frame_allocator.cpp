@@ -8,9 +8,10 @@
 
 using namespace std;
 
-PBOFrameAllocator::PBOFrameAllocator(size_t frame_size, size_t num_queued_frames, GLenum buffer, GLenum permissions, GLenum map_bits)
+PBOFrameAllocator::PBOFrameAllocator(size_t frame_size, GLuint width, GLuint height, size_t num_queued_frames, GLenum buffer, GLenum permissions, GLenum map_bits)
         : frame_size(frame_size), buffer(buffer)
 {
+	userdata.reset(new Userdata[num_queued_frames]);
 	for (size_t i = 0; i < num_queued_frames; ++i) {
 		GLuint pbo;
 		glGenBuffers(1, &pbo);
@@ -25,12 +26,35 @@ PBOFrameAllocator::PBOFrameAllocator(size_t frame_size, size_t num_queued_frames
 		frame.data2 = frame.data + frame_size / 2;
 		check_error();
 		frame.size = frame_size;
-		frame.userdata = (void *)(intptr_t)pbo;
+		frame.userdata = &userdata[i];
+		userdata[i].pbo = pbo;
 		frame.owner = this;
 		frame.interleaved = true;
+
+		// Create textures.
+		glGenTextures(1, &userdata[i].tex_y);
+		check_error();
+		glBindTexture(GL_TEXTURE_2D, userdata[i].tex_y);
+		check_error();
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		check_error();
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		check_error();
+
+		glGenTextures(1, &userdata[i].tex_cbcr);
+		check_error();
+		glBindTexture(GL_TEXTURE_2D, userdata[i].tex_cbcr);
+		check_error();
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		check_error();
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, width / 2, height, 0, GL_RG, GL_UNSIGNED_BYTE, NULL);
+		check_error();
+
 		freelist.push(frame);
 	}
 	glBindBuffer(buffer, 0);
+	check_error();
+	glBindTexture(GL_TEXTURE_2D, 0);
 	check_error();
 }
 
@@ -39,7 +63,7 @@ PBOFrameAllocator::~PBOFrameAllocator()
 	while (!freelist.empty()) {
 		Frame frame = freelist.front();
 		freelist.pop();
-		GLuint pbo = (intptr_t)frame.userdata;
+		GLuint pbo = ((Userdata *)frame.userdata)->pbo;
 		glBindBuffer(buffer, pbo);
 		check_error();
 		glUnmapBuffer(buffer);
@@ -47,6 +71,13 @@ PBOFrameAllocator::~PBOFrameAllocator()
 		glBindBuffer(buffer, 0);
 		check_error();
 		glDeleteBuffers(1, &pbo);
+		check_error();
+		GLuint tex_y = ((Userdata *)frame.userdata)->tex_y;
+		glDeleteTextures(1, &tex_y);
+		check_error();
+		GLuint tex_cbcr = ((Userdata *)frame.userdata)->tex_cbcr;
+		glDeleteTextures(1, &tex_cbcr);
+		check_error();
 	}
 }
 //static int sumsum = 0;
