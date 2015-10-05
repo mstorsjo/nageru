@@ -15,7 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef __SSE2__
+#ifdef __SSE4_1__
 #include <immintrin.h>
 #endif
 #include "bmusb.h"
@@ -54,7 +54,7 @@ atomic<bool> should_quit;
 
 FrameAllocator::~FrameAllocator() {}
 
-#define NUM_QUEUED_FRAMES 16
+#define NUM_QUEUED_FRAMES 8
 class MallocFrameAllocator : public FrameAllocator {
 public:
 	MallocFrameAllocator(size_t frame_size);
@@ -285,10 +285,10 @@ void add_to_frame(FrameAllocator::Frame *current_frame, const char *frame_type_n
 	}
 }
 
-#ifdef __SSE2__
+#ifdef __SSE4_1__
 
 #if 0
-void dump(const char *name, __m256i n)
+void avx2_dump(const char *name, __m256i n)
 {
 	printf("%-10s:", name);
 	printf(" %02x", _mm256_extract_epi8(n, 0));
@@ -519,7 +519,7 @@ void decode_packs(const libusb_transfer *xfr,
 		const uint8_t *start = xfr->buffer + offset;
 		const uint8_t *limit = start + pack->actual_length;
 		while (start < limit) {  // Usually runs only one iteration.
-#ifdef __SSE2__
+#ifdef __SSE4_1__
 			start = add_to_frame_fastpath(current_frame, start, limit, sync_pattern[0]);
 			if (start == limit) break;
 			assert(start < limit);
@@ -669,13 +669,11 @@ void BMUSBCapture::configure_card()
 		}
 	}
 
-#if 0
 	rc = libusb_set_configuration(devh, /*configuration=*/1);
 	if (rc < 0) {
 		fprintf(stderr, "Error setting configuration 1: %s\n", libusb_error_name(rc));
 		exit(1);
 	}
-#endif
 
 	rc = libusb_claim_interface(devh, 0);
 	if (rc < 0) {
@@ -683,6 +681,22 @@ void BMUSBCapture::configure_card()
 		exit(1);
 	}
 
+	// Alternate setting 1 is output, alternate setting 2 is input.
+	// Card is reset when switching alternates, so the driver uses
+	// this “double switch” when it wants to reset.
+	//
+	// There's also alternate settings 3 and 4, which seem to be
+	// like 1 and 2 except they advertise less bandwidth needed.
+	rc = libusb_set_interface_alt_setting(devh, /*interface=*/0, /*alternate_setting=*/1);
+	if (rc < 0) {
+		fprintf(stderr, "Error setting alternate 1: %s\n", libusb_error_name(rc));
+		exit(1);
+	}
+	rc = libusb_set_interface_alt_setting(devh, /*interface=*/0, /*alternate_setting=*/2);
+	if (rc < 0) {
+		fprintf(stderr, "Error setting alternate 1: %s\n", libusb_error_name(rc));
+		exit(1);
+	}
 #if 0
 	rc = libusb_set_interface_alt_setting(devh, /*interface=*/0, /*alternate_setting=*/1);
 	if (rc < 0) {
@@ -720,6 +734,8 @@ void BMUSBCapture::configure_card()
 	//
 	//    so only first 16 bits count, and 0x0100 is a mask for ok/stable signal?
 	//
+	//    Bottom 16 bits of this register seem to be firmware version number (possibly not all all of them).
+	//
 	//    28 and 32 seems to be analog audio input levels (one byte for each of the eight channels).
 	//    however, if setting 32 with HDMI embedded audio, it is immediately overwritten back (to 0xe137002a).
 	//
@@ -728,6 +744,11 @@ void BMUSBCapture::configure_card()
 	//
 	//    36 can be set to 0 with no apparent effect (all of this tested on both video and audio),
 	//    but the driver sets it to 0x8036802a at some point.
+	//
+	//    all of this is on request 214/215. other requests (192, 219,
+	//    222, 223, 224) are used for firmware upgrade. Probably best to
+	//    stay out of it unless you know what you're doing.
+	//
 	//
 	// register 16:
  	// first byte is 0x39 for a stable 576p60 signal, 0x2d for a stable 720p60 signal, 0x20 for no signal
@@ -781,22 +802,6 @@ void BMUSBCapture::configure_card()
 			printf("%02x", value[i]);
 		}
 		printf("\n");
-	}
-
-	// Alternate setting 1 is output, alternate setting 2 is input.
-	// Card is reset when switching alternates, so the driver uses
-	// this “double switch” when it wants to reset.
-#if 0
-	rc = libusb_set_interface_alt_setting(devh, /*interface=*/0, /*alternate_setting=*/1);
-	if (rc < 0) {
-		fprintf(stderr, "Error setting alternate 1: %s\n", libusb_error_name(rc));
-		exit(1);
-	}
-#endif
-	rc = libusb_set_interface_alt_setting(devh, /*interface=*/0, /*alternate_setting=*/4);
-	if (rc < 0) {
-		fprintf(stderr, "Error setting alternate 4: %s\n", libusb_error_name(rc));
-		exit(1);
 	}
 
 #if 0
@@ -862,7 +867,7 @@ void BMUSBCapture::configure_card()
 	// set up isochronous transfers for audio and video
 	for (int e = 3; e <= 4; ++e) {
 		//int num_transfers = (e == 3) ? 6 : 6;
-		int num_transfers = 2;
+		int num_transfers = 6;
 		for (int i = 0; i < num_transfers; ++i) {
 			int num_iso_pack, size;
 			if (e == 3) {
