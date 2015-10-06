@@ -140,7 +140,7 @@
          <number>0</number>
         </property>
         <item>
-         <widget class="QGLWidget" name="preview2">
+         <widget class="GLWidget" name="preview1">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
             <horstretch>1</horstretch>
@@ -150,7 +150,7 @@
          </widget>
         </item>
         <item>
-         <widget class="QGLWidget" name="preview1">
+         <widget class="GLWidget" name="preview2">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
             <horstretch>1</horstretch>

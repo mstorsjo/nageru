@@ -60,6 +60,8 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	resource_pool.reset(new ResourcePool);
 	output_channel[OUTPUT_LIVE].parent = this;
 	output_channel[OUTPUT_PREVIEW].parent = this;
+	output_channel[OUTPUT_INPUT0].parent = this;
+	output_channel[OUTPUT_INPUT1].parent = this;
 
 	ImageFormat inout_format;
 	inout_format.color_space = COLORSPACE_sRGB;
@@ -117,14 +119,22 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	display_chain->set_dither_bits(0);  // Don't bother.
 	display_chain->finalize();
 
-	// Preview chain (always shows just first input for now).
-	preview_chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
+	// Preview chains (always shows just the inputs for now).
+	preview0_chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
 	check_error();
-	preview_input = new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
-	preview_chain->add_input(preview_input);
-	preview_chain->add_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED);
-	preview_chain->set_dither_bits(0);  // Don't bother.
-	preview_chain->finalize();
+	preview0_input = new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
+	preview0_chain->add_input(preview0_input);
+	preview0_chain->add_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED);
+	preview0_chain->set_dither_bits(0);  // Don't bother.
+	preview0_chain->finalize();
+
+	preview1_chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
+	check_error();
+	preview1_input = new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
+	preview1_chain->add_input(preview1_input);
+	preview1_chain->add_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED);
+	preview1_chain->set_dither_bits(0);  // Don't bother.
+	preview1_chain->finalize();
 
 	h264_encoder.reset(new H264Encoder(h264_encoder_surface, WIDTH, HEIGHT, "test.mp4"));
 
@@ -474,19 +484,40 @@ void Mixer::thread_func()
 
 		// The preview frame shows the first input. Note that the textures
 		// are owned by the input frame, not the display frame.
-		const PBOFrameAllocator::Userdata *input0_userdata = (const PBOFrameAllocator::Userdata *)bmusb_current_rendering_frame[0]->userdata;
-		GLuint input0_y_tex = input0_userdata->tex_y;
-		GLuint input0_cbcr_tex = input0_userdata->tex_cbcr;
-		DisplayFrame preview_frame;
-		preview_frame.chain = preview_chain.get();
-		preview_frame.setup_chain = [this, input0_y_tex, input0_cbcr_tex]{
-			preview_input->set_texture_num(0, input0_y_tex);
-			preview_input->set_texture_num(1, input0_cbcr_tex);
-		};
-		preview_frame.ready_fence = fence;
-		preview_frame.input_frames = { bmusb_current_rendering_frame[0] };
-		preview_frame.temp_textures = {};
-		output_channel[OUTPUT_PREVIEW].output_frame(preview_frame);
+		{
+			const PBOFrameAllocator::Userdata *input0_userdata = (const PBOFrameAllocator::Userdata *)bmusb_current_rendering_frame[0]->userdata;
+			GLuint input0_y_tex = input0_userdata->tex_y;
+			GLuint input0_cbcr_tex = input0_userdata->tex_cbcr;
+			DisplayFrame preview0_frame;
+			preview0_frame.chain = preview0_chain.get();
+			preview0_frame.setup_chain = [this, input0_y_tex, input0_cbcr_tex]{
+				preview0_input->set_texture_num(0, input0_y_tex);
+				preview0_input->set_texture_num(1, input0_cbcr_tex);
+			};
+			preview0_frame.ready_fence = fence;
+			preview0_frame.input_frames = { bmusb_current_rendering_frame[0] };
+			preview0_frame.temp_textures = {};
+			output_channel[OUTPUT_PREVIEW].output_frame(preview0_frame);
+			output_channel[OUTPUT_INPUT0].output_frame(preview0_frame);
+		}
+
+		// Same for the other preview.
+		// TODO: Use a for loop. Gah.
+		{
+			const PBOFrameAllocator::Userdata *input1_userdata = (const PBOFrameAllocator::Userdata *)bmusb_current_rendering_frame[1]->userdata;
+			GLuint input1_y_tex = input1_userdata->tex_y;
+			GLuint input1_cbcr_tex = input1_userdata->tex_cbcr;
+			DisplayFrame preview1_frame;
+			preview1_frame.chain = preview1_chain.get();
+			preview1_frame.setup_chain = [this, input1_y_tex, input1_cbcr_tex]{
+				preview1_input->set_texture_num(0, input1_y_tex);
+				preview1_input->set_texture_num(1, input1_cbcr_tex);
+			};
+			preview1_frame.ready_fence = fence;
+			preview1_frame.input_frames = { bmusb_current_rendering_frame[1] };
+			preview1_frame.temp_textures = {};
+			output_channel[OUTPUT_INPUT1].output_frame(preview1_frame);
+		}
 
 		clock_gettime(CLOCK_MONOTONIC, &now);
 		double elapsed = now.tv_sec - start.tv_sec +

@@ -41,6 +41,8 @@ public:
 	enum Output {
 		OUTPUT_LIVE = 0,
 		OUTPUT_PREVIEW,
+		OUTPUT_INPUT0,
+		OUTPUT_INPUT1,
 		NUM_OUTPUTS
 	};
 
@@ -89,7 +91,8 @@ private:
 	std::unique_ptr<movit::ResourcePool> resource_pool;
 	std::unique_ptr<movit::EffectChain> chain;
 	std::unique_ptr<movit::EffectChain> display_chain;
-	std::unique_ptr<movit::EffectChain> preview_chain;
+	std::unique_ptr<movit::EffectChain> preview0_chain;
+	std::unique_ptr<movit::EffectChain> preview1_chain;
 	GLuint cbcr_program_num;  // Owned by <resource_pool>.
 	std::unique_ptr<H264Encoder> h264_encoder;
 
@@ -101,8 +104,11 @@ private:
 	// Effects part of <display_chain>. Owned by <display_chain>.
 	movit::FlatInput *display_input;
 
-	// Effects part of <preview_chain>. Owned by <preview_chain>.
-	movit::YCbCrInput *preview_input;
+	// Effects part of <preview0_chain>. Owned by <preview0_chain>.
+	movit::YCbCrInput *preview0_input;
+
+	// Effects part of <preview1_chain>. Owned by <preview1_chain>.
+	movit::YCbCrInput *preview1_input;
 
 	Source current_source = SOURCE_INPUT1;
 	int frame = 0;

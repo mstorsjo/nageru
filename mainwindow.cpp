@@ -17,6 +17,8 @@ MainWindow::MainWindow()
 
 	ui->me_live->set_output(Mixer::OUTPUT_LIVE);
 	ui->me_preview->set_output(Mixer::OUTPUT_PREVIEW);
+	ui->preview1->set_output(Mixer::OUTPUT_INPUT0);
+	ui->preview2->set_output(Mixer::OUTPUT_INPUT1);
 }
 
 void MainWindow::cut()
