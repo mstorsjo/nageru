@@ -56,7 +56,6 @@ void GLWidget::initializeGL()
 void GLWidget::resizeGL(int width, int height)
 {
 	glViewport(0, 0, width, height);
-	global_mixer->set_preview_size(output, width, height);
 }
 
 void GLWidget::paintGL()

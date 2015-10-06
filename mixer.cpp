@@ -638,9 +638,3 @@ void Mixer::OutputChannel::set_frame_ready_callback(Mixer::new_frame_ready_callb
 	new_frame_ready_callback = callback;
 	has_new_frame_ready_callback = true;
 }
-
-void Mixer::OutputChannel::set_size(int width, int height)
-{
-	this->width = width;
-	this->height = height;
-}

@@ -76,12 +76,6 @@ public:
 		output_channel[output].set_frame_ready_callback(callback);
 	}
 
-	// Ignored for OUTPUT_LIVE.
-	void set_preview_size(Output output, int width, int height)
-	{
-		output_channel[output].set_size(width, height);
-	}
-
 private:
 	void bm_frame(int card_index, uint16_t timecode,
 		FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,
@@ -137,7 +131,6 @@ private:
 		void output_frame(DisplayFrame frame);
 		bool get_display_frame(DisplayFrame *frame);
 		void set_frame_ready_callback(new_frame_ready_callback_t callback);
-		void set_size(int width, int height);  // Ignored for OUTPUT_LIVE.
 
 	private:
 		friend class Mixer;
@@ -148,8 +141,6 @@ private:
 		bool has_current_frame = false, has_ready_frame = false;  // protected by <frame_mutex>
 		new_frame_ready_callback_t new_frame_ready_callback;
 		bool has_new_frame_ready_callback = false;
-
-		int width = 1280, height = 720;
 	};
 	OutputChannel output_channel[NUM_OUTPUTS];
 
