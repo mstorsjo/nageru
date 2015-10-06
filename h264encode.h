@@ -42,6 +42,7 @@ extern "C" {
 #include "bmusb.h"
 #include "context.h"
 #include "pbo_frame_allocator.h"
+#include "ref_counted_frame.h"
 #include "ref_counted_gl_sync.h"
 
 class QSurface;
@@ -66,7 +67,7 @@ public:
 	void 
 #endif
 	bool begin_frame(GLuint *y_tex, GLuint *cbcr_tex);
-	void end_frame(RefCountedGLsync fence, const std::vector<FrameAllocator::Frame> &input_frames_to_release);
+	void end_frame(RefCountedGLsync fence, const std::vector<RefCountedFrame> &input_frames);
 
 private:
 	struct storage_task {
@@ -98,7 +99,7 @@ private:
 
 	struct PendingFrame {
 		RefCountedGLsync fence;
-		std::vector<FrameAllocator::Frame> input_frames_to_release;
+		std::vector<RefCountedFrame> input_frames;
 	};
 	std::map<int, PendingFrame> pending_frames;
 	QSurface *surface;

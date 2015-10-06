@@ -11,6 +11,7 @@
 #include "bmusb.h"
 #include "h264encode.h"
 #include "pbo_frame_allocator.h"
+#include "ref_counted_frame.h"
 #include "ref_counted_gl_sync.h"
 
 #define NUM_CARDS 2
@@ -101,13 +102,13 @@ private:
 		QOpenGLContext *context;
 
 		bool new_data_ready = false;  // Whether new_frame contains anything.
-		FrameAllocator::Frame new_frame;
+		RefCountedFrame new_frame;
 		GLsync new_data_ready_fence;  // Whether new_frame is ready for rendering.
 		std::condition_variable new_data_ready_changed;  // Set whenever new_data_ready is changed.
 	};
 	CaptureCard cards[NUM_CARDS];  // protected by <bmusb_mutex>
 
-	FrameAllocator::Frame bmusb_current_rendering_frame[NUM_CARDS];
+	RefCountedFrame bmusb_current_rendering_frame[NUM_CARDS];
 
 	class OutputChannel {
 	public:

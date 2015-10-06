@@ -228,12 +228,12 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 	{
 		std::unique_lock<std::mutex> lock(bmusb_mutex);
 		card->new_data_ready = true;
-		card->new_frame = video_frame;
+		card->new_frame = RefCountedFrame(video_frame);
 		card->new_data_ready_fence = fence;
 		card->new_data_ready_changed.notify_all();
 	}
 
-	// Video frame will be released later.
+	// Video frame will be released when last user of card->new_frame goes out of scope.
         card->usb->get_audio_frame_allocator()->release_frame(audio_frame);
 }
 	
@@ -393,20 +393,11 @@ void Mixer::thread_func()
 			}
 		}
 
-		vector<FrameAllocator::Frame> input_frames_to_release;
-	
 		for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
 			CaptureCard *card = &card_copy[card_index];
 			if (!card->new_data_ready)
 				continue;
 
-			// Now we're done with the previous frame, so we can definitely
-			// release it when this is done rendering. (Actually, we could do
-			// it one frame earlier, but before we have a new one, there's no
-			// knowing when the current one is released.)
-			if (bmusb_current_rendering_frame[card_index].owner != nullptr) {
-				input_frames_to_release.push_back(bmusb_current_rendering_frame[card_index]);
-			}
 			bmusb_current_rendering_frame[card_index] = card->new_frame;
 			check_error();
 
@@ -417,7 +408,7 @@ void Mixer::thread_func()
 			check_error();
 			glDeleteSync(card->new_data_ready_fence);
 			check_error();
-			const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)card->new_frame.userdata;
+			const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)card->new_frame->userdata;
 			input[card_index]->set_texture_num(0, userdata->tex_y);
 			input[card_index]->set_texture_num(1, userdata->tex_cbcr);
 
@@ -455,7 +446,15 @@ void Mixer::thread_func()
 
 		RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
 		check_error();
-		h264_encoder->end_frame(fence, input_frames_to_release);
+
+		// Make sure the H.264 gets a reference to all the
+		// input frames needed, so that they are not released back
+		// until the rendering is done.
+		vector<RefCountedFrame> input_frames;
+		for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
+			input_frames.push_back(bmusb_current_rendering_frame[card_index]);
+		}
+		h264_encoder->end_frame(fence, input_frames);
 
 		output_channel[OUTPUT_LIVE].output_frame(rgba_tex, fence);
 		output_channel[OUTPUT_PREVIEW].output_frame(preview_rgba_tex, fence);

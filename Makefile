@@ -8,7 +8,7 @@ OBJS=glwidget.o main.o mainwindow.o window.o
 OBJS += glwidget.moc.o mainwindow.moc.o window.moc.o
 
 # Mixer objects
-OBJS += h264encode.o mixer.o bmusb.o pbo_frame_allocator.o context.o
+OBJS += h264encode.o mixer.o bmusb.o pbo_frame_allocator.o context.o ref_counted_frame.o
 
 %.o: %.cpp
 	$(CXX) -MMD -MP $(CPPFLAGS) $(CXXFLAGS) -o $@ -c $<
