@@ -108,6 +108,15 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	chain->set_output_origin(OUTPUT_ORIGIN_TOP_LEFT);
 	chain->finalize();
 
+	// Display chain; shows the live output produced by the main chain (its RGBA version).
+	display_chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
+	check_error();
+	display_input = new FlatInput(inout_format, FORMAT_RGB, GL_UNSIGNED_BYTE, WIDTH, HEIGHT);  // FIXME: GL_UNSIGNED_BYTE is really wrong.
+	display_chain->add_input(display_input);
+	display_chain->add_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED);
+	display_chain->set_dither_bits(0);  // Don't bother.
+	display_chain->finalize();
+
 	// Preview chain (always shows just first input for now).
 	preview_chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
 	check_error();
@@ -115,7 +124,6 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	preview_chain->add_input(preview_input);
 	preview_chain->add_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED);
 	preview_chain->set_dither_bits(0);  // Don't bother.
-	preview_chain->set_output_origin(OUTPUT_ORIGIN_TOP_LEFT);
 	preview_chain->finalize();
 
 	h264_encoder.reset(new H264Encoder(h264_encoder_surface, WIDTH, HEIGHT, "test.mp4"));
@@ -417,11 +425,6 @@ void Mixer::thread_func()
 				input[1]->set_texture_num(0, userdata->tex_y);
 				input[1]->set_texture_num(1, userdata->tex_cbcr);
 			}
-
-			if (card_index == 0) {
-				preview_input->set_texture_num(0, userdata->tex_y);
-				preview_input->set_texture_num(1, userdata->tex_cbcr);
-			}
 		}
 
 		GLuint y_tex, cbcr_tex;
@@ -438,11 +441,12 @@ void Mixer::thread_func()
 		subsample_chroma(cbcr_full_tex, cbcr_tex);
 		resource_pool->release_2d_texture(cbcr_full_tex);
 
-		// Render preview chain.
-		GLuint preview_rgba_tex = resource_pool->create_2d_texture(GL_RGB565, output_channel[OUTPUT_PREVIEW].width, output_channel[OUTPUT_PREVIEW].height);  // Saves texture bandwidth, although dithering gets messed up.
-		fbo = resource_pool->create_fbo(preview_rgba_tex);
-		preview_chain->render_to_fbo(fbo, output_channel[OUTPUT_PREVIEW].width, output_channel[OUTPUT_PREVIEW].height);
-		resource_pool->release_fbo(fbo);
+		// Set the right state for rgba_tex.
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glBindTexture(GL_TEXTURE_2D, rgba_tex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
 		RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
 		check_error();
@@ -456,8 +460,33 @@ void Mixer::thread_func()
 		}
 		h264_encoder->end_frame(fence, input_frames);
 
-		output_channel[OUTPUT_LIVE].output_frame(rgba_tex, fence);
-		output_channel[OUTPUT_PREVIEW].output_frame(preview_rgba_tex, fence);
+		// The live frame just shows the RGBA texture we just rendered.
+		// It owns rgba_tex now.
+		DisplayFrame live_frame;
+		live_frame.chain = display_chain.get();
+		live_frame.setup_chain = [this, rgba_tex]{
+			display_input->set_texture_num(rgba_tex);
+		};
+		live_frame.ready_fence = fence;
+		live_frame.input_frames = {};
+		live_frame.temp_textures = { rgba_tex };
+		output_channel[OUTPUT_LIVE].output_frame(live_frame);
+
+		// The preview frame shows the first input. Note that the textures
+		// are owned by the input frame, not the display frame.
+		const PBOFrameAllocator::Userdata *input0_userdata = (const PBOFrameAllocator::Userdata *)bmusb_current_rendering_frame[0]->userdata;
+		GLuint input0_y_tex = input0_userdata->tex_y;
+		GLuint input0_cbcr_tex = input0_userdata->tex_cbcr;
+		DisplayFrame preview_frame;
+		preview_frame.chain = preview_chain.get();
+		preview_frame.setup_chain = [this, input0_y_tex, input0_cbcr_tex]{
+			preview_input->set_texture_num(0, input0_y_tex);
+			preview_input->set_texture_num(1, input0_cbcr_tex);
+		};
+		preview_frame.ready_fence = fence;
+		preview_frame.input_frames = { bmusb_current_rendering_frame[0] };
+		preview_frame.temp_textures = {};
+		output_channel[OUTPUT_PREVIEW].output_frame(preview_frame);
 
 		clock_gettime(CLOCK_MONOTONIC, &now);
 		double elapsed = now.tv_sec - start.tv_sec +
@@ -537,9 +566,12 @@ void Mixer::subsample_chroma(GLuint src_tex, GLuint dst_tex)
 
 void Mixer::release_display_frame(DisplayFrame *frame)
 {
-	resource_pool->release_2d_texture(frame->texnum);
-	frame->texnum = 0;
+	for (GLuint texnum : frame->temp_textures) {
+		resource_pool->release_2d_texture(texnum);
+	}
+	frame->temp_textures.clear();
 	frame->ready_fence.reset();
+	frame->input_frames.clear();
 }
 
 void Mixer::start()
@@ -558,7 +590,7 @@ void Mixer::cut(Source source)
 	current_source = source;
 }
 
-void Mixer::OutputChannel::output_frame(GLuint tex, RefCountedGLsync fence)
+void Mixer::OutputChannel::output_frame(DisplayFrame frame)
 {
 	// Store this frame for display. Remove the ready frame if any
 	// (it was seemingly never used).
@@ -567,8 +599,7 @@ void Mixer::OutputChannel::output_frame(GLuint tex, RefCountedGLsync fence)
 		if (has_ready_frame) {
 			parent->release_display_frame(&ready_frame);
 		}
-		ready_frame.texnum = tex;
-		ready_frame.ready_fence = fence;
+		ready_frame = frame;
 		has_ready_frame = true;
 	}
 
@@ -593,6 +624,7 @@ bool Mixer::OutputChannel::get_display_frame(DisplayFrame *frame)
 		assert(!has_current_frame);
 		current_frame = ready_frame;
 		ready_frame.ready_fence.reset();  // Drop the refcount.
+		ready_frame.input_frames.clear();  // Drop the refcounts.
 		has_current_frame = true;
 		has_ready_frame = false;
 	}
