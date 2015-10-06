@@ -25,7 +25,7 @@
    </property>
    <layout class="QGridLayout" name="gridLayout">
     <item row="0" column="0">
-     <layout class="QVBoxLayout" name="verticalLayout" stretch="3,0,1,0">
+     <layout class="QVBoxLayout" name="verticalLayout" stretch="2,0,1">
       <item>
        <layout class="QHBoxLayout" name="me_displays" stretch="0,0,0">
         <item>
@@ -193,13 +193,6 @@
          </spacer>
         </item>
        </layout>
-      </item>
-      <item>
-       <widget class="QPushButton" name="pushButton_2">
-        <property name="text">
-         <string>PushButton</string>
-        </property>
-       </widget>
       </item>
      </layout>
     </item>

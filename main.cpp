@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
 	global_share_widget = new QGLWidget();
 
 	MainWindow mainWindow;
-	mainWindow.resize(QSize(1500, 720));
+	mainWindow.resize(QSize(1500, 670));
 	mainWindow.show();
 
 	int rc = app.exec();
