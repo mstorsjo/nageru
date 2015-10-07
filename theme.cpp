@@ -103,6 +103,11 @@ int EffectChain_add_effect(lua_State* L)
 	}
 
 	lua_settop(L, 2);  // Return the effect itself.
+
+	// Make sure Lua doesn't garbage-collect it away.
+	lua_pushvalue(L, -1);
+	luaL_ref(L, LUA_REGISTRYINDEX);  // TODO: leak?
+
 	return 1;
 }
 
