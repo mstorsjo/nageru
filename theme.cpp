@@ -87,16 +87,20 @@ int EffectChain_add_effect(lua_State* L)
 
 	// TODO: Better error reporting.
 	Effect *effect = get_effect(L, 2);
-	vector<Effect *> inputs;
-	for (int idx = 3; idx <= lua_gettop(L); ++idx) {
-		if (luaL_testudata(L, idx, "LiveInputWrapper")) {
-			LiveInputWrapper *input = (LiveInputWrapper *)lua_touserdata(L, idx);
-			inputs.push_back(input->get_input());
-		} else {
-			inputs.push_back(get_effect(L, idx));
+	if (lua_gettop(L) == 2) {
+		chain->add_effect(effect);
+	} else {
+		vector<Effect *> inputs;
+		for (int idx = 3; idx <= lua_gettop(L); ++idx) {
+			if (luaL_testudata(L, idx, "LiveInputWrapper")) {
+				LiveInputWrapper *input = (LiveInputWrapper *)lua_touserdata(L, idx);
+				inputs.push_back(input->get_input());
+			} else {
+				inputs.push_back(get_effect(L, idx));
+			}
 		}
+		chain->add_effect(effect, inputs);
 	}
-	chain->add_effect(effect, inputs);
 
 	lua_settop(L, 2);  // Return the effect itself.
 	return 1;
@@ -192,6 +196,22 @@ int Effect_set_int(lua_State *L)
 	return 0;
 }
 
+int Effect_set_vec4(lua_State *L)
+{
+	assert(lua_gettop(L) == 6);
+	Effect *effect = (Effect *)get_effect(L, 1);
+	size_t len;
+	const char* cstr = lua_tolstring(L, 2, &len);
+	std::string key(cstr, len);
+	float v[4];
+	v[0] = luaL_checknumber(L, 3);
+	v[1] = luaL_checknumber(L, 4);
+	v[2] = luaL_checknumber(L, 5);
+	v[3] = luaL_checknumber(L, 6);
+	(void)effect->set_vec4(key, v);
+	return 0;
+}
+
 const luaL_Reg EffectChain_funcs[] = {
 	{ "new", EffectChain_new },
 	{ "add_live_input", EffectChain_add_live_input },
@@ -209,6 +229,7 @@ const luaL_Reg WhiteBalanceEffect_funcs[] = {
 	{ "new", WhiteBalanceEffect_new },
 	{ "set_float", Effect_set_float },
 	{ "set_int", Effect_set_int },
+	{ "set_vec4", Effect_set_vec4 },
 	{ NULL, NULL }
 };
 
@@ -216,6 +237,7 @@ const luaL_Reg ResampleEffect_funcs[] = {
 	{ "new", ResampleEffect_new },
 	{ "set_float", Effect_set_float },
 	{ "set_int", Effect_set_int },
+	{ "set_vec4", Effect_set_vec4 },
 	{ NULL, NULL }
 };
 
@@ -223,6 +245,7 @@ const luaL_Reg PaddingEffect_funcs[] = {
 	{ "new", PaddingEffect_new },
 	{ "set_float", Effect_set_float },
 	{ "set_int", Effect_set_int },
+	{ "set_vec4", Effect_set_vec4 },
 	{ NULL, NULL }
 };
 
@@ -230,6 +253,7 @@ const luaL_Reg IntegralPaddingEffect_funcs[] = {
 	{ "new", IntegralPaddingEffect_new },
 	{ "set_float", Effect_set_float },
 	{ "set_int", Effect_set_int },
+	{ "set_vec4", Effect_set_vec4 },
 	{ NULL, NULL }
 };
 
@@ -237,6 +261,7 @@ const luaL_Reg OverlayEffect_funcs[] = {
 	{ "new", OverlayEffect_new },
 	{ "set_float", Effect_set_float },
 	{ "set_int", Effect_set_int },
+	{ "set_vec4", Effect_set_vec4 },
 	{ NULL, NULL }
 };
 
