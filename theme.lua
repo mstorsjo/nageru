@@ -56,6 +56,13 @@ end
 -- current time in seconds. width and height are the dimensions of
 -- the output, although you can ignore them if you don't need them
 -- (they're useful if you want to e.g. know what to resample by).
+--
+-- You should return two objects; the chain itself, and then a
+-- function (taking no parameters) that is run just before rendering.
+-- The function needs to call connect_signal on any inputs, so that
+-- it gets updated video data for the given frame. (You are allowed
+-- to switch which input your input is getting from between frames,
+-- but not calling connect_signal results in undefined behavior.)
 -- If you want to change any parameters in the chain, this is also
 -- the right place.
 --
