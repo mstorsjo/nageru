@@ -23,11 +23,11 @@ padding_effect:set_int("width", 1280);
 padding_effect:set_int("height", 720);
 padding_effect:set_int("left", 30);
 padding_effect:set_int("top", 60);
-local wb_effect = main_chain:add_effect(WhiteBalanceEffect.new(), padding_effect);
+local input1 = main_chain:add_live_input();
+input1:connect_signal(1);
+local wb_effect = main_chain:add_effect(WhiteBalanceEffect.new(), input1);
+local overlay_effect = main_chain:add_effect(OverlayEffect.new(), wb_effect, padding_effect);
 main_chain:finalize(true);
--- local input1 = main_chain.add_input(Inputs.create(1));
--- local resample_effect = main_chain.add_effect(ResampleEffect.new(), input0);
--- local padding_effect = main_chain.add_effect(IntegralPaddingEffect.new());
 
 -- A chain to show a single input on screen.
 local simple_chain = EffectChain.new(16, 9);
@@ -80,6 +80,7 @@ function get_chain(num, t, width, height)
 	if num == 0 then  -- Live.
 		prepare = function()
 			input0:connect_signal(live_signal_num);
+			input1:connect_signal(1);
 			wb_effect:set_float("output_color_temperature", 3500.0 + t * 100.0);
 		end
 		return main_chain, prepare;

@@ -10,6 +10,7 @@
 #include <movit/white_balance_effect.h>
 #include <movit/resample_effect.h>
 #include <movit/padding_effect.h>
+#include <movit/overlay_effect.h>
 
 #include "theme.h"
 
@@ -48,7 +49,8 @@ Effect *get_effect(lua_State *L, int idx)
 	if (luaL_testudata(L, idx, "WhiteBalanceEffect") ||
 	    luaL_testudata(L, idx, "ResampleEffect") ||
 	    luaL_testudata(L, idx, "PaddingEffect") ||
-	    luaL_testudata(L, idx, "IntegralPaddingEffect")) {
+	    luaL_testudata(L, idx, "IntegralPaddingEffect") ||
+	    luaL_testudata(L, idx, "OverlayEffect")) {
 		return (Effect *)lua_touserdata(L, idx);
 	}
 	fprintf(stderr, "Error: Index #%d was not an Effect type\n", idx);
@@ -80,20 +82,23 @@ int EffectChain_add_live_input(lua_State* L)
 
 int EffectChain_add_effect(lua_State* L)
 {
-	assert(lua_gettop(L) == 3);
+	assert(lua_gettop(L) >= 2);
 	EffectChain *chain = (EffectChain *)luaL_checkudata(L, 1, "EffectChain");
 
 	// TODO: Better error reporting.
-	Effect *effect1 = get_effect(L, 2);
-	if (luaL_testudata(L, 3, "LiveInputWrapper")) {
-		LiveInputWrapper *effect2 = (LiveInputWrapper *)lua_touserdata(L, 3);
-		chain->add_effect(effect1, effect2->get_input());
-	} else {
-		Effect *effect2 = get_effect(L, 3);
-		chain->add_effect(effect1, effect2);
+	Effect *effect = get_effect(L, 2);
+	vector<Effect *> inputs;
+	for (int idx = 3; idx <= lua_gettop(L); ++idx) {
+		if (luaL_testudata(L, idx, "LiveInputWrapper")) {
+			LiveInputWrapper *input = (LiveInputWrapper *)lua_touserdata(L, idx);
+			inputs.push_back(input->get_input());
+		} else {
+			inputs.push_back(get_effect(L, idx));
+		}
 	}
+	chain->add_effect(effect, inputs);
 
-	lua_settop(L, 2);	
+	lua_settop(L, 2);  // Return the effect itself.
 	return 1;
 }
 
@@ -155,6 +160,12 @@ int IntegralPaddingEffect_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 0);
 	return wrap_lua_object<IntegralPaddingEffect>(L, "IntegralPaddingEffect");
+}
+
+int OverlayEffect_new(lua_State* L)
+{
+	assert(lua_gettop(L) == 0);
+	return wrap_lua_object<OverlayEffect>(L, "OverlayEffect");
 }
 
 int Effect_set_float(lua_State *L)
@@ -222,6 +233,13 @@ const luaL_Reg IntegralPaddingEffect_funcs[] = {
 	{ NULL, NULL }
 };
 
+const luaL_Reg OverlayEffect_funcs[] = {
+	{ "new", OverlayEffect_new },
+	{ "set_float", Effect_set_float },
+	{ "set_int", Effect_set_int },
+	{ NULL, NULL }
+};
+
 }  // namespace
 
 LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain)
@@ -264,6 +282,7 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool)
 	register_class("ResampleEffect", ResampleEffect_funcs);
 	register_class("PaddingEffect", PaddingEffect_funcs);
 	register_class("IntegralPaddingEffect", IntegralPaddingEffect_funcs);
+	register_class("OverlayEffect", OverlayEffect_funcs);
 
 	// Run script.
 	lua_settop(L, 0);
