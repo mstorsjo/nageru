@@ -191,14 +191,24 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool)
 	register_class("LiveInputWrapper", LiveInputWrapper_funcs); 
 	register_class("WhiteBalanceEffect", WhiteBalanceEffect_funcs); 
 
-        // Run script.
-        lua_settop(L, 0);
-        if (luaL_dofile(L, filename)) {
-                fprintf(stderr, "error: %s\n", lua_tostring(L, -1));
-                lua_pop(L, 1);
-                exit(1);
-        }
-        assert(lua_gettop(L) == 0); 
+	// Run script.
+	lua_settop(L, 0);
+	if (luaL_dofile(L, filename)) {
+		fprintf(stderr, "error: %s\n", lua_tostring(L, -1));
+		lua_pop(L, 1);
+		exit(1);
+	}
+	assert(lua_gettop(L) == 0);
+
+	// Ask it for the number of channels.
+	lua_getglobal(L, "num_channels");
+
+	if (lua_pcall(L, 0, 1, 0) != 0) {
+		fprintf(stderr, "error running function `num_channels': %s", lua_tostring(L, -1));
+		exit(1);
+	}
+
+	num_channels = luaL_checknumber(L, 1);
 }
 
 void Theme::register_class(const char *class_name, const luaL_Reg *funcs)

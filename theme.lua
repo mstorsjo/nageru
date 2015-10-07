@@ -30,7 +30,7 @@ simple_chain:finalize(false);
 -- Returns the number of outputs in addition to the live (0) and preview (1).
 -- Called only once, at the start of the program.
 function num_channels()
-	return 0;
+	return 2;
 end
 
 -- Called every frame.

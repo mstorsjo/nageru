@@ -24,6 +24,7 @@ public:
 		input_textures[signal_num].tex_y = tex_y;
 		input_textures[signal_num].tex_cbcr = tex_cbcr;
 	}
+	int get_num_channels() { return num_channels; }
 
 	void connect_signal(movit::YCbCrInput *input, int signal_num);
 	void transition_clicked(int transition_num, float t);
@@ -35,6 +36,7 @@ private:
 	struct {
 		GLuint tex_y = 0, tex_cbcr = 0;
 	} input_textures[16];  // FIXME
+	int num_channels;
 };
 
 class LiveInputWrapper {
