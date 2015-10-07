@@ -44,16 +44,6 @@ public:
 	LiveInputWrapper(Theme *theme, movit::EffectChain *chain);
 
 	void connect_signal(int signal_num);
-#if 0
-	{
-		connected_signal_num = signal_num;
-	}
-
-	int get_connected_signal_num() const {
-		return connected_signal_num;
-	}
-#endif
-
 	movit::YCbCrInput *get_input() const
 	{
 		return input;
