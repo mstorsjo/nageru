@@ -68,16 +68,6 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	inout_format.color_space = COLORSPACE_sRGB;
 	inout_format.gamma_curve = GAMMA_sRGB;
 
-	YCbCrFormat input_ycbcr_format;
-	input_ycbcr_format.chroma_subsampling_x = 2;
-	input_ycbcr_format.chroma_subsampling_y = 1;
-	input_ycbcr_format.cb_x_position = 0.0;
-	input_ycbcr_format.cr_x_position = 0.0;
-	input_ycbcr_format.cb_y_position = 0.5;
-	input_ycbcr_format.cr_y_position = 0.5;
-	input_ycbcr_format.luma_coefficients = YCBCR_REC_601;
-	input_ycbcr_format.full_range = false;
-
 	// Display chain; shows the live output produced by the main chain (its RGBA version).
 	display_chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
 	check_error();
@@ -86,23 +76,6 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	display_chain->add_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED);
 	display_chain->set_dither_bits(0);  // Don't bother.
 	display_chain->finalize();
-
-	// Preview chains (always shows just the inputs for now).
-	preview0_chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
-	check_error();
-	preview0_input = new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
-	preview0_chain->add_input(preview0_input);
-	preview0_chain->add_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED);
-	preview0_chain->set_dither_bits(0);  // Don't bother.
-	preview0_chain->finalize();
-
-	preview1_chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
-	check_error();
-	preview1_input = new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
-	preview1_chain->add_input(preview1_input);
-	preview1_chain->add_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED);
-	preview1_chain->set_dither_bits(0);  // Don't bother.
-	preview1_chain->finalize();
 
 	h264_encoder.reset(new H264Encoder(h264_encoder_surface, WIDTH, HEIGHT, "test.mp4"));
 
@@ -449,41 +422,16 @@ void Mixer::thread_func()
 		live_frame.temp_textures = { rgba_tex };
 		output_channel[OUTPUT_LIVE].output_frame(live_frame);
 
-		// The preview frame shows the first input. Note that the textures
-		// are owned by the input frame, not the display frame.
-		if (bmusb_current_rendering_frame[0] != nullptr) {
-			const PBOFrameAllocator::Userdata *input0_userdata = (const PBOFrameAllocator::Userdata *)bmusb_current_rendering_frame[0]->userdata;
-			GLuint input0_y_tex = input0_userdata->tex_y;
-			GLuint input0_cbcr_tex = input0_userdata->tex_cbcr;
-			DisplayFrame preview0_frame;
-			preview0_frame.chain = preview0_chain.get();
-			preview0_frame.setup_chain = [this, input0_y_tex, input0_cbcr_tex]{
-				preview0_input->set_texture_num(0, input0_y_tex);
-				preview0_input->set_texture_num(1, input0_cbcr_tex);
-			};
-			preview0_frame.ready_fence = fence;
-			preview0_frame.input_frames = { bmusb_current_rendering_frame[0] };
-			preview0_frame.temp_textures = {};
-			output_channel[OUTPUT_PREVIEW].output_frame(preview0_frame);
-			output_channel[OUTPUT_INPUT0].output_frame(preview0_frame);
-		}
-
-		// Same for the other preview.
-		// TODO: Use a for loop. Gah.
-		if (bmusb_current_rendering_frame[1] != nullptr) {
-			const PBOFrameAllocator::Userdata *input1_userdata = (const PBOFrameAllocator::Userdata *)bmusb_current_rendering_frame[1]->userdata;
-			GLuint input1_y_tex = input1_userdata->tex_y;
-			GLuint input1_cbcr_tex = input1_userdata->tex_cbcr;
-			DisplayFrame preview1_frame;
-			preview1_frame.chain = preview1_chain.get();
-			preview1_frame.setup_chain = [this, input1_y_tex, input1_cbcr_tex]{
-				preview1_input->set_texture_num(0, input1_y_tex);
-				preview1_input->set_texture_num(1, input1_cbcr_tex);
-			};
-			preview1_frame.ready_fence = fence;
-			preview1_frame.input_frames = { bmusb_current_rendering_frame[1] };
-			preview1_frame.temp_textures = {};
-			output_channel[OUTPUT_INPUT1].output_frame(preview1_frame);
+		// Set up non-live inputs.
+		for (unsigned i = 1; i < 4; ++i) {  // FIXME: Don't lock to 4, ask Lua.
+			DisplayFrame display_frame;
+			pair<EffectChain *, function<void()>> chain = theme->get_chain(i, frame / 60.0f, WIDTH, HEIGHT);  // FIXME: dimensions
+			display_frame.chain = chain.first;
+			display_frame.setup_chain = chain.second;
+			display_frame.ready_fence = fence;
+			display_frame.input_frames = { bmusb_current_rendering_frame[0], bmusb_current_rendering_frame[1] };  // FIXME: possible to do better?
+			display_frame.temp_textures = {};
+			output_channel[i].output_frame(display_frame);
 		}
 
 		clock_gettime(CLOCK_MONOTONIC, &now);

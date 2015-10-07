@@ -8,16 +8,8 @@
 -- C++ side and you generally just build chains.
 io.write("hello from lua\n");
 
--- A chain to show input 0 on screen.
-local input0_chain = EffectChain.new(16, 9);
---input0_chain:add_input(Inputs.create(0));  -- TODO: We probably want something more fluid.
-local preview_input0 = input0_chain:add_live_input();
-preview_input0:connect_signal(0);  -- First input card. Can be changed whenever you want.
-input0_chain:finalize(false);
-
 -- The main live chain. Currently just about input 0 with some color correction.
 local main_chain = EffectChain.new(16, 9);
--- local input0 = main_chain:add_input(Inputs.create(0));
 local input0 = main_chain:add_live_input();
 input0:connect_signal(0);
 local wb_effect = main_chain:add_effect(WhiteBalanceEffect.new(), input0);
@@ -26,6 +18,12 @@ main_chain:finalize(true);
 -- local input1 = main_chain.add_input(Inputs.create(1));
 -- local resample_effect = main_chain.add_effect(ResampleEffect.new(), input0);
 -- local padding_effect = main_chain.add_effect(IntegralPaddingEffect.new());
+
+-- A chain to show a single input on screen.
+local simple_chain = EffectChain.new(16, 9);
+local simple_chain_input = simple_chain:add_live_input();
+simple_chain_input:connect_signal(0);  -- First input card. Can be changed whenever you want.
+simple_chain:finalize(false);
 
 -- Returns the number of outputs in addition to the live (0) and preview (1).
 -- Called only once, at the start of the program.
@@ -60,18 +58,30 @@ end
 -- NOTE: The chain returned must be finalized with the Y'CbCr flag
 -- if and only if num==0.
 function get_chain(num, t, width, height)
-	if num == 0 then
+	if num == 0 then  -- Live.
 		prepare = function()
-	--		io.write("prepare is being called back\n");
 			input0:connect_signal(1);
 			wb_effect:set_float("output_color_temperature", 3500.0 + t * 100.0);
 		end
 		return main_chain, prepare;
 	end
-	if num == 1 then
+	if num == 1 then  -- Preview.
 		prepare = function()
+			simple_chain_input:connect_signal(0);
 		end
-		return input0_chain, prepare;
+		return simple_chain, prepare;
+	end
+	if num == 2 then
+		prepare = function()
+			simple_chain_input:connect_signal(0);
+		end
+		return simple_chain, prepare;
+	end
+	if num == 3 then
+		prepare = function()
+			simple_chain_input:connect_signal(1);
+		end
+		return simple_chain, prepare;
 	end
 end
 
