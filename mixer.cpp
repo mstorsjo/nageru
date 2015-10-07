@@ -193,69 +193,7 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 	// Video frame will be released when last user of card->new_frame goes out of scope.
         card->usb->get_audio_frame_allocator()->release_frame(audio_frame);
 }
-	
-void Mixer::place_rectangle(Effect *resample_effect, Effect *padding_effect, float x0, float y0, float x1, float y1)
-{
-	float srcx0 = 0.0f;
-	float srcx1 = 1.0f;
-	float srcy0 = 0.0f;
-	float srcy1 = 1.0f;
 
-	// Cull.
-	if (x0 > 1280.0 || x1 < 0.0 || y0 > 720.0 || y1 < 0.0) {
-		CHECK(resample_effect->set_int("width", 1));
-		CHECK(resample_effect->set_int("height", 1));
-		CHECK(resample_effect->set_float("zoom_x", 1280.0));
-		CHECK(resample_effect->set_float("zoom_y", 720.0));
-		CHECK(padding_effect->set_int("left", 2000));
-		CHECK(padding_effect->set_int("top", 2000));
-		return;	
-	}
-
-	// Clip. (TODO: Clip on upper/left sides, too.)
-	if (x1 > 1280.0) {
-		srcx1 = (1280.0 - x0) / (x1 - x0);
-		x1 = 1280.0;
-	}
-	if (y1 > 720.0) {
-		srcy1 = (720.0 - y0) / (y1 - y0);
-		y1 = 720.0;
-	}
-
-	float x_subpixel_offset = x0 - floor(x0);
-	float y_subpixel_offset = y0 - floor(y0);
-
-	// Resampling must be to an integral number of pixels. Round up,
-	// and then add an extra pixel so we have some leeway for the border.
-	int width = int(ceil(x1 - x0)) + 1;
-	int height = int(ceil(y1 - y0)) + 1;
-	CHECK(resample_effect->set_int("width", width));
-	CHECK(resample_effect->set_int("height", height));
-
-	// Correct the discrepancy with zoom. (This will leave a small
-	// excess edge of pixels and subpixels, which we'll correct for soon.)
-	float zoom_x = (x1 - x0) / (width * (srcx1 - srcx0));
-	float zoom_y = (y1 - y0) / (height * (srcy1 - srcy0));
-	CHECK(resample_effect->set_float("zoom_x", zoom_x));
-	CHECK(resample_effect->set_float("zoom_y", zoom_y));
-	CHECK(resample_effect->set_float("zoom_center_x", 0.0f));
-	CHECK(resample_effect->set_float("zoom_center_y", 0.0f));
-
-	// Padding must also be to a whole-pixel offset.
-	CHECK(padding_effect->set_int("left", floor(x0)));
-	CHECK(padding_effect->set_int("top", floor(y0)));
-
-	// Correct _that_ discrepancy by subpixel offset in the resampling.
-	CHECK(resample_effect->set_float("left", -x_subpixel_offset / zoom_x));
-	CHECK(resample_effect->set_float("top", -y_subpixel_offset / zoom_y));
-
-	// Finally, adjust the border so it is exactly where we want it.
-	CHECK(padding_effect->set_float("border_offset_left", x_subpixel_offset));
-	CHECK(padding_effect->set_float("border_offset_right", x1 - (floor(x0) + width)));
-	CHECK(padding_effect->set_float("border_offset_top", y_subpixel_offset));
-	CHECK(padding_effect->set_float("border_offset_bottom", y1 - (floor(y0) + height)));
-}
-	
 void Mixer::thread_func()
 {
 	eglBindAPI(EGL_OPENGL_API);
@@ -270,67 +208,6 @@ void Mixer::thread_func()
 
 	while (!should_quit) {
 		++frame;
-
-#if 0
-		//int width0 = lrintf(848 * (1.0 + 0.2 * sin(frame * 0.02)));
-		int width0 = 848;
-		int height0 = lrintf(width0 * 9.0 / 16.0);
-
-		//float top0 = 96 + 48 * sin(frame * 0.005);
-		//float left0 = 96 + 48 * cos(frame * 0.006);
-		float top0 = 48;
-		float left0 = 16;
-		float bottom0 = top0 + height0;
-		float right0 = left0 + width0;
-
-		int width1 = 384;
-		int height1 = 216;
-	
-		float bottom1 = 720 - 48;
-		float right1 = 1280 - 16;
-		float top1 = bottom1 - height1;
-		float left1 = right1 - width1;
-	
-		if (current_source == SOURCE_INPUT1) {
-			top0 = 0.0;
-			bottom0 = HEIGHT;
-			left0 = 0.0;
-			right0 = WIDTH;
-
-			top1 = HEIGHT + 10;
-			bottom1 = HEIGHT + 20;
-			left1 = WIDTH + 10;
-			right1 = WIDTH + 20;
-		} else if (current_source == SOURCE_INPUT2) {
-			top1 = 0.0;
-			bottom1 = HEIGHT;
-			left1 = 0.0;
-			right1 = WIDTH;
-
-			top0 = HEIGHT + 10;
-			bottom0 = HEIGHT + 20;
-			left0 = WIDTH + 10;
-			right0 = WIDTH + 20;
-		} else {
-			float t = 0.5 + 0.5 * cos(frame * 0.006);
-			float scale0 = 1.0 + t * (1280.0 / 848.0 - 1.0);
-			float tx0 = 0.0 + t * (-16.0 * scale0);
-			float ty0 = 0.0 + t * (-48.0 * scale0);
-
-			top0 = top0 * scale0 + ty0;
-			bottom0 = bottom0 * scale0 + ty0;
-			left0 = left0 * scale0 + tx0;
-			right0 = right0 * scale0 + tx0;
-
-			top1 = top1 * scale0 + ty0;
-			bottom1 = bottom1 * scale0 + ty0;
-			left1 = left1 * scale0 + tx0;
-			right1 = right1 * scale0 + tx0;
-		}
-
-		place_rectangle(resample_effect, padding_effect, left0, top0, right0, bottom0);
-		place_rectangle(resample2_effect, padding2_effect, left1, top1, right1, bottom1);
-#endif
 
 		CaptureCard card_copy[NUM_CARDS];
 

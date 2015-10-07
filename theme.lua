@@ -11,22 +11,24 @@ io.write("hello from lua\n");
 local live_signal_num = 0;
 local preview_signal_num = 1;
 
--- The main live chain. Currently just about input 0 with some color correction.
+-- The main live chain.
 local main_chain = EffectChain.new(16, 9);
 local input0 = main_chain:add_live_input();
 input0:connect_signal(0);
-local resample_effect = main_chain:add_effect(ResampleEffect.new(), input0);
-resample_effect:set_int("width", 320);
-resample_effect:set_int("height", 180);
-local padding_effect = main_chain:add_effect(IntegralPaddingEffect.new(), resample_effect);
-padding_effect:set_int("width", 1280);
-padding_effect:set_int("height", 720);
-padding_effect:set_int("left", 30);
-padding_effect:set_int("top", 60);
 local input1 = main_chain:add_live_input();
 input1:connect_signal(1);
-local wb_effect = main_chain:add_effect(WhiteBalanceEffect.new(), input1);
-local overlay_effect = main_chain:add_effect(OverlayEffect.new(), wb_effect, padding_effect);
+local resample_effect = main_chain:add_effect(ResampleEffect.new(), input0);
+local padding_effect = main_chain:add_effect(IntegralPaddingEffect.new());
+padding_effect:set_vec4("border_color", 0.0, 0.0, 0.0, 1.0);
+
+local resample2_effect = main_chain:add_effect(ResampleEffect.new(), input1);
+-- Effect *saturation_effect = main_chain->add_effect(new SaturationEffect());
+-- CHECK(saturation_effect->set_float("saturation", 0.3f));
+local wb_effect = main_chain:add_effect(WhiteBalanceEffect.new());
+wb_effect:set_float("output_color_temperature", 3500.0);
+local padding2_effect = main_chain:add_effect(IntegralPaddingEffect.new());
+
+main_chain:add_effect(OverlayEffect.new(), padding_effect, padding2_effect);
 main_chain:finalize(true);
 
 -- A chain to show a single input on screen.
@@ -79,9 +81,7 @@ end
 function get_chain(num, t, width, height)
 	if num == 0 then  -- Live.
 		prepare = function()
-			input0:connect_signal(live_signal_num);
-			input1:connect_signal(1);
-			wb_effect:set_float("output_color_temperature", 3500.0 + t * 100.0);
+			prepare_live_chain(t, width, height);
 		end
 		return main_chain, prepare;
 	end
@@ -105,3 +105,105 @@ function get_chain(num, t, width, height)
 	end
 end
 
+function place_rectangle(resample_effect, padding_effect, x0, y0, x1, y1)
+	local srcx0 = 0.0;
+	local srcx1 = 1.0;
+	local srcy0 = 0.0;
+	local srcy1 = 1.0;
+
+	-- Cull.
+	if x0 > 1280.0 or x1 < 0.0 or y0 > 720.0 or y1 < 0.0 then
+		resample_effect:set_int("width", 1);
+		resample_effect:set_int("height", 1);
+		resample_effect:set_float("zoom_x", 1280.0);
+		resample_effect:set_float("zoom_y", 720.0);
+		padding_effect:set_int("left", 2000);
+		padding_effect:set_int("top", 2000);
+		return;
+	end
+
+	-- Clip. (TODO: Clip on upper/left sides, too.)
+	if x1 > 1280.0 then
+		srcx1 = (1280.0 - x0) / (x1 - x0);
+		x1 = 1280.0;
+	end
+	if y1 > 720.0 then
+		srcy1 = (720.0 - y0) / (y1 - y0);
+		y1 = 720.0;
+	end
+
+	local x_subpixel_offset = x0 - math.floor(x0);
+	local y_subpixel_offset = y0 - math.floor(y0);
+
+	-- Resampling must be to an integral number of pixels. Round up,
+	-- and then add an extra pixel so we have some leeway for the border.
+	local width = math.ceil(x1 - x0) + 1;
+	local height = math.ceil(y1 - y0) + 1;
+	resample_effect:set_int("width", width);
+	resample_effect:set_int("height", height);
+
+	-- Correct the discrepancy with zoom. (This will leave a small
+	-- excess edge of pixels and subpixels, which we'll correct for soon.)
+	local zoom_x = (x1 - x0) / (width * (srcx1 - srcx0));
+	local zoom_y = (y1 - y0) / (height * (srcy1 - srcy0));
+	resample_effect:set_float("zoom_x", zoom_x);
+	resample_effect:set_float("zoom_y", zoom_y);
+	resample_effect:set_float("zoom_center_x", 0.0);
+	resample_effect:set_float("zoom_center_y", 0.0);
+
+	-- Padding must also be to a whole-pixel offset.
+	padding_effect:set_int("left", math.floor(x0));
+	padding_effect:set_int("top", math.floor(y0));
+
+	-- Correct _that_ discrepancy by subpixel offset in the resampling.
+	resample_effect:set_float("left", -x_subpixel_offset / zoom_x);
+	resample_effect:set_float("top", -y_subpixel_offset / zoom_y);
+
+	-- Finally, adjust the border so it is exactly where we want it.
+	padding_effect:set_float("border_offset_left", x_subpixel_offset);
+	padding_effect:set_float("border_offset_right", x1 - (math.floor(x0) + width));
+	padding_effect:set_float("border_offset_top", y_subpixel_offset);
+	padding_effect:set_float("border_offset_bottom", y1 - (math.floor(y0) + height));
+end
+
+-- This is broken, of course (even for positive numbers), but Lua doesn't give us access to real rounding.
+function round(x)
+	return math.floor(x + 0.5)
+end
+
+function prepare_live_chain(t, width, height)
+	input0:connect_signal(live_signal_num);
+	input1:connect_signal(1);
+
+	local width0 = 848;
+	local height0 = round(width0 * 9.0 / 16.0);
+
+	local top0 = 48;
+	local left0 = 16;
+	local bottom0 = top0 + height0;
+	local right0 = left0 + width0;
+
+	local width1 = 384;
+	local height1 = 216;
+
+	local bottom1 = 720 - 48;
+	local right1 = 1280 - 16;
+	local top1 = bottom1 - height1;
+	local left1 = right1 - width1;
+	local sub_t = 0.5 + 0.5 * math.cos(t * 1.0);
+	local scale0 = 1.0 + sub_t * (1280.0 / 848.0 - 1.0);
+	local tx0 = 0.0 + sub_t * (-16.0 * scale0);
+	local ty0 = 0.0 + sub_t * (-48.0 * scale0);
+
+	top0 = top0 * scale0 + ty0;
+	bottom0 = bottom0 * scale0 + ty0;
+	left0 = left0 * scale0 + tx0;
+	right0 = right0 * scale0 + tx0;
+
+	top1 = top1 * scale0 + ty0;
+	bottom1 = bottom1 * scale0 + ty0;
+	left1 = left1 * scale0 + tx0;
+	right1 = right1 * scale0 + tx0;
+	place_rectangle(resample_effect, padding_effect, left0, top0, right0, bottom0);
+	place_rectangle(resample2_effect, padding2_effect, left1, top1, right1, bottom1);
+end
