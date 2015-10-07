@@ -271,6 +271,7 @@ void Mixer::thread_func()
 	while (!should_quit) {
 		++frame;
 
+#if 0
 		//int width0 = lrintf(848 * (1.0 + 0.2 * sin(frame * 0.02)));
 		int width0 = 848;
 		int height0 = lrintf(width0 * 9.0 / 16.0);
@@ -327,7 +328,6 @@ void Mixer::thread_func()
 			right1 = right1 * scale0 + tx0;
 		}
 
-#if 0
 		place_rectangle(resample_effect, padding_effect, left0, top0, right0, bottom0);
 		place_rectangle(resample2_effect, padding2_effect, left1, top1, right1, bottom1);
 #endif
@@ -531,9 +531,9 @@ void Mixer::quit()
 	mixer_thread.join();
 }
 
-void Mixer::cut(Source source)
+void Mixer::transition_clicked(int transition_num, float t)
 {
-	current_source = source;
+	theme->transition_clicked(transition_num, t);
 }
 
 void Mixer::OutputChannel::output_frame(DisplayFrame frame)

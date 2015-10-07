@@ -32,12 +32,7 @@ public:
 	void start();
 	void quit();
 
-	enum Source {
-		SOURCE_INPUT1,
-		SOURCE_INPUT2,
-		SOURCE_SBS,
-	};
-	void cut(Source source);
+	void transition_clicked(int transition_num, float t);
 
 	enum Output {
 		OUTPUT_LIVE = 0,
@@ -98,7 +93,6 @@ private:
 	// Effects part of <display_chain>. Owned by <display_chain>.
 	movit::FlatInput *display_input;
 
-	Source current_source = SOURCE_INPUT1;
 	int frame = 0;
 
 	std::mutex bmusb_mutex;

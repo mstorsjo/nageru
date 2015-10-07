@@ -8,12 +8,14 @@
 -- C++ side and you generally just build chains.
 io.write("hello from lua\n");
 
+local live_signal_num = 0;
+local preview_signal_num = 1;
+
 -- The main live chain. Currently just about input 0 with some color correction.
 local main_chain = EffectChain.new(16, 9);
 local input0 = main_chain:add_live_input();
 input0:connect_signal(0);
 local wb_effect = main_chain:add_effect(WhiteBalanceEffect.new(), input0);
-wb_effect:set_float("output_color_temperature", 1234.0);
 main_chain:finalize(true);
 -- local input1 = main_chain.add_input(Inputs.create(1));
 -- local resample_effect = main_chain.add_effect(ResampleEffect.new(), input0);
@@ -37,8 +39,10 @@ function get_transitions()
 end
 
 function transition_clicked(num, t)
-	-- Presumably do some sort of transition here.
-	io.write("STUB: transition_clicked\n");
+	-- Only a cut for now.
+	local temp = live_signal_num;
+	live_signal_num = preview_signal_num;
+	preview_signal_num = temp;
 end
 
 function channel_clicked(num, t)
@@ -60,14 +64,14 @@ end
 function get_chain(num, t, width, height)
 	if num == 0 then  -- Live.
 		prepare = function()
-			input0:connect_signal(1);
+			input0:connect_signal(live_signal_num);
 			wb_effect:set_float("output_color_temperature", 3500.0 + t * 100.0);
 		end
 		return main_chain, prepare;
 	end
 	if num == 1 then  -- Preview.
 		prepare = function()
-			simple_chain_input:connect_signal(0);
+			simple_chain_input:connect_signal(preview_signal_num);
 		end
 		return simple_chain, prepare;
 	end

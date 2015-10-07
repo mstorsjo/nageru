@@ -23,6 +23,5 @@ MainWindow::MainWindow()
 
 void MainWindow::cut()
 {
-	static int i = 0;
-	global_mixer->cut(Mixer::Source((++i) % 3));
+	global_mixer->transition_clicked(0, 0.0f);  // FIXME: real values
 }

@@ -248,3 +248,16 @@ void Theme::connect_signal(YCbCrInput *input, int signal_num)
 	input->set_texture_num(0, input_textures[signal_num].tex_y);
 	input->set_texture_num(1, input_textures[signal_num].tex_cbcr);
 }
+
+void Theme::transition_clicked(int transition_num, float t)
+{
+	unique_lock<mutex> lock(m);
+	lua_getglobal(L, "transition_clicked");
+	lua_pushnumber(L, transition_num);
+	lua_pushnumber(L, t);
+
+	if (lua_pcall(L, 2, 0, 0) != 0) {
+		fprintf(stderr, "error running function `transition_clicked': %s", lua_tostring(L, -1));
+		exit(1);
+	}
+}
