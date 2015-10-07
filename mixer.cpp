@@ -58,6 +58,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	check_error();
 
 	resource_pool.reset(new ResourcePool);
+	theme.reset(new Theme("theme.lua", resource_pool.get()));
 	output_channel[OUTPUT_LIVE].parent = this;
 	output_channel[OUTPUT_PREVIEW].parent = this;
 	output_channel[OUTPUT_INPUT0].parent = this;
@@ -76,39 +77,6 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	input_ycbcr_format.cr_y_position = 0.5;
 	input_ycbcr_format.luma_coefficients = YCBCR_REC_601;
 	input_ycbcr_format.full_range = false;
-
-	YCbCrFormat output_ycbcr_format;
-	output_ycbcr_format.chroma_subsampling_x = 1;
-	output_ycbcr_format.chroma_subsampling_y = 1;
-	output_ycbcr_format.luma_coefficients = YCBCR_REC_601;
-	output_ycbcr_format.full_range = false;
-
-	// Main chain.
-	chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
-	check_error();
-	input[0] = new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
-	chain->add_input(input[0]);
-	input[1] = new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
-	chain->add_input(input[1]);
-	resample_effect = chain->add_effect(new ResampleEffect(), input[0]);
-	padding_effect = chain->add_effect(new IntegralPaddingEffect());
-	float border_color[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-	CHECK(padding_effect->set_vec4("border_color", border_color));
-
-	resample2_effect = chain->add_effect(new ResampleEffect(), input[1]);
-	Effect *saturation_effect = chain->add_effect(new SaturationEffect());
-	CHECK(saturation_effect->set_float("saturation", 0.3f));
-	Effect *wb_effect = chain->add_effect(new WhiteBalanceEffect());
-	CHECK(wb_effect->set_float("output_color_temperature", 3500.0));
-	padding2_effect = chain->add_effect(new IntegralPaddingEffect());
-
-	chain->add_effect(new OverlayEffect(), padding_effect, padding2_effect);
-
-	chain->add_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED);
-	chain->add_ycbcr_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED, output_ycbcr_format, YCBCR_OUTPUT_SPLIT_Y_AND_CBCR);
-	chain->set_dither_bits(8);
-	chain->set_output_origin(OUTPUT_ORIGIN_TOP_LEFT);
-	chain->finalize();
 
 	// Display chain; shows the live output produced by the main chain (its RGBA version).
 	display_chain.reset(new EffectChain(WIDTH, HEIGHT, resource_pool.get()));
@@ -162,8 +130,6 @@ Mixer::Mixer(const QSurfaceFormat &format)
 
 	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
 		cards[card_index].usb->start_bm_capture();
-		input[card_index]->set_pixel_data(0, nullptr, 0);
-		input[card_index]->set_pixel_data(1, nullptr, 0);
 	}
 
 	//chain->enable_phase_timing(true);
@@ -388,8 +354,10 @@ void Mixer::thread_func()
 			right1 = right1 * scale0 + tx0;
 		}
 
+#if 0
 		place_rectangle(resample_effect, padding_effect, left0, top0, right0, bottom0);
 		place_rectangle(resample2_effect, padding2_effect, left1, top1, right1, bottom1);
+#endif
 
 		CaptureCard card_copy[NUM_CARDS];
 
@@ -416,6 +384,7 @@ void Mixer::thread_func()
 			if (!card->new_data_ready)
 				continue;
 
+			assert(card->new_frame != nullptr);
 			bmusb_current_rendering_frame[card_index] = card->new_frame;
 			check_error();
 
@@ -427,15 +396,13 @@ void Mixer::thread_func()
 			glDeleteSync(card->new_data_ready_fence);
 			check_error();
 			const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)card->new_frame->userdata;
-			input[card_index]->set_texture_num(0, userdata->tex_y);
-			input[card_index]->set_texture_num(1, userdata->tex_cbcr);
-
-			if (NUM_CARDS == 1) {
-				// Set to the other one, too.
-				input[1]->set_texture_num(0, userdata->tex_y);
-				input[1]->set_texture_num(1, userdata->tex_cbcr);
-			}
+			theme->set_input_textures(card_index, userdata->tex_y, userdata->tex_cbcr);
 		}
+
+		// Get the main chain from the theme, and set its state immediately.
+		pair<EffectChain *, function<void()>> theme_main_chain = theme->get_chain(0, frame / 60.0f, WIDTH, HEIGHT);
+		EffectChain *chain = theme_main_chain.first;
+		theme_main_chain.second();
 
 		GLuint y_tex, cbcr_tex;
 		bool got_frame = h264_encoder->begin_frame(&y_tex, &cbcr_tex);
@@ -484,7 +451,7 @@ void Mixer::thread_func()
 
 		// The preview frame shows the first input. Note that the textures
 		// are owned by the input frame, not the display frame.
-		{
+		if (bmusb_current_rendering_frame[0] != nullptr) {
 			const PBOFrameAllocator::Userdata *input0_userdata = (const PBOFrameAllocator::Userdata *)bmusb_current_rendering_frame[0]->userdata;
 			GLuint input0_y_tex = input0_userdata->tex_y;
 			GLuint input0_cbcr_tex = input0_userdata->tex_cbcr;
@@ -503,7 +470,7 @@ void Mixer::thread_func()
 
 		// Same for the other preview.
 		// TODO: Use a for loop. Gah.
-		{
+		if (bmusb_current_rendering_frame[1] != nullptr) {
 			const PBOFrameAllocator::Userdata *input1_userdata = (const PBOFrameAllocator::Userdata *)bmusb_current_rendering_frame[1]->userdata;
 			GLuint input1_y_tex = input1_userdata->tex_y;
 			GLuint input1_cbcr_tex = input1_userdata->tex_cbcr;

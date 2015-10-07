@@ -14,6 +14,7 @@
 #include "pbo_frame_allocator.h"
 #include "ref_counted_frame.h"
 #include "ref_counted_gl_sync.h"
+#include "theme.h"
 
 #define NUM_CARDS 2
 
@@ -89,17 +90,12 @@ private:
 
 	QSurface *mixer_surface, *h264_encoder_surface;
 	std::unique_ptr<movit::ResourcePool> resource_pool;
-	std::unique_ptr<movit::EffectChain> chain;
+	std::unique_ptr<Theme> theme;
 	std::unique_ptr<movit::EffectChain> display_chain;
 	std::unique_ptr<movit::EffectChain> preview0_chain;
 	std::unique_ptr<movit::EffectChain> preview1_chain;
 	GLuint cbcr_program_num;  // Owned by <resource_pool>.
 	std::unique_ptr<H264Encoder> h264_encoder;
-
-	// Effects part of <chain>. Owned by <chain>.
-	movit::YCbCrInput *input[NUM_CARDS];
-	movit::Effect *resample_effect, *resample2_effect;
-	movit::Effect *padding_effect, *padding2_effect;
 
 	// Effects part of <display_chain>. Owned by <display_chain>.
 	movit::FlatInput *display_input;
