@@ -8,6 +8,7 @@
 #include <movit/effect_chain.h>
 #include <movit/ycbcr_input.h>
 #include <movit/white_balance_effect.h>
+#include <movit/resample_effect.h>
 
 #include "theme.h"
 
@@ -41,6 +42,16 @@ Theme *get_theme_updata(lua_State* L)
 	return (Theme *)lua_touserdata(L, lua_upvalueindex(1));
 }
 
+Effect *get_effect(lua_State *L, int idx)
+{
+	if (luaL_testudata(L, idx, "WhiteBalanceEffect") ||
+	    luaL_testudata(L, idx, "ResampleEffect")) {
+		return (Effect *)lua_touserdata(L, idx);
+	}
+	fprintf(stderr, "Error: Index #%d was not an Effect type\n", idx);
+	exit(1);
+}
+
 bool checkbool(lua_State* L, int idx)
 {
 	luaL_checktype(L, idx, LUA_TBOOLEAN);
@@ -69,10 +80,15 @@ int EffectChain_add_effect(lua_State* L)
 	assert(lua_gettop(L) == 3);
 	EffectChain *chain = (EffectChain *)luaL_checkudata(L, 1, "EffectChain");
 
-	// FIXME: This needs a lot of work.
-	Effect *effect1 = (Effect *)luaL_checkudata(L, 2, "WhiteBalanceEffect");
-	LiveInputWrapper *effect2 = (LiveInputWrapper *)luaL_checkudata(L, 3, "LiveInputWrapper");
-	chain->add_effect(effect1, effect2->get_input());
+	// TODO: Better error reporting.
+	Effect *effect1 = get_effect(L, 2);
+	if (luaL_testudata(L, 3, "LiveInputWrapper")) {
+		LiveInputWrapper *effect2 = (LiveInputWrapper *)lua_touserdata(L, 3);
+		chain->add_effect(effect1, effect2->get_input());
+	} else {
+		Effect *effect2 = get_effect(L, 3);
+		chain->add_effect(effect1, effect2);
+	}
 
 	lua_settop(L, 2);	
 	return 1;
@@ -120,15 +136,33 @@ int WhiteBalanceEffect_new(lua_State* L)
 	return wrap_lua_object<WhiteBalanceEffect>(L, "WhiteBalanceEffect");
 }
 
-int WhiteBalanceEffect_set_float(lua_State *L)
+int ResampleEffect_new(lua_State* L)
+{
+	assert(lua_gettop(L) == 0);
+	return wrap_lua_object<ResampleEffect>(L, "ResampleEffect");
+}
+
+int Effect_set_float(lua_State *L)
 {
 	assert(lua_gettop(L) == 3);
-	WhiteBalanceEffect *effect = (WhiteBalanceEffect *)luaL_checkudata(L, 1, "WhiteBalanceEffect");
+	Effect *effect = (Effect *)get_effect(L, 1);
 	size_t len;
 	const char* cstr = lua_tolstring(L, 2, &len);
 	std::string key(cstr, len);
 	float value = luaL_checknumber(L, 3);
 	(void)effect->set_float(key, value);
+	return 0;
+}
+
+int Effect_set_int(lua_State *L)
+{
+	assert(lua_gettop(L) == 3);
+	Effect *effect = (Effect *)get_effect(L, 1);
+	size_t len;
+	const char* cstr = lua_tolstring(L, 2, &len);
+	std::string key(cstr, len);
+	float value = luaL_checknumber(L, 3);
+	(void)effect->set_int(key, value);
 	return 0;
 }
 
@@ -147,7 +181,15 @@ const luaL_Reg LiveInputWrapper_funcs[] = {
 
 const luaL_Reg WhiteBalanceEffect_funcs[] = {
 	{ "new", WhiteBalanceEffect_new },
-	{ "set_float", WhiteBalanceEffect_set_float },
+	{ "set_float", Effect_set_float },
+	{ "set_int", Effect_set_int },
+	{ NULL, NULL }
+};
+
+const luaL_Reg ResampleEffect_funcs[] = {
+	{ "new", ResampleEffect_new },
+	{ "set_float", Effect_set_float },
+	{ "set_int", Effect_set_int },
 	{ NULL, NULL }
 };
 
@@ -189,7 +231,8 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool)
        
 	register_class("EffectChain", EffectChain_funcs); 
 	register_class("LiveInputWrapper", LiveInputWrapper_funcs); 
-	register_class("WhiteBalanceEffect", WhiteBalanceEffect_funcs); 
+	register_class("WhiteBalanceEffect", WhiteBalanceEffect_funcs);
+	register_class("ResampleEffect", ResampleEffect_funcs);
 
 	// Run script.
 	lua_settop(L, 0);
