@@ -322,7 +322,7 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool)
 	lua_getglobal(L, "num_channels");
 
 	if (lua_pcall(L, 0, 1, 0) != 0) {
-		fprintf(stderr, "error running function `num_channels': %s", lua_tostring(L, -1));
+		fprintf(stderr, "error running function `num_channels': %s\n", lua_tostring(L, -1));
 		exit(1);
 	}
 
@@ -350,7 +350,7 @@ Theme::get_chain(unsigned num, float t, unsigned width, unsigned height)
 	lua_pushnumber(L, height);
 
 	if (lua_pcall(L, 4, 2, 0) != 0) {
-		fprintf(stderr, "error running function `get_chain': %s", lua_tostring(L, -1));
+		fprintf(stderr, "error running function `get_chain': %s\n", lua_tostring(L, -1));
 		exit(1);
 	}
 
@@ -367,7 +367,10 @@ Theme::get_chain(unsigned num, float t, unsigned width, unsigned height)
 
 		// Set up state, including connecting signals.
 		lua_rawgeti(L, LUA_REGISTRYINDEX, funcref);
-		lua_pcall(L, 0, 0, 0);
+		if (lua_pcall(L, 0, 0, 0) != 0) {
+			fprintf(stderr, "error running chain setup callback: %s\n", lua_tostring(L, -1));
+			exit(1);
+		}
 	});
 }
 
@@ -385,7 +388,7 @@ void Theme::transition_clicked(int transition_num, float t)
 	lua_pushnumber(L, t);
 
 	if (lua_pcall(L, 2, 0, 0) != 0) {
-		fprintf(stderr, "error running function `transition_clicked': %s", lua_tostring(L, -1));
+		fprintf(stderr, "error running function `transition_clicked': %s\n", lua_tostring(L, -1));
 		exit(1);
 	}
 }
