@@ -47,7 +47,8 @@ Effect *get_effect(lua_State *L, int idx)
 {
 	if (luaL_testudata(L, idx, "WhiteBalanceEffect") ||
 	    luaL_testudata(L, idx, "ResampleEffect") ||
-	    luaL_testudata(L, idx, "PaddingEffect")) {
+	    luaL_testudata(L, idx, "PaddingEffect") ||
+	    luaL_testudata(L, idx, "IntegralPaddingEffect")) {
 		return (Effect *)lua_touserdata(L, idx);
 	}
 	fprintf(stderr, "Error: Index #%d was not an Effect type\n", idx);
@@ -150,6 +151,12 @@ int PaddingEffect_new(lua_State* L)
 	return wrap_lua_object<PaddingEffect>(L, "PaddingEffect");
 }
 
+int IntegralPaddingEffect_new(lua_State* L)
+{
+	assert(lua_gettop(L) == 0);
+	return wrap_lua_object<IntegralPaddingEffect>(L, "IntegralPaddingEffect");
+}
+
 int Effect_set_float(lua_State *L)
 {
 	assert(lua_gettop(L) == 3);
@@ -208,6 +215,13 @@ const luaL_Reg PaddingEffect_funcs[] = {
 	{ NULL, NULL }
 };
 
+const luaL_Reg IntegralPaddingEffect_funcs[] = {
+	{ "new", IntegralPaddingEffect_new },
+	{ "set_float", Effect_set_float },
+	{ "set_int", Effect_set_int },
+	{ NULL, NULL }
+};
+
 }  // namespace
 
 LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain)
@@ -249,6 +263,7 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool)
 	register_class("WhiteBalanceEffect", WhiteBalanceEffect_funcs);
 	register_class("ResampleEffect", ResampleEffect_funcs);
 	register_class("PaddingEffect", PaddingEffect_funcs);
+	register_class("IntegralPaddingEffect", IntegralPaddingEffect_funcs);
 
 	// Run script.
 	lua_settop(L, 0);
