@@ -81,7 +81,7 @@ end
 function get_chain(num, t, width, height)
 	if num == 0 then  -- Live.
 		prepare = function()
-			prepare_live_chain(t, width, height);
+			prepare_sbs_chain(t, width, height);
 		end
 		return main_chain, prepare;
 	end
@@ -171,29 +171,33 @@ function round(x)
 	return math.floor(x + 0.5)
 end
 
-function prepare_live_chain(t, width, height)
+function prepare_sbs_chain(t, screen_width, screen_height)
 	input0:connect_signal(live_signal_num);
 	input1:connect_signal(1);
 
-	local width0 = 848;
+	-- First input is positioned (16,48) from top-left.
+	local width0 = round(848 * screen_width/1280.0);
 	local height0 = round(width0 * 9.0 / 16.0);
 
-	local top0 = 48;
-	local left0 = 16;
+	local top0 = 48 * screen_height/720.0;
+	local left0 = 16 * screen_width/1280.0;
 	local bottom0 = top0 + height0;
 	local right0 = left0 + width0;
 
-	local width1 = 384;
-	local height1 = 216;
+	-- Second input is positioned (16,48) from the bottom-right.
+	local width1 = 384 * screen_width/1280.0;
+	local height1 = 216 * screen_height/720.0;
 
-	local bottom1 = 720 - 48;
-	local right1 = 1280 - 16;
+	local bottom1 = screen_height - 48 * screen_height/720.0;
+	local right1 = screen_width - 16 * screen_width/1280.0;
 	local top1 = bottom1 - height1;
 	local left1 = right1 - width1;
+
+	-- Interpolate between the fullscreen and side-by-side views.
 	local sub_t = 0.5 + 0.5 * math.cos(t * 1.0);
 	local scale0 = 1.0 + sub_t * (1280.0 / 848.0 - 1.0);
-	local tx0 = 0.0 + sub_t * (-16.0 * scale0);
-	local ty0 = 0.0 + sub_t * (-48.0 * scale0);
+	local tx0 = 0.0 + sub_t * (-left0 * scale0);
+	local ty0 = 0.0 + sub_t * (-top0 * scale0);
 
 	top0 = top0 * scale0 + ty0;
 	bottom0 = bottom0 * scale0 + ty0;
