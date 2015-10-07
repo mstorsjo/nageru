@@ -105,31 +105,31 @@ function get_chain(num, t, width, height)
 	end
 end
 
-function place_rectangle(resample_effect, padding_effect, x0, y0, x1, y1)
+function place_rectangle(resample_effect, padding_effect, x0, y0, x1, y1, screen_width, screen_height)
 	local srcx0 = 0.0;
 	local srcx1 = 1.0;
 	local srcy0 = 0.0;
 	local srcy1 = 1.0;
 
 	-- Cull.
-	if x0 > 1280.0 or x1 < 0.0 or y0 > 720.0 or y1 < 0.0 then
+	if x0 > screen_width or x1 < 0.0 or y0 > screen_height or y1 < 0.0 then
 		resample_effect:set_int("width", 1);
 		resample_effect:set_int("height", 1);
-		resample_effect:set_float("zoom_x", 1280.0);
-		resample_effect:set_float("zoom_y", 720.0);
-		padding_effect:set_int("left", 2000);
-		padding_effect:set_int("top", 2000);
+		resample_effect:set_float("zoom_x", screen_width);
+		resample_effect:set_float("zoom_y", screen_height);
+		padding_effect:set_int("left", screen_width + 100);
+		padding_effect:set_int("top", screen_height + 100);
 		return;
 	end
 
 	-- Clip. (TODO: Clip on upper/left sides, too.)
-	if x1 > 1280.0 then
-		srcx1 = (1280.0 - x0) / (x1 - x0);
-		x1 = 1280.0;
+	if x1 > screen_width then
+		srcx1 = (screen_width - x0) / (x1 - x0);
+		x1 = screen_width;
 	end
-	if y1 > 720.0 then
-		srcy1 = (720.0 - y0) / (y1 - y0);
-		y1 = 720.0;
+	if y1 > screen_height then
+		srcy1 = (screen_height - y0) / (y1 - y0);
+		y1 = screen_height;
 	end
 
 	local x_subpixel_offset = x0 - math.floor(x0);
@@ -208,6 +208,6 @@ function prepare_sbs_chain(t, screen_width, screen_height)
 	bottom1 = bottom1 * scale0 + ty0;
 	left1 = left1 * scale0 + tx0;
 	right1 = right1 * scale0 + tx0;
-	place_rectangle(resample_effect, padding_effect, left0, top0, right0, bottom0);
-	place_rectangle(resample2_effect, padding2_effect, left1, top1, right1, bottom1);
+	place_rectangle(resample_effect, padding_effect, left0, top0, right0, bottom0, screen_width, screen_height);
+	place_rectangle(resample2_effect, padding2_effect, left1, top1, right1, bottom1, screen_width, screen_height);
 end
