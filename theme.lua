@@ -8,6 +8,11 @@
 -- C++ side and you generally just build chains.
 io.write("hello from lua\n");
 
+local zoom_start = -2.0;
+local zoom_end = -1.0;
+local zoom_src = 0.0;
+local zoom_dst = 1.0;
+
 local live_signal_num = 0;
 local preview_signal_num = 1;
 
@@ -49,10 +54,16 @@ function get_transitions()
 end
 
 function transition_clicked(num, t)
-	-- Only a cut for now.
-	local temp = live_signal_num;
-	live_signal_num = preview_signal_num;
-	preview_signal_num = temp;
+	-- local temp = live_signal_num;
+	-- live_signal_num = preview_signal_num;
+	-- preview_signal_num = temp;
+
+	zoom_start = t;
+	zoom_end = t + 1.0;
+
+	local temp = zoom_src;
+	zoom_src = zoom_dst;
+	zoom_dst = temp;
 end
 
 function channel_clicked(num, t)
@@ -81,7 +92,16 @@ end
 function get_chain(num, t, width, height)
 	if num == 0 then  -- Live.
 		prepare = function()
-			prepare_sbs_chain(t, width, height);
+			if (t < zoom_start) then
+				prepare_sbs_chain(zoom_src, width, height);
+			elseif (t > zoom_end) then
+				prepare_sbs_chain(zoom_dst, width, height);
+			else
+				local tt = (t - zoom_start) / (zoom_end - zoom_start);
+				-- Smooth it a bit.
+				tt = math.sin(tt * 3.14159265358 * 0.5)
+				prepare_sbs_chain(zoom_src + (zoom_dst - zoom_src) * tt, width, height);
+			end
 		end
 		return main_chain, prepare;
 	end
@@ -194,10 +214,9 @@ function prepare_sbs_chain(t, screen_width, screen_height)
 	local left1 = right1 - width1;
 
 	-- Interpolate between the fullscreen and side-by-side views.
-	local sub_t = 0.5 + 0.5 * math.cos(t * 1.0);
-	local scale0 = 1.0 + sub_t * (1280.0 / 848.0 - 1.0);
-	local tx0 = 0.0 + sub_t * (-left0 * scale0);
-	local ty0 = 0.0 + sub_t * (-top0 * scale0);
+	local scale0 = 1.0 + t * (1280.0 / 848.0 - 1.0);
+	local tx0 = 0.0 + t * (-left0 * scale0);
+	local ty0 = 0.0 + t * (-top0 * scale0);
 
 	top0 = top0 * scale0 + ty0;
 	bottom0 = bottom0 * scale0 + ty0;

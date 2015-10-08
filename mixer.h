@@ -32,7 +32,7 @@ public:
 	void start();
 	void quit();
 
-	void transition_clicked(int transition_num, float t);
+	void transition_clicked(int transition_num);
 
 	enum Output {
 		OUTPUT_LIVE = 0,

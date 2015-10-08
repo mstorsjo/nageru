@@ -408,9 +408,9 @@ void Mixer::quit()
 	mixer_thread.join();
 }
 
-void Mixer::transition_clicked(int transition_num, float t)
+void Mixer::transition_clicked(int transition_num)
 {
-	theme->transition_clicked(transition_num, t);
+	theme->transition_clicked(transition_num, frame / 60.0);
 }
 
 void Mixer::OutputChannel::output_frame(DisplayFrame frame)
