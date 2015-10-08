@@ -95,16 +95,64 @@ function get_transitions()
 end
 
 function transition_clicked(num, t)
-	-- local temp = live_signal_num
-	-- live_signal_num = preview_signal_num
-	-- preview_signal_num = temp
+	if num == 0 then
+		-- Cut.
+		local temp = live_signal_num
+		live_signal_num = preview_signal_num
+		preview_signal_num = temp
 
-	zoom_start = t
-	zoom_end = t + 1.0
+		if live_signal_num == 2 then
+			-- Just cut to SBS, we need to reset any zooms.
+			zoom_src = 1.0
+			zoom_dst = 0.0
+			zoom_start = -2.0
+			zoom_end = -1.0
+		end
+	elseif num == 1 then
+		-- Zoom.
 
-	local temp = zoom_src
-	zoom_src = zoom_dst
-	zoom_dst = temp
+		-- If live is 2 (SBS) but de-facto single, make it so.
+		if live_signal_num == 2 and t >= zoom_end and zoom_dst == 1.0 then
+			live_signal_num = 0
+		end
+
+		if live_signal_num == preview_signal_num then
+			-- Nothing to do.
+			return
+		end
+
+		if (live_signal_num == 0 and preview_signal_num == 1) or
+		   (live_signal_num == 1 and preview_signal_num == 0) then
+			-- We can't zoom between these. Just make a cut.
+			io.write("Cutting from " .. live_signal_num .. " to " .. live_signal_num .. "\n")
+			local temp = live_signal_num
+			live_signal_num = preview_signal_num
+			preview_signal_num = temp
+			return
+		end
+
+		if live_signal_num == 2 and preview_signal_num == 1 then
+			io.write("NOT SUPPORTED YET\n")
+			return
+		end
+
+		if live_signal_num == 2 and preview_signal_num == 0 then
+			-- Zoom in from SBS to single.
+			zoom_start = t
+			zoom_end = t + 1.0
+			zoom_src = 0.0
+			zoom_dst = 1.0
+			preview_signal_num = 2
+		elseif live_signal_num == 0 and preview_signal_num == 2 then
+			-- Zoom out from single to SBS.
+			zoom_start = t
+			zoom_end = t + 1.0
+			zoom_src = 1.0
+			zoom_dst = 0.0
+			preview_signal_num = 0
+			live_signal_num = 2
+		end
+	end
 end
 
 function channel_clicked(num)
@@ -113,7 +161,7 @@ end
 
 -- Called every frame. Get the chain for displaying at input <num>,
 -- where 0 is live, 1 is preview, 2 is the first channel to display
--- in the bottom bar, and so on up to num_channels()+1. t is the 
+-- in the bottom bar, and so on up to num_channels()+1. t is the
 -- current time in seconds. width and height are the dimensions of
 -- the output, although you can ignore them if you don't need them
 -- (they're useful if you want to e.g. know what to resample by).
@@ -131,10 +179,18 @@ end
 -- if and only if num==0.
 function get_chain(num, t, width, height)
 	if num == 0 then  -- Live.
+		if live_signal_num == 0 or live_signal_num == 1 then  -- Plain inputs.
+			prepare = function()
+				simple_chain_hq_input:connect_signal(live_signal_num)
+			end
+			return simple_chain_hq, prepare
+		end
+
+		-- SBS code (live_signal_num == 2).
 		if t > zoom_end and zoom_dst == 1.0 then
 			-- Special case: Show only the single image on screen.
 			prepare = function()
-				simple_chain_hq_input:connect_signal(live_signal_num)
+				simple_chain_hq_input:connect_signal(0)
 			end
 			return simple_chain_hq, prepare
 		end
@@ -255,7 +311,7 @@ function round(x)
 end
 
 function prepare_sbs_chain(chain, t, screen_width, screen_height)
-	chain.input0.input:connect_signal(live_signal_num)
+	chain.input0.input:connect_signal(0)
 	chain.input1.input:connect_signal(1)
 
 	-- First input is positioned (16,48) from top-left.
