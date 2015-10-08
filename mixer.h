@@ -100,8 +100,7 @@ private:
 		BMUSBCapture *usb;
 		std::unique_ptr<PBOFrameAllocator> frame_allocator;
 
-		// Threading stuff
-		bool thread_initialized = false;
+		// Stuff for the OpenGL context (for texture uploading).
 		QSurface *surface;
 		QOpenGLContext *context;
 

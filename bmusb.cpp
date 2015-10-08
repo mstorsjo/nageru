@@ -146,11 +146,14 @@ void dump_audio_block(uint8_t *audio_start, size_t audio_len)
 	fwrite(audio_start + AUDIO_HEADER_SIZE, 1, audio_len - AUDIO_HEADER_SIZE, audiofp);
 }
 
-void BMUSBCapture::dequeue_thread()
+void BMUSBCapture::dequeue_thread_func()
 {
-	for ( ;; ) {
+	if (has_dequeue_callbacks) {
+		dequeue_init_callback();
+	}
+	while (!dequeue_thread_should_quit) {
 		unique_lock<mutex> lock(queue_lock);
-		queues_not_empty.wait(lock, [this]{ return !pending_video_frames.empty() && !pending_audio_frames.empty(); });
+		queues_not_empty.wait(lock, [this]{ return dequeue_thread_should_quit || !pending_video_frames.empty() && !pending_audio_frames.empty(); });
 
 		uint16_t video_timecode = pending_video_frames.front().timecode;
 		uint16_t audio_timecode = pending_audio_frames.front().timecode;
@@ -182,6 +185,9 @@ void BMUSBCapture::dequeue_thread()
 			               video_frame.frame, HEADER_SIZE, video_frame.format,
 			               audio_frame.frame, AUDIO_HEADER_SIZE, audio_frame.format);
 		}
+	}
+	if (has_dequeue_callbacks) {
+		dequeue_cleanup_callback();
 	}
 }
 
@@ -630,7 +636,8 @@ void BMUSBCapture::configure_card()
 	if (audio_frame_allocator == nullptr) {
 		set_audio_frame_allocator(new MallocFrameAllocator(65536));  // FIXME: leak.
 	}
-	thread(&BMUSBCapture::dequeue_thread, this).detach();
+	dequeue_thread_should_quit = false;
+	dequeue_thread = thread(&BMUSBCapture::dequeue_thread_func, this);
 
 	int rc;
 	struct libusb_transfer *xfr;
@@ -931,6 +938,13 @@ out:
 	libusb_exit(nullptr);
 	return rc;
 #endif
+}
+
+void BMUSBCapture::stop_dequeue_thread()
+{
+	dequeue_thread_should_quit = true;
+	queues_not_empty.notify_all();	
+	dequeue_thread.join();
 }
 
 void BMUSBCapture::start_bm_thread()

@@ -95,8 +95,17 @@ class BMUSBCapture {
 		frame_callback = callback;
 	}
 
+	// Needs to be run before configure_card().
+	void set_dequeue_thread_callbacks(std::function<void()> init, std::function<void()> cleanup)
+	{
+		dequeue_init_callback = init;
+		dequeue_cleanup_callback = cleanup;
+		has_dequeue_callbacks = true;
+	}
+
 	void configure_card();
 	void start_bm_capture();
+	void stop_dequeue_thread();
 
 	static void start_bm_thread();
 	static void stop_bm_thread();
@@ -112,7 +121,7 @@ class BMUSBCapture {
 	void start_new_frame(const uint8_t *start);
 
 	void queue_frame(uint16_t format, uint16_t timecode, FrameAllocator::Frame frame, std::deque<QueuedFrame> *q);
-	void dequeue_thread();
+	void dequeue_thread_func();
 
 	static void usb_thread_func();
 	static void cb_xfr(struct libusb_transfer *xfr);
@@ -128,6 +137,12 @@ class BMUSBCapture {
 	FrameAllocator *video_frame_allocator = nullptr;
 	FrameAllocator *audio_frame_allocator = nullptr;
 	frame_callback_t frame_callback = nullptr;
+
+	std::thread dequeue_thread;
+	std::atomic<bool> dequeue_thread_should_quit;
+	bool has_dequeue_callbacks = false;
+	std::function<void()> dequeue_init_callback = nullptr;
+	std::function<void()> dequeue_cleanup_callback = nullptr;
 
 	int current_register = 0;
 

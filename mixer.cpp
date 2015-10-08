@@ -79,24 +79,28 @@ Mixer::Mixer(const QSurfaceFormat &format)
 
 	h264_encoder.reset(new H264Encoder(h264_encoder_surface, WIDTH, HEIGHT, "test.mp4"));
 
-	printf("Configuring first card...\n");
-	cards[0].usb = new BMUSBCapture(0x1edb, 0xbd3b);  // 0xbd4f
-	cards[0].usb->set_frame_callback(std::bind(&Mixer::bm_frame, this, 0, _1, _2, _3, _4, _5, _6, _7));
-	cards[0].frame_allocator.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44, 1280, 720));
-	cards[0].usb->set_video_frame_allocator(cards[0].frame_allocator.get());
-	cards[0].usb->configure_card();
-	cards[0].surface = create_surface(format);
-#if NUM_CARDS == 2
-	cards[1].surface = create_surface(format);
-#endif
-
-	if (NUM_CARDS == 2) {
-		printf("Configuring second card...\n");
-		cards[1].usb = new BMUSBCapture(0x1edb, 0xbd4f);
-		cards[1].usb->set_frame_callback(std::bind(&Mixer::bm_frame, this, 1, _1, _2, _3, _4, _5, _6, _7));
-		cards[1].frame_allocator.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44, 1280, 720));
-		cards[1].usb->set_video_frame_allocator(cards[1].frame_allocator.get());
-		cards[1].usb->configure_card();
+	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
+		printf("Configuring card %d...\n", card_index);
+		CaptureCard *card = &cards[card_index];
+		card->usb = new BMUSBCapture(0x1edb, card_index == 0 ? 0xbd3b : 0xbd4f);
+		card->usb->set_frame_callback(std::bind(&Mixer::bm_frame, this, card_index, _1, _2, _3, _4, _5, _6, _7));
+		card->frame_allocator.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44, 1280, 720));
+		card->usb->set_video_frame_allocator(card->frame_allocator.get());
+		card->surface = create_surface(format);
+		card->usb->set_dequeue_thread_callbacks(
+			[card]{
+				eglBindAPI(EGL_OPENGL_API);
+				card->context = create_context();
+				if (!make_current(card->context, card->surface)) {
+					printf("failed to create bmusb context\n");
+					exit(1);
+				}
+				printf("inited!\n");
+			},
+			[this]{
+				resource_pool->clean_context();
+			});
+		card->usb->configure_card();
 	}
 
 	BMUSBCapture::start_bm_thread();
@@ -125,6 +129,12 @@ Mixer::~Mixer()
 {
 	resource_pool->release_glsl_program(cbcr_program_num);
 	BMUSBCapture::stop_bm_thread();
+
+	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
+		cards[card_index].new_data_ready = false;  // Unblock thread.
+		cards[card_index].new_data_ready_changed.notify_all();
+		cards[card_index].usb->stop_dequeue_thread();
+	}
 }
 
 void Mixer::bm_frame(int card_index, uint16_t timecode,
@@ -132,16 +142,6 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 		     FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format)
 {
 	CaptureCard *card = &cards[card_index];
-	if (!card->thread_initialized) {
-		printf("initializing context for bmusb thread %d\n", card_index);
-		eglBindAPI(EGL_OPENGL_API);
-		card->context = create_context();
-		if (!make_current(card->context, card->surface)) {
-			printf("failed to create bmusb context\n");
-			exit(1);
-		}
-		card->thread_initialized = true;
-	}	
 
 	if (video_frame.len - video_offset != 1280 * 750 * 2) {
 		printf("dropping frame with wrong length (%ld)\n", video_frame.len - video_offset);
@@ -331,6 +331,8 @@ void Mixer::thread_func()
 		}
 		check_error();
 	}
+
+	resource_pool->clean_context();
 }
 
 void Mixer::subsample_chroma(GLuint src_tex, GLuint dst_tex)
