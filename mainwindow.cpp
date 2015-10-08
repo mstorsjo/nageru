@@ -17,8 +17,11 @@ MainWindow::MainWindow()
 
 	ui->me_live->set_output(Mixer::OUTPUT_LIVE);
 	ui->me_preview->set_output(Mixer::OUTPUT_PREVIEW);
+
+	// TODO: Ask for the real number.
 	ui->preview1->set_output(Mixer::OUTPUT_INPUT0);
 	ui->preview2->set_output(Mixer::OUTPUT_INPUT1);
+	ui->preview3->set_output(Mixer::OUTPUT_INPUT2);
 }
 
 void MainWindow::cut()

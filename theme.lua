@@ -17,24 +17,59 @@ local live_signal_num = 0
 local preview_signal_num = 1
 
 -- The main live chain.
-local main_chain = EffectChain.new(16, 9)
-local input0 = main_chain:add_live_input()
-input0:connect_signal(0)
-local input1 = main_chain:add_live_input()
-input1:connect_signal(1)
-local resample_effect = main_chain:add_effect(ResampleEffect.new(), input0)
-local padding_effect = main_chain:add_effect(IntegralPaddingEffect.new())
-padding_effect:set_vec4("border_color", 0.0, 0.0, 0.0, 1.0)
+function make_sbs_chain(hq)
+	local chain = EffectChain.new(16, 9)
+	local input0 = chain:add_live_input()
+	input0:connect_signal(0)
+	local input1 = chain:add_live_input()
+	input1:connect_signal(1)
 
-local resample2_effect = main_chain:add_effect(ResampleEffect.new(), input1)
--- Effect *saturation_effect = main_chain->add_effect(new SaturationEffect())
--- CHECK(saturation_effect->set_float("saturation", 0.3f))
-local wb_effect = main_chain:add_effect(WhiteBalanceEffect.new())
-wb_effect:set_float("output_color_temperature", 3500.0)
-local padding2_effect = main_chain:add_effect(IntegralPaddingEffect.new())
+	local resample_effect = nil
+	local resize_effect = nil
+	if (hq) then
+		resample_effect = chain:add_effect(ResampleEffect.new(), input0)
+	else
+		resize_effect = chain:add_effect(ResizeEffect.new(), input0)
+	end
 
-main_chain:add_effect(OverlayEffect.new(), padding_effect, padding2_effect)
-main_chain:finalize(true)
+	local padding_effect = chain:add_effect(IntegralPaddingEffect.new())
+	padding_effect:set_vec4("border_color", 0.0, 0.0, 0.0, 1.0)
+
+	local resample2_effect = nil
+	local resize2_effect = nil
+	if (hq) then
+		resample2_effect = chain:add_effect(ResampleEffect.new(), input1)
+	else
+		resize2_effect = chain:add_effect(ResizeEffect.new(), input1)
+	end
+	-- Effect *saturation_effect = chain->add_effect(new SaturationEffect())
+	-- CHECK(saturation_effect->set_float("saturation", 0.3f))
+	local wb_effect = chain:add_effect(WhiteBalanceEffect.new())
+	wb_effect:set_float("output_color_temperature", 3500.0)
+	local padding2_effect = chain:add_effect(IntegralPaddingEffect.new())
+
+	chain:add_effect(OverlayEffect.new(), padding_effect, padding2_effect)
+	chain:finalize(hq)
+
+	return {
+		chain = chain,
+		input0 = {
+			input = input0,
+			resample_effect = resample_effect,
+			resize_effect = resize_effect,
+			padding_effect = padding_effect
+		},
+		input1 = {
+			input = input1,
+			resample_effect = resample2_effect,
+			resize_effect = resize2_effect,
+			padding_effect = padding2_effect
+		}
+	}
+end
+
+local main_chain_hq = make_sbs_chain(true)
+local main_chain_lq = make_sbs_chain(false)
 
 -- A chain to show a single input on screen (HQ version).
 local simple_chain_hq = EffectChain.new(16, 9)
@@ -51,7 +86,7 @@ simple_chain_lq:finalize(false)
 -- Returns the number of outputs in addition to the live (0) and preview (1).
 -- Called only once, at the start of the program.
 function num_channels()
-	return 2
+	return 3
 end
 
 -- Called every frame.
@@ -106,17 +141,17 @@ function get_chain(num, t, width, height)
 		end
 		prepare = function()
 			if t < zoom_start then
-				prepare_sbs_chain(zoom_src, width, height)
+				prepare_sbs_chain(main_chain_hq, zoom_src, width, height)
 			elseif t > zoom_end then
-				prepare_sbs_chain(zoom_dst, width, height)
+				prepare_sbs_chain(main_chain_hq, zoom_dst, width, height)
 			else
 				local tt = (t - zoom_start) / (zoom_end - zoom_start)
 				-- Smooth it a bit.
 				tt = math.sin(tt * 3.14159265358 * 0.5)
-				prepare_sbs_chain(zoom_src + (zoom_dst - zoom_src) * tt, width, height)
+				prepare_sbs_chain(main_chain_hq, zoom_src + (zoom_dst - zoom_src) * tt, width, height)
 			end
 		end
-		return main_chain, prepare
+		return main_chain_hq.chain, prepare
 	end
 	if num == 1 then  -- Preview.
 		prepare = function()
@@ -136,9 +171,15 @@ function get_chain(num, t, width, height)
 		end
 		return simple_chain_lq, prepare
 	end
+	if num == 4 then
+		prepare = function()
+			prepare_sbs_chain(main_chain_lq, 0.0, width, height)
+		end
+		return main_chain_lq.chain, prepare
+	end
 end
 
-function place_rectangle(resample_effect, padding_effect, x0, y0, x1, y1, screen_width, screen_height)
+function place_rectangle(resample_effect, resize_effect, padding_effect, x0, y0, x1, y1, screen_width, screen_height)
 	local srcx0 = 0.0
 	local srcx1 = 1.0
 	local srcy0 = 0.0
@@ -165,38 +206,51 @@ function place_rectangle(resample_effect, padding_effect, x0, y0, x1, y1, screen
 		y1 = screen_height
 	end
 
-	local x_subpixel_offset = x0 - math.floor(x0)
-	local y_subpixel_offset = y0 - math.floor(y0)
+	if resample_effect ~= nil then
+		-- High-quality resampling.
+		local x_subpixel_offset = x0 - math.floor(x0)
+		local y_subpixel_offset = y0 - math.floor(y0)
 
-	-- Resampling must be to an integral number of pixels. Round up,
-	-- and then add an extra pixel so we have some leeway for the border.
-	local width = math.ceil(x1 - x0) + 1
-	local height = math.ceil(y1 - y0) + 1
-	resample_effect:set_int("width", width)
-	resample_effect:set_int("height", height)
+		-- Resampling must be to an integral number of pixels. Round up,
+		-- and then add an extra pixel so we have some leeway for the border.
+		local width = math.ceil(x1 - x0) + 1
+		local height = math.ceil(y1 - y0) + 1
+		resample_effect:set_int("width", width)
+		resample_effect:set_int("height", height)
 
-	-- Correct the discrepancy with zoom. (This will leave a small
-	-- excess edge of pixels and subpixels, which we'll correct for soon.)
-	local zoom_x = (x1 - x0) / (width * (srcx1 - srcx0))
-	local zoom_y = (y1 - y0) / (height * (srcy1 - srcy0))
-	resample_effect:set_float("zoom_x", zoom_x)
-	resample_effect:set_float("zoom_y", zoom_y)
-	resample_effect:set_float("zoom_center_x", 0.0)
-	resample_effect:set_float("zoom_center_y", 0.0)
+		-- Correct the discrepancy with zoom. (This will leave a small
+		-- excess edge of pixels and subpixels, which we'll correct for soon.)
+		local zoom_x = (x1 - x0) / (width * (srcx1 - srcx0))
+		local zoom_y = (y1 - y0) / (height * (srcy1 - srcy0))
+		resample_effect:set_float("zoom_x", zoom_x)
+		resample_effect:set_float("zoom_y", zoom_y)
+		resample_effect:set_float("zoom_center_x", 0.0)
+		resample_effect:set_float("zoom_center_y", 0.0)
 
-	-- Padding must also be to a whole-pixel offset.
-	padding_effect:set_int("left", math.floor(x0))
-	padding_effect:set_int("top", math.floor(y0))
+		-- Padding must also be to a whole-pixel offset.
+		padding_effect:set_int("left", math.floor(x0))
+		padding_effect:set_int("top", math.floor(y0))
 
-	-- Correct _that_ discrepancy by subpixel offset in the resampling.
-	resample_effect:set_float("left", -x_subpixel_offset / zoom_x)
-	resample_effect:set_float("top", -y_subpixel_offset / zoom_y)
+		-- Correct _that_ discrepancy by subpixel offset in the resampling.
+		resample_effect:set_float("left", -x_subpixel_offset / zoom_x)
+		resample_effect:set_float("top", -y_subpixel_offset / zoom_y)
 
-	-- Finally, adjust the border so it is exactly where we want it.
-	padding_effect:set_float("border_offset_left", x_subpixel_offset)
-	padding_effect:set_float("border_offset_right", x1 - (math.floor(x0) + width))
-	padding_effect:set_float("border_offset_top", y_subpixel_offset)
-	padding_effect:set_float("border_offset_bottom", y1 - (math.floor(y0) + height))
+		-- Finally, adjust the border so it is exactly where we want it.
+		padding_effect:set_float("border_offset_left", x_subpixel_offset)
+		padding_effect:set_float("border_offset_right", x1 - (math.floor(x0) + width))
+		padding_effect:set_float("border_offset_top", y_subpixel_offset)
+		padding_effect:set_float("border_offset_bottom", y1 - (math.floor(y0) + height))
+	else
+		-- Lower-quality simple resizing.
+		local width = round(x1 - x0)
+		local height = round(y1 - y0)
+		resize_effect:set_int("width", width)
+		resize_effect:set_int("height", height)
+
+		-- Padding must also be to a whole-pixel offset.
+		padding_effect:set_int("left", math.floor(x0))
+		padding_effect:set_int("top", math.floor(y0))
+	end
 end
 
 -- This is broken, of course (even for positive numbers), but Lua doesn't give us access to real rounding.
@@ -204,9 +258,9 @@ function round(x)
 	return math.floor(x + 0.5)
 end
 
-function prepare_sbs_chain(t, screen_width, screen_height)
-	input0:connect_signal(live_signal_num)
-	input1:connect_signal(1)
+function prepare_sbs_chain(chain, t, screen_width, screen_height)
+	chain.input0.input:connect_signal(live_signal_num)
+	chain.input1.input:connect_signal(1)
 
 	-- First input is positioned (16,48) from top-left.
 	local width0 = round(848 * screen_width/1280.0)
@@ -240,6 +294,6 @@ function prepare_sbs_chain(t, screen_width, screen_height)
 	bottom1 = bottom1 * scale0 + ty0
 	left1 = left1 * scale0 + tx0
 	right1 = right1 * scale0 + tx0
-	place_rectangle(resample_effect, padding_effect, left0, top0, right0, bottom0, screen_width, screen_height)
-	place_rectangle(resample2_effect, padding2_effect, left1, top1, right1, bottom1, screen_width, screen_height)
+	place_rectangle(chain.input0.resample_effect, chain.input0.resize_effect, chain.input0.padding_effect, left0, top0, right0, bottom0, screen_width, screen_height)
+	place_rectangle(chain.input1.resample_effect, chain.input1.resize_effect, chain.input1.padding_effect, left1, top1, right1, bottom1, screen_width, screen_height)
 end
