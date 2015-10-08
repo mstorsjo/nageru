@@ -36,11 +36,17 @@ local padding2_effect = main_chain:add_effect(IntegralPaddingEffect.new());
 main_chain:add_effect(OverlayEffect.new(), padding_effect, padding2_effect);
 main_chain:finalize(true);
 
--- A chain to show a single input on screen.
-local simple_chain = EffectChain.new(16, 9);
-local simple_chain_input = simple_chain:add_live_input();
-simple_chain_input:connect_signal(0);  -- First input card. Can be changed whenever you want.
-simple_chain:finalize(false);
+-- A chain to show a single input on screen (HQ version).
+local simple_chain_hq = EffectChain.new(16, 9);
+local simple_chain_hq_input = simple_chain_hq:add_live_input();
+simple_chain_hq_input:connect_signal(0);  -- First input card. Can be changed whenever you want.
+simple_chain_hq:finalize(true);
+
+-- A chain to show a single input on screen (LQ version).
+local simple_chain_lq = EffectChain.new(16, 9);
+local simple_chain_lq_input = simple_chain_lq:add_live_input();
+simple_chain_lq_input:connect_signal(0);  -- First input card. Can be changed whenever you want.
+simple_chain_lq:finalize(false);
 
 -- Returns the number of outputs in addition to the live (0) and preview (1).
 -- Called only once, at the start of the program.
@@ -91,10 +97,17 @@ end
 -- if and only if num==0.
 function get_chain(num, t, width, height)
 	if num == 0 then  -- Live.
+		if t > zoom_end and zoom_dst == 1.0 then
+			-- Special case: Show only the single image on screen.
+			prepare = function()
+				simple_chain_hq_input:connect_signal(live_signal_num);
+			end
+			return simple_chain_hq, prepare;
+		end
 		prepare = function()
-			if (t < zoom_start) then
+			if t < zoom_start then
 				prepare_sbs_chain(zoom_src, width, height);
-			elseif (t > zoom_end) then
+			elseif t > zoom_end then
 				prepare_sbs_chain(zoom_dst, width, height);
 			else
 				local tt = (t - zoom_start) / (zoom_end - zoom_start);
@@ -107,21 +120,21 @@ function get_chain(num, t, width, height)
 	end
 	if num == 1 then  -- Preview.
 		prepare = function()
-			simple_chain_input:connect_signal(preview_signal_num);
+			simple_chain_lq_input:connect_signal(preview_signal_num);
 		end
-		return simple_chain, prepare;
+		return simple_chain_lq, prepare;
 	end
 	if num == 2 then
 		prepare = function()
-			simple_chain_input:connect_signal(0);
+			simple_chain_lq_input:connect_signal(0);
 		end
-		return simple_chain, prepare;
+		return simple_chain_lq, prepare;
 	end
 	if num == 3 then
 		prepare = function()
-			simple_chain_input:connect_signal(1);
+			simple_chain_lq_input:connect_signal(1);
 		end
-		return simple_chain, prepare;
+		return simple_chain_lq, prepare;
 	end
 end
 
