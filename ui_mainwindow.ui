@@ -58,21 +58,21 @@
         <item>
          <layout class="QVBoxLayout" name="verticalLayout_2">
           <item>
-           <widget class="QPushButton" name="cut_btn">
+           <widget class="QPushButton" name="transition_btn1">
             <property name="text">
              <string>Cut</string>
             </property>
            </widget>
           </item>
           <item>
-           <widget class="QPushButton" name="fade_btn">
+           <widget class="QPushButton" name="transition_btn2">
             <property name="text">
              <string>Fade</string>
             </property>
            </widget>
           </item>
           <item>
-           <widget class="QPushButton" name="wipe_btn">
+           <widget class="QPushButton" name="transition_btn3">
             <property name="text">
              <string>Wipe</string>
             </property>

@@ -11,8 +11,8 @@ public:
 	MainWindow();
 
 public slots:
-	void cut();
-	void channel_clicked(int id);
+	void transition_clicked(int transition_number);
+	void channel_clicked(int channel_number);
 };
 
 #endif
