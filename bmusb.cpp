@@ -153,7 +153,7 @@ void BMUSBCapture::dequeue_thread_func()
 	}
 	while (!dequeue_thread_should_quit) {
 		unique_lock<mutex> lock(queue_lock);
-		queues_not_empty.wait(lock, [this]{ return dequeue_thread_should_quit || !pending_video_frames.empty() && !pending_audio_frames.empty(); });
+		queues_not_empty.wait(lock, [this]{ return dequeue_thread_should_quit || (!pending_video_frames.empty() && !pending_audio_frames.empty()); });
 
 		uint16_t video_timecode = pending_video_frames.front().timecode;
 		uint16_t audio_timecode = pending_audio_frames.front().timecode;
