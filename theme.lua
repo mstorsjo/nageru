@@ -8,10 +8,12 @@
 -- C++ side and you generally just build chains.
 io.write("hello from lua\n")
 
-local zoom_start = -2.0
-local zoom_end = -1.0
+local transition_start = -2.0
+local transition_end = -1.0
 local zoom_src = 0.0
 local zoom_dst = 1.0
+local fade_src = 0.0
+local fade_dst = 1.0
 
 local live_signal_num = 0
 local preview_signal_num = 1
@@ -71,16 +73,25 @@ end
 local main_chain_hq = make_sbs_chain(true)
 local main_chain_lq = make_sbs_chain(false)
 
+-- A chain to fade between two inputs (live chain only)
+local fade_chain_hq = EffectChain.new(16, 9)
+local fade_chain_hq_input0 = fade_chain_hq:add_live_input()
+local fade_chain_hq_input1 = fade_chain_hq:add_live_input()
+fade_chain_hq_input0:connect_signal(0)
+fade_chain_hq_input1:connect_signal(1)
+local fade_chain_mix_effect = fade_chain_hq:add_effect(MixEffect.new(), fade_chain_hq_input0, fade_chain_hq_input1)
+fade_chain_hq:finalize(true)
+
 -- A chain to show a single input on screen (HQ version).
 local simple_chain_hq = EffectChain.new(16, 9)
 local simple_chain_hq_input = simple_chain_hq:add_live_input()
-simple_chain_hq_input:connect_signal(0);  -- First input card. Can be changed whenever you want.
+simple_chain_hq_input:connect_signal(0)  -- First input card. Can be changed whenever you want.
 simple_chain_hq:finalize(true)
 
 -- A chain to show a single input on screen (LQ version).
 local simple_chain_lq = EffectChain.new(16, 9)
 local simple_chain_lq_input = simple_chain_lq:add_live_input()
-simple_chain_lq_input:connect_signal(0);  -- First input card. Can be changed whenever you want.
+simple_chain_lq_input:connect_signal(0)  -- First input card. Can be changed whenever you want.
 simple_chain_lq:finalize(false)
 
 -- Returns the number of outputs in addition to the live (0) and preview (1).
@@ -89,25 +100,37 @@ function num_channels()
 	return 3
 end
 
--- Called every frame.
-function get_transitions(t)
+function finish_transitions(t)
 	-- If live is 2 (SBS) but de-facto single, make it so.
-	if live_signal_num == 2 and t >= zoom_end and zoom_dst == 1.0 then
+	if live_signal_num == 2 and t >= transition_end and zoom_dst == 1.0 then
 		live_signal_num = 0
 	end
+
+	-- If live is 3 (fade) but de-facto single, make it so.
+	if live_signal_num == 3 and t >= transition_end and fade_dst == 1.0 then
+		live_signal_num = 0
+	end
+	if live_signal_num == 3 and t >= transition_end and fade_dst == 0.0 then
+		live_signal_num = 1
+	end
+end
+
+-- Called every frame.
+function get_transitions(t)
+	finish_transitions(t)
 
 	if live_signal_num == preview_signal_num then
 		return {}
 	end
 
-	if live_signal_num == 2 and t >= zoom_start and t <= zoom_end then
+	if live_signal_num == 2 and t >= transition_start and t <= transition_end then
 		-- Zoom in progress.
 		return {"Cut"}
 	end
 
 	if (live_signal_num == 0 and preview_signal_num == 1) or
 	   (live_signal_num == 1 and preview_signal_num == 0) then
-		return {"Cut"}
+		return {"Cut", "", "Fade"}
 	end
 
 	if live_signal_num == 2 and preview_signal_num == 1 then
@@ -127,6 +150,11 @@ end
 function transition_clicked(num, t)
 	if num == 0 then
 		-- Cut.
+		if live_signal_num == 3 then
+			-- Ongoing fade; finish it immediately.
+			finish_transitions(transition_end)
+		end
+
 		local temp = live_signal_num
 		live_signal_num = preview_signal_num
 		preview_signal_num = temp
@@ -135,16 +163,13 @@ function transition_clicked(num, t)
 			-- Just cut to SBS, we need to reset any zooms.
 			zoom_src = 1.0
 			zoom_dst = 0.0
-			zoom_start = -2.0
-			zoom_end = -1.0
+			transition_start = -2.0
+			transition_end = -1.0
 		end
 	elseif num == 1 then
 		-- Zoom.
 
-		-- If live is 2 (SBS) but de-facto single, make it so.
-		if live_signal_num == 2 and t >= zoom_end and zoom_dst == 1.0 then
-			live_signal_num = 0
-		end
+		finish_transitions(t)
 
 		if live_signal_num == preview_signal_num then
 			-- Nothing to do.
@@ -168,19 +193,40 @@ function transition_clicked(num, t)
 
 		if live_signal_num == 2 and preview_signal_num == 0 then
 			-- Zoom in from SBS to single.
-			zoom_start = t
-			zoom_end = t + 1.0
+			transition_start = t
+			transition_end = t + 1.0
 			zoom_src = 0.0
 			zoom_dst = 1.0
 			preview_signal_num = 2
 		elseif live_signal_num == 0 and preview_signal_num == 2 then
 			-- Zoom out from single to SBS.
-			zoom_start = t
-			zoom_end = t + 1.0
+			transition_start = t
+			transition_end = t + 1.0
 			zoom_src = 1.0
 			zoom_dst = 0.0
 			preview_signal_num = 0
 			live_signal_num = 2
+		end
+	elseif num == 2 then
+		finish_transitions(t)
+
+		-- Fade.
+		if live_signal_num == 0 and preview_signal_num == 1 then
+			transition_start = t
+			transition_end = t + 1.0
+			fade_src = 1.0
+			fade_dst = 0.0
+			preview_signal_num = 0
+			live_signal_num = 3
+		elseif live_signal_num == 1 and preview_signal_num == 0 then
+			transition_start = t
+			transition_end = t + 1.0
+			fade_src = 0.0
+			fade_dst = 1.0
+			preview_signal_num = 1
+			live_signal_num = 3
+		else
+			-- Fades involving SBS are ignored (we have no chain for it).
 		end
 	end
 end
@@ -214,10 +260,27 @@ function get_chain(num, t, width, height)
 				simple_chain_hq_input:connect_signal(live_signal_num)
 			end
 			return simple_chain_hq, prepare
+		elseif live_signal_num == 3 then  -- Fade.
+			prepare = function()
+				fade_chain_hq_input0:connect_signal(0)
+				fade_chain_hq_input1:connect_signal(1)
+				local tt = (t - transition_start) / (transition_end - transition_start)
+				if tt < 0.0 then
+					tt = 0.0
+				elseif tt > 1.0 then
+					tt = 1.0
+				end
+
+				tt = fade_src + tt * (fade_dst - fade_src)
+
+				fade_chain_mix_effect:set_float("strength_first", tt)
+				fade_chain_mix_effect:set_float("strength_second", 1.0 - tt)
+			end
+			return fade_chain_hq, prepare
 		end
 
 		-- SBS code (live_signal_num == 2).
-		if t > zoom_end and zoom_dst == 1.0 then
+		if t > transition_end and zoom_dst == 1.0 then
 			-- Special case: Show only the single image on screen.
 			prepare = function()
 				simple_chain_hq_input:connect_signal(0)
@@ -225,12 +288,12 @@ function get_chain(num, t, width, height)
 			return simple_chain_hq, prepare
 		end
 		prepare = function()
-			if t < zoom_start then
+			if t < transition_start then
 				prepare_sbs_chain(main_chain_hq, zoom_src, width, height)
-			elseif t > zoom_end then
+			elseif t > transition_end then
 				prepare_sbs_chain(main_chain_hq, zoom_dst, width, height)
 			else
-				local tt = (t - zoom_start) / (zoom_end - zoom_start)
+				local tt = (t - transition_start) / (transition_end - transition_start)
 				-- Smooth it a bit.
 				tt = math.sin(tt * 3.14159265358 * 0.5)
 				prepare_sbs_chain(main_chain_hq, zoom_src + (zoom_dst - zoom_src) * tt, width, height)

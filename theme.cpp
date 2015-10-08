@@ -12,6 +12,7 @@
 #include <movit/padding_effect.h>
 #include <movit/overlay_effect.h>
 #include <movit/resize_effect.h>
+#include <movit/mix_effect.h>
 
 #include "theme.h"
 
@@ -52,7 +53,8 @@ Effect *get_effect(lua_State *L, int idx)
 	    luaL_testudata(L, idx, "PaddingEffect") ||
 	    luaL_testudata(L, idx, "IntegralPaddingEffect") ||
 	    luaL_testudata(L, idx, "OverlayEffect") ||
-	    luaL_testudata(L, idx, "ResizeEffect")) {
+	    luaL_testudata(L, idx, "ResizeEffect") ||
+	    luaL_testudata(L, idx, "MixEffect")) {
 		return (Effect *)lua_touserdata(L, idx);
 	}
 	fprintf(stderr, "Error: Index #%d was not an Effect type\n", idx);
@@ -185,6 +187,12 @@ int ResizeEffect_new(lua_State* L)
 	return wrap_lua_object<ResizeEffect>(L, "ResizeEffect");
 }
 
+int MixEffect_new(lua_State* L)
+{
+	assert(lua_gettop(L) == 0);
+	return wrap_lua_object<MixEffect>(L, "MixEffect");
+}
+
 int Effect_set_float(lua_State *L)
 {
 	assert(lua_gettop(L) == 3);
@@ -286,6 +294,14 @@ const luaL_Reg ResizeEffect_funcs[] = {
 	{ NULL, NULL }
 };
 
+const luaL_Reg MixEffect_funcs[] = {
+	{ "new", MixEffect_new },
+	{ "set_float", Effect_set_float },
+	{ "set_int", Effect_set_int },
+	{ "set_vec4", Effect_set_vec4 },
+	{ NULL, NULL }
+};
+
 }  // namespace
 
 LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain)
@@ -330,6 +346,7 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool)
 	register_class("IntegralPaddingEffect", IntegralPaddingEffect_funcs);
 	register_class("OverlayEffect", OverlayEffect_funcs);
 	register_class("ResizeEffect", ResizeEffect_funcs);
+	register_class("MixEffect", MixEffect_funcs);
 
 	// Run script.
 	lua_settop(L, 0);
