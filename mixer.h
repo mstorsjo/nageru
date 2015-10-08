@@ -116,6 +116,7 @@ private:
 
 	class OutputChannel {
 	public:
+		~OutputChannel();
 		void output_frame(DisplayFrame frame);
 		bool get_display_frame(DisplayFrame *frame);
 		void set_frame_ready_callback(new_frame_ready_callback_t callback);

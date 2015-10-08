@@ -413,6 +413,16 @@ void Mixer::transition_clicked(int transition_num)
 	theme->transition_clicked(transition_num, frame / 60.0);
 }
 
+Mixer::OutputChannel::~OutputChannel()
+{
+	if (has_current_frame) {
+		parent->release_display_frame(&current_frame);
+	}
+	if (has_ready_frame) {
+		parent->release_display_frame(&ready_frame);
+	}
+}
+
 void Mixer::OutputChannel::output_frame(DisplayFrame frame)
 {
 	// Store this frame for display. Remove the ready frame if any

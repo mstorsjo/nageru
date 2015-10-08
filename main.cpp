@@ -36,5 +36,6 @@ int main(int argc, char *argv[])
 
 	int rc = app.exec();
 	global_mixer->quit();
+	delete global_mixer;
 	return rc;
 }
