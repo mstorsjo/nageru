@@ -77,6 +77,11 @@ public:
 		output_channel[output].set_frame_ready_callback(callback);
 	}
 
+	std::vector<std::string> get_transition_names()
+	{
+		return theme->get_transition_names(frame / 60.0);
+	}
+
 private:
 	void bm_frame(int card_index, uint16_t timecode,
 		FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,

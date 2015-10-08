@@ -8,6 +8,7 @@
 #include <QSurfaceFormat>
 
 #include "glwidget.h"
+#include "mainwindow.h"
 
 #include <movit/resource_pool.h>
 #include <stdio.h>
@@ -17,12 +18,15 @@
 #include "mixer.h"
 #include "ref_counted_gl_sync.h"
 
+class MainWindow;
 class QSurface;
 class QWidget;
 
 #undef Success
 #include <movit/util.h>
 #include <string>
+
+using namespace std;
 
 GLWidget::GLWidget(QWidget *parent)
     : QGLWidget(parent, global_share_widget),
@@ -46,6 +50,7 @@ void GLWidget::initializeGL()
 	});
 	global_mixer->set_frame_ready_callback(output, [this]{
 		QMetaObject::invokeMethod(this, "update", Qt::AutoConnection);
+		emit transition_names_updated(global_mixer->get_transition_names());
 	});
 
 	glDisable(GL_BLEND);

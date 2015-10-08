@@ -1,14 +1,19 @@
 #include "mainwindow.h"
 #include "window.h"
 #include <thread>
+#include <vector>
+#include <string>
 #include <QSignalMapper>
+#include <QMetaType>
 
 #include "context.h"
 #include "mixer.h"
 
 #include "ui_mainwindow.cpp"
 
-using std::thread;
+using namespace std;
+
+Q_DECLARE_METATYPE(std::vector<std::string>);
 
 MainWindow::MainWindow()
 {
@@ -46,6 +51,33 @@ MainWindow::MainWindow()
 		connect(ui->transition_btn2, SIGNAL(clicked()), mapper, SLOT(map()));
 		connect(ui->transition_btn3, SIGNAL(clicked()), mapper, SLOT(map()));
 		connect(mapper, SIGNAL(mapped(int)), this, SLOT(transition_clicked(int)));
+	}
+
+	// Aiee...
+	transition_btn1 = ui->transition_btn1;
+	transition_btn2 = ui->transition_btn2;
+	transition_btn3 = ui->transition_btn3;
+	qRegisterMetaType<std::vector<std::string>>("std::vector<std::string>");
+	connect(ui->preview1, SIGNAL(transition_names_updated(std::vector<std::string>)),
+	        this, SLOT(set_transition_names(std::vector<std::string>)));
+}
+
+void MainWindow::set_transition_names(vector<string> transition_names)
+{
+	if (transition_names.size() < 1) {
+		transition_btn1->setText(QString(""));
+	} else {
+		transition_btn1->setText(QString::fromStdString(transition_names[0]));
+	}
+	if (transition_names.size() < 2) {
+		transition_btn2->setText(QString(""));
+	} else {
+		transition_btn2->setText(QString::fromStdString(transition_names[1]));
+	}
+	if (transition_names.size() < 3) {
+		transition_btn3->setText(QString(""));
+	} else {
+		transition_btn3->setText(QString::fromStdString(transition_names[2]));
 	}
 }
 

@@ -90,8 +90,38 @@ function num_channels()
 end
 
 -- Called every frame.
-function get_transitions()
-	return {"Cut", "Fade", "Zoom!"}
+function get_transitions(t)
+	-- If live is 2 (SBS) but de-facto single, make it so.
+	if live_signal_num == 2 and t >= zoom_end and zoom_dst == 1.0 then
+		live_signal_num = 0
+	end
+
+	if live_signal_num == preview_signal_num then
+		return {}
+	end
+
+	if live_signal_num == 2 and t >= zoom_start and t <= zoom_end then
+		-- Zoom in progress.
+		return {"Cut"}
+	end
+
+	if (live_signal_num == 0 and preview_signal_num == 1) or
+	   (live_signal_num == 1 and preview_signal_num == 0) then
+		return {"Cut"}
+	end
+
+	if live_signal_num == 2 and preview_signal_num == 1 then
+		-- Zoom-out not supported here yet.
+		return {"Cut"}
+	end
+
+	if live_signal_num == 2 and preview_signal_num == 0 then
+		return {"Cut", "Zoom in"}
+	elseif live_signal_num == 0 and preview_signal_num == 2 then
+		return {"Cut", "Zoom out"}
+	end
+
+	return {"Cut"}
 end
 
 function transition_clicked(num, t)

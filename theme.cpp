@@ -396,6 +396,25 @@ Theme::get_chain(unsigned num, float t, unsigned width, unsigned height)
 	});
 }
 
+std::vector<std::string> Theme::get_transition_names(float t)
+{
+	unique_lock<mutex> lock(m);
+	lua_getglobal(L, "get_transitions");
+	lua_pushnumber(L, t);
+	if (lua_pcall(L, 1, 1, 0) != 0) {
+		fprintf(stderr, "error running function `get_transitions': %s\n", lua_tostring(L, -1));
+		exit(1);
+	}
+
+	std::vector<std::string> ret;
+	lua_pushnil(L);
+	while (lua_next(L, -2) != 0) {
+		ret.push_back(lua_tostring(L, -1));
+		lua_pop(L, 1);
+	}
+	return ret;
+}	
+
 void Theme::connect_signal(YCbCrInput *input, int signal_num)
 {
 	input->set_texture_num(0, input_textures[signal_num].tex_y);
