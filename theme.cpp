@@ -414,3 +414,15 @@ void Theme::transition_clicked(int transition_num, float t)
 		exit(1);
 	}
 }
+
+void Theme::channel_clicked(int preview_num)
+{
+	unique_lock<mutex> lock(m);
+	lua_getglobal(L, "channel_clicked");
+	lua_pushnumber(L, preview_num);
+
+	if (lua_pcall(L, 1, 0, 0) != 0) {
+		fprintf(stderr, "error running function `channel_clicked': %s\n", lua_tostring(L, -1));
+		exit(1);
+	}
+}

@@ -33,6 +33,10 @@ protected:
 	void initializeGL() override;
 	void resizeGL(int width, int height) override;
 	void paintGL() override;
+	void mousePressEvent(QMouseEvent *event) override;
+
+signals:
+	void clicked();
 
 private:
 	Mixer::Output output;

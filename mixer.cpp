@@ -415,6 +415,11 @@ void Mixer::transition_clicked(int transition_num)
 	theme->transition_clicked(transition_num, frame / 60.0);
 }
 
+void Mixer::channel_clicked(int preview_num)
+{
+	theme->channel_clicked(preview_num);
+}
+
 Mixer::OutputChannel::~OutputChannel()
 {
 	if (has_current_frame) {

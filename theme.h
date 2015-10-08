@@ -28,6 +28,7 @@ public:
 
 	void connect_signal(movit::YCbCrInput *input, int signal_num);
 	void transition_clicked(int transition_num, float t);
+	void channel_clicked(int preview_num);
 
 private:
 	std::mutex m;

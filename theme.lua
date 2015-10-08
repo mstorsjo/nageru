@@ -107,9 +107,8 @@ function transition_clicked(num, t)
 	zoom_dst = temp
 end
 
-function channel_clicked(num, t)
-	-- Presumably change the preview here.
-	io.write("STUB: channel_clicked\n")
+function channel_clicked(num)
+	preview_signal_num = num
 end
 
 -- Called every frame. Get the chain for displaying at input <num>,
@@ -154,10 +153,7 @@ function get_chain(num, t, width, height)
 		return main_chain_hq.chain, prepare
 	end
 	if num == 1 then  -- Preview.
-		prepare = function()
-			simple_chain_lq_input:connect_signal(preview_signal_num)
-		end
-		return simple_chain_lq, prepare
+		num = preview_signal_num + 2
 	end
 	if num == 2 then
 		prepare = function()

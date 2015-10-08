@@ -72,3 +72,8 @@ void GLWidget::paintGL()
 	frame.chain->render_to_screen();
 	check_error();
 }
+
+void GLWidget::mousePressEvent(QMouseEvent *event)
+{
+	emit clicked();
+}

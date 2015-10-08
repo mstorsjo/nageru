@@ -12,6 +12,7 @@ public:
 
 public slots:
 	void cut();
+	void channel_clicked(int id);
 };
 
 #endif

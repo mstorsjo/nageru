@@ -33,6 +33,7 @@ public:
 	void quit();
 
 	void transition_clicked(int transition_num);
+	void channel_clicked(int preview_num);
 
 	enum Output {
 		OUTPUT_LIVE = 0,
