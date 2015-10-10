@@ -300,7 +300,7 @@ void Mixer::thread_func()
 		output_channel[OUTPUT_LIVE].output_frame(live_frame);
 
 		// Set up preview and any additional channels.
-		for (unsigned i = 1; i < theme->get_num_channels() + 2; ++i) {
+		for (int i = 1; i < theme->get_num_channels() + 2; ++i) {
 			DisplayFrame display_frame;
 			pair<EffectChain *, function<void()>> chain = theme->get_chain(i, frame / 60.0f, WIDTH, HEIGHT);  // FIXME: dimensions
 			display_frame.chain = chain.first;
