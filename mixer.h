@@ -15,6 +15,7 @@
 #include "ref_counted_frame.h"
 #include "ref_counted_gl_sync.h"
 #include "theme.h"
+#include "resampler.h"
 
 #define NUM_CARDS 2
 
@@ -116,6 +117,7 @@ private:
 		RefCountedFrame new_frame;
 		GLsync new_data_ready_fence;  // Whether new_frame is ready for rendering.
 		std::condition_variable new_data_ready_changed;  // Set whenever new_data_ready is changed.
+		Resampler *resampler = nullptr;
 	};
 	CaptureCard cards[NUM_CARDS];  // protected by <bmusb_mutex>
 

@@ -50,6 +50,24 @@ using namespace std::placeholders;
 
 Mixer *global_mixer = nullptr;
 
+namespace {
+
+void convert_fixed24_to_fp32(float *dst, size_t out_channels, const uint8_t *src, size_t in_channels, size_t num_samples)
+{
+	for (size_t i = 0; i < num_samples; ++i) {
+		for (size_t j = 0; j < out_channels; ++j) {
+			uint32_t s1 = *src++;
+			uint32_t s2 = *src++;
+			uint32_t s3 = *src++;
+			uint32_t s = s1 | (s1 << 8) | (s2 << 16) | (s3 << 24);
+			dst[i * out_channels + j] = int(s) * (1.0f / 4294967296.0f);
+		}
+		src += 3 * (in_channels - out_channels);
+	}
+}
+
+}  // namespace
+
 Mixer::Mixer(const QSurfaceFormat &format)
 	: mixer_surface(create_surface(format)),
 	  h264_encoder_surface(create_surface(format))
@@ -100,6 +118,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 			[this]{
 				resource_pool->clean_context();
 			});
+		card->resampler = new Resampler(48000.0, 48000.0, 2);
 		card->usb->configure_card();
 	}
 
@@ -188,6 +207,30 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 		card->new_frame = RefCountedFrame(video_frame);
 		card->new_data_ready_fence = fence;
 		card->new_data_ready_changed.notify_all();
+	}
+
+	// As a test of the resampler, send the data from card 0 through it and onto disk.
+	// TODO: Send the audio on, and encode it through ffmpeg.
+	if (card_index == 0) {
+		size_t num_samples = (audio_frame.len - audio_offset) / 8 / 3;
+		double pts = timecode / 60.0;  // FIXME: Unwrap. And rebase.
+		unique_ptr<float[]> samplesf(new float[num_samples * 2]);
+		convert_fixed24_to_fp32(samplesf.get(), 2, audio_frame.data + audio_offset, 8, num_samples);
+		card->resampler->add_input_samples(pts, samplesf.get(), num_samples);
+
+		float samples_out[(48000 / 60) * 2];
+		card->resampler->get_output_samples(pts, samples_out, 48000 / 60);
+
+		static FILE *audiofp = nullptr;
+		if (audiofp == nullptr) {
+			audiofp = fopen("audio.raw", "wb");
+		}
+		fwrite(samples_out, sizeof(samples_out), 1, audiofp);
+		//fwrite(samplesf.get(), num_samples * sizeof(float) * 2, 1, audiofp);
+
+		if (audio_frame.len - audio_offset != 19200) {
+			printf("%d: %d samples (%d bytes)\n", card_index, int(num_samples), int(audio_frame.len - audio_offset));
+		}
 	}
 
 	// Video frame will be released when last user of card->new_frame goes out of scope.
