@@ -1569,7 +1569,7 @@ static int render_slice(void)
 
 
 
-int H264Encoder::save_codeddata(unsigned long long display_order, unsigned long long encode_order, int frame_type)
+int H264Encoder::save_codeddata(storage_task task)
 {    
     VACodedBufferSegment *buf_list = NULL;
     VAStatus va_status;
@@ -1577,7 +1577,7 @@ int H264Encoder::save_codeddata(unsigned long long display_order, unsigned long 
 
     string data;
 
-    va_status = vaMapBuffer(va_dpy, gl_surfaces[display_order % SURFACE_NUM].coded_buf, (void **)(&buf_list));
+    va_status = vaMapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf, (void **)(&buf_list));
     CHECK_VASTATUS(va_status, "vaMapBuffer");
     while (buf_list != NULL) {
         data.append(reinterpret_cast<const char *>(buf_list->buf), buf_list->size);
@@ -1585,17 +1585,17 @@ int H264Encoder::save_codeddata(unsigned long long display_order, unsigned long 
 
         frame_size += coded_size;
     }
-    vaUnmapBuffer(va_dpy, gl_surfaces[display_order % SURFACE_NUM].coded_buf);
+    vaUnmapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf);
 
     AVPacket pkt;
     memset(&pkt, 0, sizeof(pkt));
     pkt.buf = nullptr;
-    pkt.pts = av_rescale_q(display_order, AVRational{1, frame_rate}, avstream->time_base);
-    pkt.dts = av_rescale_q(encode_order, AVRational{1, frame_rate}, avstream->time_base);
+    pkt.pts = av_rescale_q(task.display_order, AVRational{1, frame_rate}, avstream->time_base);
+    pkt.dts = av_rescale_q(task.encode_order, AVRational{1, frame_rate}, avstream->time_base);
     pkt.data = reinterpret_cast<uint8_t *>(&data[0]);
     pkt.size = data.size();
     pkt.stream_index = 0;
-    if (frame_type == FRAME_IDR || frame_type == FRAME_I) {
+    if (task.frame_type == FRAME_IDR || task.frame_type == FRAME_I) {
         pkt.flags = AV_PKT_FLAG_KEY;
     } else {
         pkt.flags = 0;
@@ -1628,17 +1628,11 @@ int H264Encoder::save_codeddata(unsigned long long display_order, unsigned long 
 
 
 // this is weird. but it seems to put a new frame onto the queue
-void H264Encoder::storage_task_enqueue(unsigned long long display_order, unsigned long long encode_order, int frame_type)
+void H264Encoder::storage_task_enqueue(storage_task task)
 {
 	std::unique_lock<std::mutex> lock(storage_task_queue_mutex);
-
-	storage_task tmp;
-	tmp.display_order = display_order;
-	tmp.encode_order = encode_order;
-	tmp.frame_type = frame_type;
-	storage_task_queue.push(tmp);
-	srcsurface_status[display_order % SURFACE_NUM] = SRC_SURFACE_IN_ENCODING;
-
+	storage_task_queue.push(move(task));
+	srcsurface_status[task.display_order % SURFACE_NUM] = SRC_SURFACE_IN_ENCODING;
 	storage_task_queue_changed.notify_all();
 }
 
@@ -1651,7 +1645,7 @@ void H264Encoder::storage_task_thread()
 			std::unique_lock<std::mutex> lock(storage_task_queue_mutex);
 			storage_task_queue_changed.wait(lock, [this]{ return storage_thread_should_quit || !storage_task_queue.empty(); });
 			if (storage_thread_should_quit) return;
-			current = storage_task_queue.front();
+			current = move(storage_task_queue.front());
 			storage_task_queue.pop();
 		}
 
@@ -1660,7 +1654,7 @@ void H264Encoder::storage_task_thread()
 		// waits for data, then saves it to disk.
 		va_status = vaSyncSurface(va_dpy, gl_surfaces[current.display_order % SURFACE_NUM].src_surface);
 		CHECK_VASTATUS(va_status, "vaSyncSurface");
-		save_codeddata(current.display_order, current.encode_order, current.frame_type);
+		save_codeddata(move(current));
 
 		{
 			std::unique_lock<std::mutex> lock(storage_task_queue_mutex);
@@ -1893,7 +1887,7 @@ void H264Encoder::copy_thread_func()
 			unique_lock<mutex> lock(frame_queue_mutex);
 			frame_queue_nonempty.wait(lock, [this]{ return copy_thread_should_quit || pending_frames.count(current_frame_display) != 0; });
 			if (copy_thread_should_quit) return;
-			frame = pending_frames[current_frame_display];
+			frame = move(pending_frames[current_frame_display]);
 			pending_frames.erase(current_frame_display);
 		}
 
@@ -1936,7 +1930,11 @@ void H264Encoder::copy_thread_func()
 
 		// so now the data is done encoding (well, async job kicked off)...
 		// we send that to the storage thread
-		storage_task_enqueue(current_frame_display, current_frame_encoding, current_frame_type);
+		storage_task tmp;
+		tmp.display_order = current_frame_display;
+		tmp.encode_order = current_frame_encoding;
+		tmp.frame_type = current_frame_type;
+		storage_task_enqueue(move(tmp));
 		
 		update_ReferenceFrames();
 		++current_frame_encoding;
