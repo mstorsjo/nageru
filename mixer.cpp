@@ -151,8 +151,11 @@ Mixer::~Mixer()
 	BMUSBCapture::stop_bm_thread();
 
 	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
-		cards[card_index].new_data_ready = false;  // Unblock thread.
-		cards[card_index].new_data_ready_changed.notify_all();
+		{
+			std::unique_lock<std::mutex> lock(bmusb_mutex);
+			cards[card_index].should_quit = true;  // Unblock thread.
+			cards[card_index].new_data_ready_changed.notify_all();
+		}
 		cards[card_index].usb->stop_dequeue_thread();
 	}
 }
@@ -176,7 +179,8 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 	{
 		// Wait until the previous frame was consumed.
 		std::unique_lock<std::mutex> lock(bmusb_mutex);
-		card->new_data_ready_changed.wait(lock, [card]{ return !card->new_data_ready; });
+		card->new_data_ready_changed.wait(lock, [card]{ return !card->new_data_ready || card->should_quit; });
+		if (card->should_quit) return;
 	}
 	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)video_frame.userdata;
 	GLuint pbo = userdata->pbo;

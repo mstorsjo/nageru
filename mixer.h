@@ -114,6 +114,7 @@ private:
 		QOpenGLContext *context;
 
 		bool new_data_ready = false;  // Whether new_frame and new_frame_audio contains anything.
+		bool should_quit = false;
 		RefCountedFrame new_frame;
 		GLsync new_data_ready_fence;  // Whether new_frame is ready for rendering.
 		std::vector<float> new_frame_audio;
