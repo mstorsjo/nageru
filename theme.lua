@@ -273,6 +273,11 @@ function get_chain(num, t, width, height)
 
 				tt = fade_src + tt * (fade_dst - fade_src)
 
+				-- Make the fade look maybe a tad more natural, by pumping it
+				-- through a sigmoid function.
+				tt = 10.0 * tt - 5.0
+				tt = 1.0 / (1.0 + math.exp(-tt))
+
 				fade_chain_mix_effect:set_float("strength_first", tt)
 				fade_chain_mix_effect:set_float("strength_second", 1.0 - tt)
 			end
