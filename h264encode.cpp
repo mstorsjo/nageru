@@ -117,7 +117,7 @@ static  int initial_qp = 15;
 static  int minimal_qp = 0;
 static  int intra_period = 30;
 static  int intra_idr_period = 60;
-static  int ip_period = 1;
+static  int ip_period = 3;
 static  int rc_mode = -1;
 static  int rc_default_modes[] = {
     VA_RC_VBR,
