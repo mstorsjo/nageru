@@ -90,14 +90,11 @@ void Resampler::get_output_samples(double pts, float *samples, ssize_t num_sampl
 	// The loop bandwidth starts at 1.0 Hz, then goes down to 0.05 Hz after four seconds.
 	double loop_bandwidth_hz = (k_a0 < 4 * freq_in) ? 1.0 : 0.05;
 
-	// Set first filter much wider than the first one (20x as wide).
-	double w = (2.0 * M_PI) * 20.0 * loop_bandwidth_hz * num_samples / freq_out;
-	double w0 = 1.0 - exp(-w);
-
-	// Set second filter.
-	w = (2.0 * M_PI) * loop_bandwidth_hz * ratio / freq_out;
-	double w1 = w * 1.6;
-	double w2 = w * num_samples / 1.6;
+	// Set filters. The first filter much wider than the first one (20x as wide).
+	double w = (2.0 * M_PI) * loop_bandwidth_hz * num_samples / freq_out;
+	double w0 = 1.0 - exp(-20.0 * w);
+	double w1 = w * 1.5 / num_samples / ratio;
+	double w2 = w / 1.5;
 
 	// Filter <err> through the loop filter to find the correction ratio.
 	z1 += w0 * (w1 * err - z1);
