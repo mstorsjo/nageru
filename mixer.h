@@ -113,9 +113,10 @@ private:
 		QSurface *surface;
 		QOpenGLContext *context;
 
-		bool new_data_ready = false;  // Whether new_frame contains anything.
+		bool new_data_ready = false;  // Whether new_frame and new_frame_audio contains anything.
 		RefCountedFrame new_frame;
 		GLsync new_data_ready_fence;  // Whether new_frame is ready for rendering.
+		std::vector<float> new_frame_audio;
 		std::condition_variable new_data_ready_changed;  // Set whenever new_data_ready is changed.
 		Resampler *resampler = nullptr;
 	};

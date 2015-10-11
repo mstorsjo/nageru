@@ -201,36 +201,20 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 	GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);              
 	check_error();
 	assert(fence != nullptr);
+
+	// Convert the audio to stereo fp32 and store it next to the video.
+	size_t num_samples = (audio_frame.len - audio_offset) / 8 / 3;
+	vector<float> audio;
+	audio.resize(num_samples * 2);
+	convert_fixed24_to_fp32(&audio[0], 2, audio_frame.data + audio_offset, 8, num_samples);
+
 	{
 		std::unique_lock<std::mutex> lock(bmusb_mutex);
 		card->new_data_ready = true;
 		card->new_frame = RefCountedFrame(video_frame);
 		card->new_data_ready_fence = fence;
+		card->new_frame_audio = move(audio);
 		card->new_data_ready_changed.notify_all();
-	}
-
-	// As a test of the resampler, send the data from card 0 through it and onto disk.
-	// TODO: Send the audio on, and encode it through ffmpeg.
-	if (card_index == 0) {
-		size_t num_samples = (audio_frame.len - audio_offset) / 8 / 3;
-		double pts = timecode / 60.0;  // FIXME: Unwrap. And rebase.
-		unique_ptr<float[]> samplesf(new float[num_samples * 2]);
-		convert_fixed24_to_fp32(samplesf.get(), 2, audio_frame.data + audio_offset, 8, num_samples);
-		card->resampler->add_input_samples(pts, samplesf.get(), num_samples);
-
-		float samples_out[(48000 / 60) * 2];
-		card->resampler->get_output_samples(pts, samples_out, 48000 / 60);
-
-		static FILE *audiofp = nullptr;
-		if (audiofp == nullptr) {
-			audiofp = fopen("audio.raw", "wb");
-		}
-		fwrite(samples_out, sizeof(samples_out), 1, audiofp);
-		//fwrite(samplesf.get(), num_samples * sizeof(float) * 2, 1, audiofp);
-
-		if (audio_frame.len - audio_offset != 19200) {
-			printf("%d: %d samples (%d bytes)\n", card_index, int(num_samples), int(audio_frame.len - audio_offset));
-		}
 	}
 
 	// Video frame will be released when last user of card->new_frame goes out of scope.
@@ -267,6 +251,7 @@ void Mixer::thread_func()
 				card_copy[card_index].new_data_ready = card->new_data_ready;
 				card_copy[card_index].new_frame = card->new_frame;
 				card_copy[card_index].new_data_ready_fence = card->new_data_ready_fence;
+				card_copy[card_index].new_frame_audio = move(card->new_frame_audio);
 				card->new_data_ready = false;
 				card->new_data_ready_changed.notify_all();
 			}
@@ -321,6 +306,14 @@ void Mixer::thread_func()
 		RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
 		check_error();
 
+		// Resample the audio as needed.
+		// TODO: Allow using audio from the other card(s) as well.
+		double pts = frame / 60.0;
+		cards[0].resampler->add_input_samples(pts, card_copy[0].new_frame_audio.data(), card_copy[0].new_frame_audio.size() / 2);
+		vector<float> samples_out;
+		samples_out.resize((48000 / 60) * 2);
+		cards[0].resampler->get_output_samples(pts, &samples_out[0], 48000 / 60);
+
 		// Make sure the H.264 gets a reference to all the
 		// input frames needed, so that they are not released back
 		// until the rendering is done.
@@ -328,7 +321,7 @@ void Mixer::thread_func()
 		for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
 			input_frames.push_back(bmusb_current_rendering_frame[card_index]);
 		}
-		h264_encoder->end_frame(fence, input_frames);
+		h264_encoder->end_frame(fence, move(samples_out), input_frames);
 
 		// The live frame just shows the RGBA texture we just rendered.
 		// It owns rgba_tex now.
@@ -364,6 +357,7 @@ void Mixer::thread_func()
 		//	chain->print_phase_timing();
 		}
 
+#if 0
 		// Reset every 100 frames, so that local variations in frame times
 		// (especially for the first few frames, when the shaders are
 		// compiled etc.) don't make it hard to measure for the entire
@@ -372,6 +366,7 @@ void Mixer::thread_func()
 			frame = 0;
 			start = now;
 		}
+#endif
 		check_error();
 	}
 

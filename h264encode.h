@@ -67,13 +67,14 @@ public:
 	void 
 #endif
 	bool begin_frame(GLuint *y_tex, GLuint *cbcr_tex);
-	void end_frame(RefCountedGLsync fence, const std::vector<RefCountedFrame> &input_frames);
+	void end_frame(RefCountedGLsync fence, std::vector<float> audio, const std::vector<RefCountedFrame> &input_frames);
 
 private:
 	struct storage_task {
 		unsigned long long display_order;
 		unsigned long long encode_order;
 		int frame_type;
+		std::vector<float> audio;
 	};
 
 	void copy_thread_func();
@@ -100,12 +101,14 @@ private:
 	struct PendingFrame {
 		RefCountedGLsync fence;
 		std::vector<RefCountedFrame> input_frames;
+		std::vector<float> audio;
 	};
 	std::map<int, PendingFrame> pending_frames;
 	QSurface *surface;
 
 	AVFormatContext *avctx;
-	AVStream *avstream;
+	AVStream *avstream_video;
+	AVStream *avstream_audio;
 };
 
 #endif

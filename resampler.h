@@ -80,7 +80,7 @@ private:
 	// How much delay we are expected to have, in input samples.
 	// If actual delay drifts too much away from this, we will start
 	// changing the resampling ratio to compensate.
-	double expected_delay = 4800.0;
+	double expected_delay = 1600.0;
 
 	// Input samples not yet fed into the resampler.
 	// TODO: Use a circular buffer instead, for efficiency.
