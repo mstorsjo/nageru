@@ -26,6 +26,7 @@
 #include <thread>
 
 #include "context.h"
+#include "timebase.h"
 
 class QOpenGLContext;
 class QSurface;
@@ -343,7 +344,7 @@ static void sps_rbsp(bitstream *bs)
         bitstream_put_ui(bs, 1, 1); /* timing_info_present_flag */
         {
             bitstream_put_ui(bs, 1, 32);  // FPS
-            bitstream_put_ui(bs, frame_rate * 2, 32);  // FPS
+            bitstream_put_ui(bs, TIMEBASE * 2, 32);  // FPS
             bitstream_put_ui(bs, 1, 1);
         }
         bitstream_put_ui(bs, 1, 1); /* nal_hrd_parameters_present_flag */
@@ -1252,7 +1253,7 @@ static int render_sequence(void)
 
     seq_param.max_num_ref_frames = num_ref_frames;
     seq_param.seq_fields.bits.frame_mbs_only_flag = 1;
-    seq_param.time_scale = frame_rate * 2;
+    seq_param.time_scale = TIMEBASE * 2;
     seq_param.num_units_in_tick = 1; /* Tc = num_units_in_tick / scale */
     seq_param.seq_fields.bits.log2_max_pic_order_cnt_lsb_minus4 = Log2MaxPicOrderCntLsb - 4;
     seq_param.seq_fields.bits.log2_max_frame_num_minus4 = Log2MaxFrameNum - 4;;
@@ -1587,15 +1588,23 @@ int H264Encoder::save_codeddata(storage_task task)
     }
     vaUnmapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf);
 
-    const int pts_dts_delay = ip_period - 1;
-    const int av_delay = 2;  // Corresponds to the fixed delay in resampler.h. TODO: Make less hard-coded.
+    const int64_t pts_dts_delay = (ip_period - 1) * (TIMEBASE / frame_rate);
+    const int64_t av_delay = TIMEBASE / 30;  // Corresponds to the fixed delay in resampler.h. TODO: Make less hard-coded.
     {
+        int64_t pts, dts;
+        {
+             unique_lock<mutex> lock(frame_queue_mutex);
+             assert(timestamps.count(task.display_order));
+             assert(timestamps.count(task.encode_order));
+             pts = timestamps[task.display_order];
+             dts = timestamps[task.encode_order];
+        }
         // Add video.
         AVPacket pkt;
         memset(&pkt, 0, sizeof(pkt));
         pkt.buf = nullptr;
-        pkt.pts = av_rescale_q(task.display_order + av_delay + pts_dts_delay, AVRational{1, frame_rate}, avstream_video->time_base);
-        pkt.dts = av_rescale_q(task.encode_order + av_delay, AVRational{1, frame_rate}, avstream_video->time_base);
+        pkt.pts = av_rescale_q(pts + av_delay + pts_dts_delay, AVRational{1, TIMEBASE}, avstream_video->time_base);
+        pkt.dts = av_rescale_q(dts + av_delay, AVRational{1, TIMEBASE}, avstream_video->time_base);
         pkt.data = reinterpret_cast<uint8_t *>(&data[0]);
         pkt.size = data.size();
         pkt.stream_index = 0;
@@ -1611,6 +1620,7 @@ int H264Encoder::save_codeddata(storage_task task)
     // (They can never be queued to us after the video frame they belong to, only before.)
     for ( ;; ) {
         int display_order;
+        int64_t pts;
         std::vector<float> audio;
         {
              unique_lock<mutex> lock(frame_queue_mutex);
@@ -1620,6 +1630,10 @@ int H264Encoder::save_codeddata(storage_task task)
              display_order = it->first;
              audio = move(it->second);
              pending_audio_frames.erase(it); 
+
+             auto pts_it = timestamps.find(display_order);
+             assert(pts_it != timestamps.end());
+             pts = pts_it->second;
         }
         AVFrame *frame = avcodec_alloc_frame();
         frame->nb_samples = audio.size() / 2;
@@ -1640,13 +1654,17 @@ int H264Encoder::save_codeddata(storage_task task)
         int got_output;
         avcodec_encode_audio2(avstream_audio->codec, &pkt, frame, &got_output);
         if (got_output) {
-            pkt.pts = av_rescale_q(display_order + pts_dts_delay, AVRational{1, frame_rate}, avstream_audio->time_base);  // FIXME
+            pkt.pts = av_rescale_q(pts + pts_dts_delay, AVRational{1, TIMEBASE}, avstream_audio->time_base);
             pkt.dts = pkt.pts;
             pkt.stream_index = 1;
             av_interleaved_write_frame(avctx, &pkt);
         }
         // TODO: Delayed frames.
         avcodec_free_frame(&frame);
+    }
+    {
+        unique_lock<mutex> lock(frame_queue_mutex);
+        timestamps.erase(task.encode_order - (ip_period - 1));
     }
 
 #if 0
@@ -1777,10 +1795,10 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, const char *o
 		fprintf(stderr, "%s: avformat_new_stream() failed\n", output_filename);
 		exit(1);
 	}
-	avstream_video->time_base = AVRational{1, frame_rate};
+	avstream_video->time_base = AVRational{1, TIMEBASE};
 	avstream_video->codec->width = width;
 	avstream_video->codec->height = height;
-	avstream_video->codec->time_base = AVRational{1, frame_rate};
+	avstream_video->codec->time_base = AVRational{1, TIMEBASE};
 	avstream_video->codec->ticks_per_frame = 1;  // or 2?
 
 	AVCodec *codec_audio = avcodec_find_encoder(AV_CODEC_ID_MP3);
@@ -1789,13 +1807,13 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, const char *o
 		fprintf(stderr, "%s: avformat_new_stream() failed\n", output_filename);
 		exit(1);
 	}
-	avstream_audio->time_base = AVRational{1, frame_rate};
+	avstream_audio->time_base = AVRational{1, TIMEBASE};
 	avstream_audio->codec->bit_rate = 256000;
 	avstream_audio->codec->sample_rate = 48000;
 	avstream_audio->codec->sample_fmt = AV_SAMPLE_FMT_FLTP;
 	avstream_audio->codec->channels = 2;
 	avstream_audio->codec->channel_layout = AV_CH_LAYOUT_STEREO;
-	avstream_audio->codec->time_base = AVRational{1, frame_rate};
+	avstream_audio->codec->time_base = AVRational{1, TIMEBASE};
 
 	/* open it */
 	if (avcodec_open2(avstream_audio->codec, codec_audio, NULL) < 0) {
@@ -1928,12 +1946,13 @@ bool H264Encoder::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 	return true;
 }
 
-void H264Encoder::end_frame(RefCountedGLsync fence, std::vector<float> audio, const std::vector<RefCountedFrame> &input_frames)
+void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, std::vector<float> audio, const std::vector<RefCountedFrame> &input_frames)
 {
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
 		pending_video_frames[current_storage_frame] = PendingFrame{ fence, input_frames };
 		pending_audio_frames[current_storage_frame] = move(audio);
+		timestamps[current_storage_frame] = pts;
 		++current_storage_frame;
 	}
 	frame_queue_nonempty.notify_one();

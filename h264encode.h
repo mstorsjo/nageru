@@ -67,7 +67,7 @@ public:
 	void 
 #endif
 	bool begin_frame(GLuint *y_tex, GLuint *cbcr_tex);
-	void end_frame(RefCountedGLsync fence, std::vector<float> audio, const std::vector<RefCountedFrame> &input_frames);
+	void end_frame(RefCountedGLsync fence, int64_t pts, std::vector<float> audio, const std::vector<RefCountedFrame> &input_frames);
 
 private:
 	struct storage_task {
@@ -102,8 +102,9 @@ private:
 		RefCountedGLsync fence;
 		std::vector<RefCountedFrame> input_frames;
 	};
-	std::map<int, PendingFrame> pending_video_frames;
-	std::map<int, std::vector<float>> pending_audio_frames;
+	std::map<int, PendingFrame> pending_video_frames;  // under frame_queue_mutex
+	std::map<int, std::vector<float>> pending_audio_frames;  // under frame_queue_mutex
+	std::map<int, int64_t> timestamps;  // under frame_queue_mutex
 	QSurface *surface;
 
 	AVFormatContext *avctx;

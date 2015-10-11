@@ -41,6 +41,7 @@
 #include "h264encode.h"
 #include "pbo_frame_allocator.h"
 #include "ref_counted_gl_sync.h"
+#include "timebase.h"
 
 class QOpenGLContext;
 
@@ -321,7 +322,7 @@ void Mixer::thread_func()
 		for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
 			input_frames.push_back(bmusb_current_rendering_frame[card_index]);
 		}
-		h264_encoder->end_frame(fence, move(samples_out), input_frames);
+		h264_encoder->end_frame(fence, frame * (TIMEBASE / 60), move(samples_out), input_frames);
 
 		// The live frame just shows the RGBA texture we just rendered.
 		// It owns rgba_tex now.
