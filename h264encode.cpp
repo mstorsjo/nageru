@@ -1641,7 +1641,7 @@ int H264Encoder::save_codeddata(storage_task task)
         avcodec_encode_audio2(avstream_audio->codec, &pkt, frame, &got_output);
         if (got_output) {
             pkt.pts = av_rescale_q(display_order + pts_dts_delay, AVRational{1, frame_rate}, avstream_audio->time_base);  // FIXME
-            pkt.dts = 0;
+            pkt.dts = pkt.pts;
             pkt.stream_index = 1;
             av_interleaved_write_frame(avctx, &pkt);
         }
