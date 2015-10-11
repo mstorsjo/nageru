@@ -168,14 +168,17 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 
 	if (video_frame.len - video_offset != 1280 * 750 * 2) {
 		printf("dropping frame with wrong length (%ld)\n", video_frame.len - video_offset);
-		FILE *fp = fopen("frame.raw", "wb");
-		fwrite(video_frame.data, video_frame.len, 1, fp);
-		fclose(fp);
-		//exit(1);
 		card->usb->get_video_frame_allocator()->release_frame(video_frame);
 		card->usb->get_audio_frame_allocator()->release_frame(audio_frame);
 		return;
 	}
+	if (audio_frame.len - audio_offset > 30000) {
+		printf("dropping frame with implausible audio length (%ld)\n", audio_frame.len - audio_offset);
+		card->usb->get_video_frame_allocator()->release_frame(video_frame);
+		card->usb->get_audio_frame_allocator()->release_frame(audio_frame);
+		return;
+	}
+
 	{
 		// Wait until the previous frame was consumed.
 		std::unique_lock<std::mutex> lock(bmusb_mutex);
