@@ -1587,13 +1587,15 @@ int H264Encoder::save_codeddata(storage_task task)
     }
     vaUnmapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf);
 
+    const int pts_dts_delay = ip_period - 1;
+    const int av_delay = 2;  // Corresponds to the fixed delay in resampler.h. TODO: Make less hard-coded.
     {
         // Add video.
         AVPacket pkt;
         memset(&pkt, 0, sizeof(pkt));
         pkt.buf = nullptr;
-        pkt.pts = av_rescale_q(task.display_order + 2, AVRational{1, frame_rate}, avstream_video->time_base);  // FIXME: delay
-        pkt.dts = av_rescale_q(task.encode_order + 2, AVRational{1, frame_rate}, avstream_video->time_base);  // FIXME: delay
+        pkt.pts = av_rescale_q(task.display_order + av_delay + pts_dts_delay, AVRational{1, frame_rate}, avstream_video->time_base);
+        pkt.dts = av_rescale_q(task.encode_order + av_delay, AVRational{1, frame_rate}, avstream_video->time_base);
         pkt.data = reinterpret_cast<uint8_t *>(&data[0]);
         pkt.size = data.size();
         pkt.stream_index = 0;
@@ -1605,18 +1607,30 @@ int H264Encoder::save_codeddata(storage_task task)
         //pkt.duration = 1;
         av_interleaved_write_frame(avctx, &pkt);
     }
-    {
-        // Add audio.
+    // Encode and add all audio frames up to and including the pts of this video frame.
+    // (They can never be queued to us after the video frame they belong to, only before.)
+    for ( ;; ) {
+        int display_order;
+        std::vector<float> audio;
+        {
+             unique_lock<mutex> lock(frame_queue_mutex);
+             if (pending_audio_frames.empty()) break;
+             auto it = pending_audio_frames.begin();
+             if (it->first > int(task.display_order)) break;
+             display_order = it->first;
+             audio = move(it->second);
+             pending_audio_frames.erase(it); 
+        }
         AVFrame *frame = avcodec_alloc_frame();
-        frame->nb_samples = task.audio.size() / 2;
+        frame->nb_samples = audio.size() / 2;
         frame->format = AV_SAMPLE_FMT_FLT;
         frame->channel_layout = AV_CH_LAYOUT_STEREO;
 
-        unique_ptr<float[]> planar_samples(new float[task.audio.size()]);
-        avcodec_fill_audio_frame(frame, 2, AV_SAMPLE_FMT_FLTP, (const uint8_t*)planar_samples.get(), task.audio.size() * sizeof(float), 0);
+        unique_ptr<float[]> planar_samples(new float[audio.size()]);
+        avcodec_fill_audio_frame(frame, 2, AV_SAMPLE_FMT_FLTP, (const uint8_t*)planar_samples.get(), audio.size() * sizeof(float), 0);
         for (int i = 0; i < frame->nb_samples; ++i) {
-            planar_samples[i] = task.audio[i * 2 + 0];
-            planar_samples[i + frame->nb_samples] = task.audio[i * 2 + 1];
+            planar_samples[i] = audio[i * 2 + 0];
+            planar_samples[i + frame->nb_samples] = audio[i * 2 + 1];
         }
 
         AVPacket pkt;
@@ -1626,16 +1640,14 @@ int H264Encoder::save_codeddata(storage_task task)
         int got_output;
         avcodec_encode_audio2(avstream_audio->codec, &pkt, frame, &got_output);
         if (got_output) {
-            pkt.pts = av_rescale_q(task.display_order, AVRational{1, frame_rate}, avstream_audio->time_base);  // FIXME
+            pkt.pts = av_rescale_q(display_order + pts_dts_delay, AVRational{1, frame_rate}, avstream_audio->time_base);  // FIXME
+            pkt.dts = 0;
             pkt.stream_index = 1;
             av_interleaved_write_frame(avctx, &pkt);
         }
         // TODO: Delayed frames.
         avcodec_free_frame(&frame);
     }
-
-    static FILE *audiofp = fopen("audio.raw", "wb");
-    fwrite(&task.audio[0], 4 * task.audio.size(), 1, audiofp);
 
 #if 0
     printf("\r      "); /* return back to startpoint */
@@ -1920,7 +1932,9 @@ void H264Encoder::end_frame(RefCountedGLsync fence, std::vector<float> audio, co
 {
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
-		pending_frames[current_storage_frame++] = PendingFrame{ fence, input_frames, move(audio) };
+		pending_video_frames[current_storage_frame] = PendingFrame{ fence, input_frames };
+		pending_audio_frames[current_storage_frame] = move(audio);
+		++current_storage_frame;
 	}
 	frame_queue_nonempty.notify_one();
 }
@@ -1939,10 +1953,10 @@ void H264Encoder::copy_thread_func()
 
 		{
 			unique_lock<mutex> lock(frame_queue_mutex);
-			frame_queue_nonempty.wait(lock, [this]{ return copy_thread_should_quit || pending_frames.count(current_frame_display) != 0; });
+			frame_queue_nonempty.wait(lock, [this]{ return copy_thread_should_quit || pending_video_frames.count(current_frame_display) != 0; });
 			if (copy_thread_should_quit) return;
-			frame = move(pending_frames[current_frame_display]);
-			pending_frames.erase(current_frame_display);
+			frame = move(pending_video_frames[current_frame_display]);
+			pending_video_frames.erase(current_frame_display);
 		}
 
 		// Wait for the GPU to be done with the frame.
@@ -1988,7 +2002,6 @@ void H264Encoder::copy_thread_func()
 		tmp.display_order = current_frame_display;
 		tmp.encode_order = current_frame_encoding;
 		tmp.frame_type = current_frame_type;
-		tmp.audio = move(frame.audio);
 		storage_task_enqueue(move(tmp));
 		
 		update_ReferenceFrames();

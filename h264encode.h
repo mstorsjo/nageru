@@ -101,9 +101,9 @@ private:
 	struct PendingFrame {
 		RefCountedGLsync fence;
 		std::vector<RefCountedFrame> input_frames;
-		std::vector<float> audio;
 	};
-	std::map<int, PendingFrame> pending_frames;
+	std::map<int, PendingFrame> pending_video_frames;
+	std::map<int, std::vector<float>> pending_audio_frames;
 	QSurface *surface;
 
 	AVFormatContext *avctx;
