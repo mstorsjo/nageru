@@ -12,6 +12,7 @@ local transition_start = -2.0
 local transition_end = -1.0
 local zoom_src = 0.0
 local zoom_dst = 1.0
+local zoom_poi = 0   -- which input to zoom in on
 local fade_src = 0.0
 local fade_dst = 1.0
 
@@ -103,7 +104,7 @@ end
 function finish_transitions(t)
 	-- If live is 2 (SBS) but de-facto single, make it so.
 	if live_signal_num == 2 and t >= transition_end and zoom_dst == 1.0 then
-		live_signal_num = 0
+		live_signal_num = zoom_poi
 	end
 
 	-- If live is 3 (fade) but de-facto single, make it so.
@@ -133,14 +134,10 @@ function get_transitions(t)
 		return {"Cut", "", "Fade"}
 	end
 
-	if live_signal_num == 2 and preview_signal_num == 1 then
-		-- Zoom-out not supported here yet.
-		return {"Cut"}
-	end
-
-	if live_signal_num == 2 and preview_signal_num == 0 then
+	-- Various zooms.
+	if live_signal_num == 2 and (preview_signal_num == 0 or preview_signal_num == 1) then
 		return {"Cut", "Zoom in"}
-	elseif live_signal_num == 0 and preview_signal_num == 2 then
+	elseif (live_signal_num == 0 or live_signal_num == 1) and preview_signal_num == 2 then
 		return {"Cut", "Zoom out"}
 	end
 
@@ -186,25 +183,22 @@ function transition_clicked(num, t)
 			return
 		end
 
-		if live_signal_num == 2 and preview_signal_num == 1 then
-			io.write("NOT SUPPORTED YET\n")
-			return
-		end
-
-		if live_signal_num == 2 and preview_signal_num == 0 then
+		if live_signal_num == 2 and (preview_signal_num == 0 or preview_signal_num == 1) then
 			-- Zoom in from SBS to single.
 			transition_start = t
 			transition_end = t + 1.0
 			zoom_src = 0.0
 			zoom_dst = 1.0
+			zoom_poi = preview_signal_num
 			preview_signal_num = 2
-		elseif live_signal_num == 0 and preview_signal_num == 2 then
+		elseif (live_signal_num == 0 or live_signal_num == 1) and preview_signal_num == 2 then
 			-- Zoom out from single to SBS.
 			transition_start = t
 			transition_end = t + 1.0
 			zoom_src = 1.0
 			zoom_dst = 0.0
-			preview_signal_num = 0
+			preview_signal_num = live_signal_num
+			zoom_poi = live_signal_num
 			live_signal_num = 2
 		end
 	elseif num == 2 then
@@ -329,7 +323,7 @@ function get_chain(num, t, width, height)
 	end
 end
 
-function place_rectangle(resample_effect, resize_effect, padding_effect, x0, y0, x1, y1, screen_width, screen_height)
+function place_rectangle(resample_effect, resize_effect, padding_effect, x0, y0, x1, y1, screen_width, screen_height, input_width, input_height)
 	local srcx0 = 0.0
 	local srcx1 = 1.0
 	local srcy0 = 0.0
@@ -346,7 +340,15 @@ function place_rectangle(resample_effect, resize_effect, padding_effect, x0, y0,
 		return
 	end
 
-	-- Clip. (TODO: Clip on upper/left sides, too.)
+	-- Clip.
+	if x0 < 0 then
+		srcx0 = -x0 / (x1 - x0)
+		x0 = 0
+	end
+	if y0 < 0 then
+		srcy0 = -y0 / (y1 - y0)
+		y0 = 0
+	end
 	if x1 > screen_width then
 		srcx1 = (screen_width - x0) / (x1 - x0)
 		x1 = screen_width
@@ -382,8 +384,8 @@ function place_rectangle(resample_effect, resize_effect, padding_effect, x0, y0,
 		padding_effect:set_int("top", math.floor(y0))
 
 		-- Correct _that_ discrepancy by subpixel offset in the resampling.
-		resample_effect:set_float("left", -x_subpixel_offset / zoom_x)
-		resample_effect:set_float("top", -y_subpixel_offset / zoom_y)
+		resample_effect:set_float("left", srcx0 * input_width - x_subpixel_offset / zoom_x)
+		resample_effect:set_float("top", srcy0 * input_height - y_subpixel_offset / zoom_y)
 
 		-- Finally, adjust the border so it is exactly where we want it.
 		padding_effect:set_float("border_offset_left", x_subpixel_offset)
@@ -408,6 +410,10 @@ function round(x)
 	return math.floor(x + 0.5)
 end
 
+function lerp(a, b, t)
+	return a + (b - a) * t
+end
+
 function prepare_sbs_chain(chain, t, screen_width, screen_height)
 	chain.input0.input:connect_signal(0)
 	chain.input1.input:connect_signal(1)
@@ -422,8 +428,8 @@ function prepare_sbs_chain(chain, t, screen_width, screen_height)
 	local right0 = left0 + width0
 
 	-- Second input is positioned (16,48) from the bottom-right.
-	local width1 = 384 * screen_width/1280.0
-	local height1 = 216 * screen_height/720.0
+	local width1 = round(384 * screen_width/1280.0)
+	local height1 = round(216 * screen_height/720.0)
 
 	local bottom1 = screen_height - 48 * screen_height/720.0
 	local right1 = screen_width - 16 * screen_width/1280.0
@@ -431,9 +437,26 @@ function prepare_sbs_chain(chain, t, screen_width, screen_height)
 	local left1 = right1 - width1
 
 	-- Interpolate between the fullscreen and side-by-side views.
-	local scale0 = 1.0 + t * (1280.0 / 848.0 - 1.0)
-	local tx0 = 0.0 + t * (-left0 * scale0)
-	local ty0 = 0.0 + t * (-top0 * scale0)
+	local scale0, tx0, tx0
+	if zoom_poi == 0 then
+		local new_left0 = lerp(left0, 0, t)
+		local new_right0 = lerp(right0, screen_width, t)
+		local new_top0 = lerp(top0, 0, t)
+		local new_bottom0 = lerp(bottom0, screen_height, t)
+
+		scale0 = (new_right0 - new_left0) / width0  -- Same vertically and horizonally.
+		tx0 = new_left0 - left0 * scale0
+		ty0 = new_top0 - top0 * scale0
+	else
+		local new_left1 = lerp(left1, 0, t)
+		local new_right1 = lerp(right1, screen_width, t)
+		local new_top1 = lerp(top1, 0, t)
+		local new_bottom1 = lerp(bottom1, screen_height, t)
+
+		scale0 = (new_right1 - new_left1) / width1  -- Same vertically and horizonally.
+		tx0 = new_left1 - left1 * scale0
+		ty0 = new_top1 - top1 * scale0
+	end
 
 	top0 = top0 * scale0 + ty0
 	bottom0 = bottom0 * scale0 + ty0
@@ -444,6 +467,6 @@ function prepare_sbs_chain(chain, t, screen_width, screen_height)
 	bottom1 = bottom1 * scale0 + ty0
 	left1 = left1 * scale0 + tx0
 	right1 = right1 * scale0 + tx0
-	place_rectangle(chain.input0.resample_effect, chain.input0.resize_effect, chain.input0.padding_effect, left0, top0, right0, bottom0, screen_width, screen_height)
-	place_rectangle(chain.input1.resample_effect, chain.input1.resize_effect, chain.input1.padding_effect, left1, top1, right1, bottom1, screen_width, screen_height)
+	place_rectangle(chain.input0.resample_effect, chain.input0.resize_effect, chain.input0.padding_effect, left0, top0, right0, bottom0, screen_width, screen_height, 1280, 720)
+	place_rectangle(chain.input1.resample_effect, chain.input1.resize_effect, chain.input1.padding_effect, left1, top1, right1, bottom1, screen_width, screen_height, 1280, 720)
 end
