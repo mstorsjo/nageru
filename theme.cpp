@@ -57,8 +57,8 @@ Effect *get_effect(lua_State *L, int idx)
 	    luaL_testudata(L, idx, "MixEffect")) {
 		return (Effect *)lua_touserdata(L, idx);
 	}
-	fprintf(stderr, "Error: Index #%d was not an Effect type\n", idx);
-	exit(1);
+	luaL_error(L, "Error: Index #%d was not an Effect type\n", idx);
+	return nullptr;
 }
 
 bool checkbool(lua_State* L, int idx)
@@ -201,7 +201,9 @@ int Effect_set_float(lua_State *L)
 	const char* cstr = lua_tolstring(L, 2, &len);
 	std::string key(cstr, len);
 	float value = luaL_checknumber(L, 3);
-	(void)effect->set_float(key, value);
+	if (!effect->set_float(key, value)) {
+		luaL_error(L, "Effect refused set_float(\"%s\", %d) (invalid key?)", cstr, int(value));
+	}
 	return 0;
 }
 
@@ -213,7 +215,9 @@ int Effect_set_int(lua_State *L)
 	const char* cstr = lua_tolstring(L, 2, &len);
 	std::string key(cstr, len);
 	float value = luaL_checknumber(L, 3);
-	(void)effect->set_int(key, value);
+	if (!effect->set_int(key, value)) {
+		luaL_error(L, "Effect refused set_int(\"%s\", %d) (invalid key?)", cstr, int(value));
+	}
 	return 0;
 }
 
@@ -229,7 +233,10 @@ int Effect_set_vec4(lua_State *L)
 	v[1] = luaL_checknumber(L, 4);
 	v[2] = luaL_checknumber(L, 5);
 	v[3] = luaL_checknumber(L, 6);
-	(void)effect->set_vec4(key, v);
+	if (!effect->set_vec4(key, v)) {
+		luaL_error(L, "Effect refused set_vec4(\"%s\", %f, %f, %f, %f) (invalid key?)", cstr,
+			v[0], v[1], v[2], v[3]);
+	}
 	return 0;
 }
 
