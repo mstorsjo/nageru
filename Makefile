@@ -24,10 +24,10 @@ all: nageru
 nageru: $(OBJS)
 	$(CXX) $(LDFLAGS) -o $@ $^
 
-mainwindow.o: mainwindow.cpp ui_mainwindow.cpp
+mainwindow.o: mainwindow.cpp ui_mainwindow.h
 
 DEPS=$(OBJS:.o=.d)
 -include $(DEPS)
 
 clean:
-	$(RM) $(OBJS) $(DEPS) nageru ui_mainwindow.cpp chain-*.frag *.dot
+	$(RM) $(OBJS) $(DEPS) nageru ui_mainwindow.h glwidget.moc.cpp mainwindow.moc.cpp window.moc.cpp chain-*.frag *.dot
