@@ -9,7 +9,7 @@
 #include "context.h"
 #include "mixer.h"
 
-#include "ui_mainwindow.cpp"
+#include "ui_mainwindow.h"
 
 using namespace std;
 

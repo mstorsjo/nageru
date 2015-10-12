@@ -13,7 +13,7 @@ OBJS += h264encode.o mixer.o bmusb/bmusb.o pbo_frame_allocator.o context.o ref_c
 %.o: %.cpp
 	$(CXX) -MMD -MP $(CPPFLAGS) $(CXXFLAGS) -o $@ -c $<
 
-%.cpp: %.ui
+%.h: %.ui
 	uic $< -o $@
 
 %.moc.cpp: %.h
