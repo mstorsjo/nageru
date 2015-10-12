@@ -36,7 +36,7 @@
 #include <thread>
 #include <vector>
 
-#include "bmusb.h"
+#include "bmusb/bmusb.h"
 #include "context.h"
 #include "h264encode.h"
 #include "pbo_frame_allocator.h"

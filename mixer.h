@@ -9,7 +9,7 @@
 #include <movit/flat_input.h>
 #include <functional>
 
-#include "bmusb.h"
+#include "bmusb/bmusb.h"
 #include "h264encode.h"
 #include "pbo_frame_allocator.h"
 #include "ref_counted_frame.h"

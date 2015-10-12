@@ -39,7 +39,7 @@ extern "C" {
 #include <thread>
 #include <vector>
 
-#include "bmusb.h"
+#include "bmusb/bmusb.h"
 #include "context.h"
 #include "pbo_frame_allocator.h"
 #include "ref_counted_frame.h"

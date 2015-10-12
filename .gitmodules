@@ -1,0 +1,3 @@
+[submodule "bmusb"]
+	path = bmusb
+	url = http://git.sesse.net/bmusb

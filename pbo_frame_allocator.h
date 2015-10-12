@@ -5,7 +5,7 @@
 #include <mutex>
 #include <queue>
 
-#include "bmusb.h"
+#include "bmusb/bmusb.h"
 
 // An allocator that allocates straight into OpenGL pinned memory.
 // Meant for video frames only. We use a queue rather than a stack,

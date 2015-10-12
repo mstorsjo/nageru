@@ -7,7 +7,7 @@
 // Note that the important point isn't really the pointer to the Frame itself,
 // it's the resources it's representing that need to go back to the allocator.
 
-#include "bmusb.h"
+#include "bmusb/bmusb.h"
 
 void release_refcounted_frame(FrameAllocator::Frame *frame);
 
