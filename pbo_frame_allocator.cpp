@@ -103,11 +103,16 @@ FrameAllocator::Frame PBOFrameAllocator::alloc_frame()
 		freelist.pop();  // Meh.
 	}
 	vf.len = 0;
+	vf.overflow = 0;
 	return vf;
 }
 
 void PBOFrameAllocator::release_frame(Frame frame)
 {
+	if (frame.overflow > 0) {
+		printf("%d bytes overflow after last (PBO) frame\n", int(frame.overflow));
+	}
+
 	std::unique_lock<std::mutex> lock(freelist_mutex);
 	freelist.push(frame);
 	//--sumsum;
