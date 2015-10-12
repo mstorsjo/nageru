@@ -102,7 +102,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 		printf("Configuring card %d...\n", card_index);
 		CaptureCard *card = &cards[card_index];
 		card->usb = new BMUSBCapture(0x1edb, card_index == 0 ? 0xbd3b : 0xbd4f);
-		card->usb->set_frame_callback(std::bind(&Mixer::bm_frame, this, card_index, _1, _2, _3, _4, _5, _6, _7));
+		card->usb->set_frame_callback(bind(&Mixer::bm_frame, this, card_index, _1, _2, _3, _4, _5, _6, _7));
 		card->frame_allocator.reset(new PBOFrameAllocator(1280 * 750 * 2 + 44, 1280, 720));
 		card->usb->set_video_frame_allocator(card->frame_allocator.get());
 		card->surface = create_surface(format);
@@ -152,7 +152,7 @@ Mixer::~Mixer()
 
 	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
 		{
-			std::unique_lock<std::mutex> lock(bmusb_mutex);
+			unique_lock<mutex> lock(bmusb_mutex);
 			cards[card_index].should_quit = true;  // Unblock thread.
 			cards[card_index].new_data_ready_changed.notify_all();
 		}
@@ -181,7 +181,7 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 
 	{
 		// Wait until the previous frame was consumed.
-		std::unique_lock<std::mutex> lock(bmusb_mutex);
+		unique_lock<mutex> lock(bmusb_mutex);
 		card->new_data_ready_changed.wait(lock, [card]{ return !card->new_data_ready || card->should_quit; });
 		if (card->should_quit) return;
 	}
@@ -217,7 +217,7 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 	convert_fixed24_to_fp32(&audio[0], 2, audio_frame.data + audio_offset, 8, num_samples);
 
 	{
-		std::unique_lock<std::mutex> lock(bmusb_mutex);
+		unique_lock<mutex> lock(bmusb_mutex);
 		card->new_data_ready = true;
 		card->new_frame = RefCountedFrame(video_frame);
 		card->new_data_ready_fence = fence;
@@ -247,7 +247,7 @@ void Mixer::thread_func()
 		CaptureCard card_copy[NUM_CARDS];
 
 		{
-			std::unique_lock<std::mutex> lock(bmusb_mutex);
+			unique_lock<mutex> lock(bmusb_mutex);
 
 			// The first card is the master timer, so wait for it to have a new frame.
 			// TODO: Make configurable, and with a timeout.
@@ -447,7 +447,7 @@ void Mixer::release_display_frame(DisplayFrame *frame)
 
 void Mixer::start()
 {
-	mixer_thread = std::thread(&Mixer::thread_func, this);
+	mixer_thread = thread(&Mixer::thread_func, this);
 }
 
 void Mixer::quit()
@@ -481,7 +481,7 @@ void Mixer::OutputChannel::output_frame(DisplayFrame frame)
 	// Store this frame for display. Remove the ready frame if any
 	// (it was seemingly never used).
 	{
-		std::unique_lock<std::mutex> lock(frame_mutex);
+		unique_lock<mutex> lock(frame_mutex);
 		if (has_ready_frame) {
 			parent->release_display_frame(&ready_frame);
 		}
@@ -496,7 +496,7 @@ void Mixer::OutputChannel::output_frame(DisplayFrame frame)
 
 bool Mixer::OutputChannel::get_display_frame(DisplayFrame *frame)
 {
-	std::unique_lock<std::mutex> lock(frame_mutex);
+	unique_lock<mutex> lock(frame_mutex);
 	if (!has_current_frame && !has_ready_frame) {
 		return false;
 	}
