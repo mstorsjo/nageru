@@ -14,6 +14,7 @@
 int main(int argc, char *argv[])
 {
 	setenv("QT_XCB_GL_INTEGRATION", "xcb_egl", 0);
+	setlinebuf(stdout);
 
 	QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts, true);
 	QApplication app(argc, argv);
