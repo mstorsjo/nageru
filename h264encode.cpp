@@ -1588,10 +1588,10 @@ int H264Encoder::save_codeddata(storage_task task)
     }
     vaUnmapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf);
 
-    const int64_t pts_dts_delay = (ip_period - 1) * (TIMEBASE / frame_rate);
-    const int64_t av_delay = TIMEBASE / 30;  // Corresponds to the fixed delay in resampler.h. TODO: Make less hard-coded.
+    const int64_t pts_dts_delay = (ip_period - 1) * (TIMEBASE / frame_rate);  // FIXME: Wrong for variable frame rate.
+    const int64_t av_delay = TIMEBASE / 10;  // Corresponds to the fixed delay in resampler.h. TODO: Make less hard-coded.
+    int64_t pts, dts;
     {
-        int64_t pts, dts;
         {
              unique_lock<mutex> lock(frame_queue_mutex);
              assert(timestamps.count(task.display_order));
@@ -1619,21 +1619,16 @@ int H264Encoder::save_codeddata(storage_task task)
     // Encode and add all audio frames up to and including the pts of this video frame.
     // (They can never be queued to us after the video frame they belong to, only before.)
     for ( ;; ) {
-        int display_order;
-        int64_t pts;
+        int64_t audio_pts;
         std::vector<float> audio;
         {
              unique_lock<mutex> lock(frame_queue_mutex);
              if (pending_audio_frames.empty()) break;
              auto it = pending_audio_frames.begin();
-             if (it->first > int(task.display_order)) break;
-             display_order = it->first;
+             if (it->first > int(pts)) break;
+             audio_pts = it->first;
              audio = move(it->second);
              pending_audio_frames.erase(it); 
-
-             auto pts_it = timestamps.find(display_order);
-             assert(pts_it != timestamps.end());
-             pts = pts_it->second;
         }
         AVFrame *frame = avcodec_alloc_frame();
         frame->nb_samples = audio.size() / 2;
@@ -1654,7 +1649,7 @@ int H264Encoder::save_codeddata(storage_task task)
         int got_output;
         avcodec_encode_audio2(avstream_audio->codec, &pkt, frame, &got_output);
         if (got_output) {
-            pkt.pts = av_rescale_q(pts + pts_dts_delay, AVRational{1, TIMEBASE}, avstream_audio->time_base);
+            pkt.pts = av_rescale_q(audio_pts + pts_dts_delay, AVRational{1, TIMEBASE}, avstream_audio->time_base);
             pkt.dts = pkt.pts;
             pkt.stream_index = 1;
             av_interleaved_write_frame(avctx, &pkt);
@@ -1946,12 +1941,21 @@ bool H264Encoder::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 	return true;
 }
 
-void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, std::vector<float> audio, const std::vector<RefCountedFrame> &input_frames)
+void H264Encoder::add_audio(int64_t pts, std::vector<float> audio)
+{
+	{
+		unique_lock<mutex> lock(frame_queue_mutex);
+		pending_audio_frames[pts] = move(audio);
+	}
+	frame_queue_nonempty.notify_one();
+}
+
+
+void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const std::vector<RefCountedFrame> &input_frames)
 {
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
 		pending_video_frames[current_storage_frame] = PendingFrame{ fence, input_frames };
-		pending_audio_frames[current_storage_frame] = move(audio);
 		timestamps[current_storage_frame] = pts;
 		++current_storage_frame;
 	}

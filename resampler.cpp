@@ -55,7 +55,7 @@ void Resampler::add_input_samples(double pts, const float *samples, ssize_t num_
 	}
 }
 
-void Resampler::get_output_samples(double pts, float *samples, ssize_t num_samples)
+bool Resampler::get_output_samples(double pts, float *samples, ssize_t num_samples)
 {
 	double last_output_len;
 	if (first_output) {
@@ -88,8 +88,10 @@ void Resampler::get_output_samples(double pts, float *samples, ssize_t num_sampl
 	// Compute loop filter coefficients for the two filters. We need to compute them
 	// every time, since they depend on the number of samples the user asked for.
 	//
-	// The loop bandwidth starts at 1.0 Hz, then goes down to 0.05 Hz after four seconds.
-	double loop_bandwidth_hz = (k_a0 < 4 * freq_in) ? 1.0 : 0.05;
+	// The loop bandwidth is at 0.02 Hz; we trust the initial estimate quite well,
+	// and our jitter is pretty large since none of the threads involved run at
+	// real-time priority.
+	double loop_bandwidth_hz = 0.02;
 
 	// Set filters. The first filter much wider than the first one (20x as wide).
 	double w = (2.0 * M_PI) * loop_bandwidth_hz * num_samples / freq_out;
@@ -116,7 +118,7 @@ void Resampler::get_output_samples(double pts, float *samples, ssize_t num_sampl
 			fprintf(stderr, "PANIC: Out of input samples to resample, still need %d output samples!\n",
 				int(vresampler.out_count));
 			memset(vresampler.out_data, 0, vresampler.out_count * sizeof(float));
-			break;
+			return false;
 		}
 
 		float inbuf[1024];
@@ -137,4 +139,5 @@ void Resampler::get_output_samples(double pts, float *samples, ssize_t num_sampl
 		total_consumed_samples += consumed_samples;
 		buffer.erase(buffer.begin(), buffer.begin() + consumed_samples * num_channels);
 	}
+	return true;
 }

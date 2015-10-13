@@ -16,6 +16,7 @@
 #include "ref_counted_gl_sync.h"
 #include "theme.h"
 #include "resampler.h"
+#include "timebase.h"
 
 #define NUM_CARDS 2
 
@@ -80,7 +81,7 @@ public:
 
 	std::vector<std::string> get_transition_names()
 	{
-		return theme->get_transition_names(frame / 60.0);
+		return theme->get_transition_names(pts());
 	}
 
 private:
@@ -91,6 +92,7 @@ private:
 	void thread_func();
 	void subsample_chroma(GLuint src_tex, GLuint dst_dst);
 	void release_display_frame(DisplayFrame *frame);
+	double pts() { return double(pts_int) / TIMEBASE; }
 
 	QSurface *mixer_surface, *h264_encoder_surface;
 	std::unique_ptr<movit::ResourcePool> resource_pool;
@@ -102,7 +104,7 @@ private:
 	// Effects part of <display_chain>. Owned by <display_chain>.
 	movit::FlatInput *display_input;
 
-	int frame = 0;
+	int64_t pts_int = 0;  // In TIMEBASE units.
 
 	std::mutex bmusb_mutex;
 	struct CaptureCard {
@@ -119,7 +121,11 @@ private:
 		GLsync new_data_ready_fence;  // Whether new_frame is ready for rendering.
 		std::vector<float> new_frame_audio;
 		std::condition_variable new_data_ready_changed;  // Set whenever new_data_ready is changed.
-		Resampler *resampler = nullptr;
+		unsigned dropped_frames = 0;  // Before new_frame.
+
+		std::mutex audio_mutex;
+		std::unique_ptr<Resampler> resampler;  // Under audio_mutex.
+		int last_timecode = -1;  // Unwrapped.
 	};
 	CaptureCard cards[NUM_CARDS];  // protected by <bmusb_mutex>
 

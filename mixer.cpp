@@ -119,7 +119,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 			[this]{
 				resource_pool->clean_context();
 			});
-		card->resampler = new Resampler(48000.0, 48000.0, 2);
+		card->resampler.reset(new Resampler(48000.0, 48000.0, 2));
 		card->usb->configure_card();
 	}
 
@@ -160,23 +160,78 @@ Mixer::~Mixer()
 	}
 }
 
+namespace {
+
+int unwrap_timecode(uint16_t current_wrapped, int last)
+{
+	uint16_t last_wrapped = last & 0xffff;
+	if (current_wrapped > last_wrapped) {
+		return (last & ~0xffff) | current_wrapped;
+	} else {
+		return 0x10000 + ((last & ~0xffff) | current_wrapped);
+	}
+}
+
+}  // namespace
+
 void Mixer::bm_frame(int card_index, uint16_t timecode,
                      FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,
 		     FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format)
 {
 	CaptureCard *card = &cards[card_index];
 
-	if (video_frame.len - video_offset != 1280 * 750 * 2) {
-		printf("dropping frame with wrong length (%ld)\n", video_frame.len - video_offset);
-		card->usb->get_video_frame_allocator()->release_frame(video_frame);
-		card->usb->get_audio_frame_allocator()->release_frame(audio_frame);
+	if (audio_frame.len - audio_offset > 30000) {
+		printf("Card %d: Dropping frame with implausible audio length (len=%d, offset=%d) [timecode=0x%04x video_len=%d video_offset=%d video_format=%x)\n",
+			card_index, int(audio_frame.len), int(audio_offset),
+			timecode, int(video_frame.len), int(video_offset), video_format);
+		if (video_frame.owner) {
+			video_frame.owner->release_frame(video_frame);
+		}
+		if (audio_frame.owner) {
+			audio_frame.owner->release_frame(audio_frame);
+		}
 		return;
 	}
-	if (audio_frame.len - audio_offset > 30000) {
-		printf("dropping frame with implausible audio length (%ld)\n", audio_frame.len - audio_offset);
-		card->usb->get_video_frame_allocator()->release_frame(video_frame);
-		card->usb->get_audio_frame_allocator()->release_frame(audio_frame);
-		return;
+
+	// Convert the audio to stereo fp32 and add it.
+	size_t num_samples = (audio_frame.len - audio_offset) / 8 / 3;
+	vector<float> audio;
+	audio.resize(num_samples * 2);
+	convert_fixed24_to_fp32(&audio[0], 2, audio_frame.data + audio_offset, 8, num_samples);
+
+	int unwrapped_timecode = timecode;
+	int dropped_frames = 0;
+	if (card->last_timecode != -1) {
+		unwrapped_timecode = unwrap_timecode(unwrapped_timecode, card->last_timecode);
+		dropped_frames = unwrapped_timecode - card->last_timecode - 1;
+	}
+	card->last_timecode = unwrapped_timecode;
+
+	// Add the audio.
+	{
+		unique_lock<mutex> lock(card->audio_mutex);
+
+		int unwrapped_timecode = timecode;
+		if (dropped_frames > 60 * 2) {
+			fprintf(stderr, "Card %d lost more than two seconds (or time code jumping around), resetting resampler\n",
+				card_index);
+			card->resampler.reset(new Resampler(48000.0, 48000.0, 2));
+		} else if (dropped_frames > 0) {
+			// Insert silence as needed.
+			fprintf(stderr, "Card %d dropped %d frame(s) (before timecode 0x%04x), inserting silence.\n",
+				card_index, dropped_frames, timecode);
+			vector<float> silence;
+			silence.resize((48000 / 60) * 2);
+			for (int i = 0; i < dropped_frames; ++i) {
+				card->resampler->add_input_samples((unwrapped_timecode - dropped_frames + i) / 60.0, silence.data(), (48000 / 60));
+			}
+		}
+		card->resampler->add_input_samples(unwrapped_timecode / 60.0, audio.data(), num_samples);
+	}
+
+	// Done with the audio, so release it.
+	if (audio_frame.owner) {
+		audio_frame.owner->release_frame(audio_frame);
 	}
 
 	{
@@ -185,6 +240,29 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 		card->new_data_ready_changed.wait(lock, [card]{ return !card->new_data_ready || card->should_quit; });
 		if (card->should_quit) return;
 	}
+
+	if (video_frame.len - video_offset != 1280 * 750 * 2) {
+		if (video_frame.len != 0) {
+			printf("Card %d: Dropping video frame with wrong length (%ld)\n",
+				card_index, video_frame.len - video_offset);
+		}
+		if (video_frame.owner) {
+			video_frame.owner->release_frame(video_frame);
+		}
+
+		// Still send on the information that we _had_ a frame, even though it's corrupted,
+		// so that pts can go up accordingly.
+		{
+			unique_lock<mutex> lock(bmusb_mutex);
+			card->new_data_ready = true;
+			card->new_frame = RefCountedFrame(FrameAllocator::Frame());
+			card->new_data_ready_fence = nullptr;
+			card->dropped_frames = dropped_frames;
+			card->new_data_ready_changed.notify_all();
+		}
+		return;
+	}
+
 	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)video_frame.userdata;
 	GLuint pbo = userdata->pbo;
 	check_error();
@@ -210,23 +288,14 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 	check_error();
 	assert(fence != nullptr);
 
-	// Convert the audio to stereo fp32 and store it next to the video.
-	size_t num_samples = (audio_frame.len - audio_offset) / 8 / 3;
-	vector<float> audio;
-	audio.resize(num_samples * 2);
-	convert_fixed24_to_fp32(&audio[0], 2, audio_frame.data + audio_offset, 8, num_samples);
-
 	{
 		unique_lock<mutex> lock(bmusb_mutex);
 		card->new_data_ready = true;
 		card->new_frame = RefCountedFrame(video_frame);
 		card->new_data_ready_fence = fence;
-		card->new_frame_audio = move(audio);
+		card->dropped_frames = dropped_frames;
 		card->new_data_ready_changed.notify_all();
 	}
-
-	// Video frame will be released when last user of card->new_frame goes out of scope.
-        card->usb->get_audio_frame_allocator()->release_frame(audio_frame);
 }
 
 void Mixer::thread_func()
@@ -241,9 +310,10 @@ void Mixer::thread_func()
 	struct timespec start, now;
 	clock_gettime(CLOCK_MONOTONIC, &start);
 
-	while (!should_quit) {
-		++frame;
+	int frame = 0;
+	int dropped_frames = 0;
 
+	while (!should_quit) {
 		CaptureCard card_copy[NUM_CARDS];
 
 		{
@@ -260,14 +330,46 @@ void Mixer::thread_func()
 				card_copy[card_index].new_frame = card->new_frame;
 				card_copy[card_index].new_data_ready_fence = card->new_data_ready_fence;
 				card_copy[card_index].new_frame_audio = move(card->new_frame_audio);
+				card_copy[card_index].dropped_frames = card->dropped_frames;
 				card->new_data_ready = false;
 				card->new_data_ready_changed.notify_all();
 			}
 		}
 
+		// Resample the audio as needed, including from previously dropped frames.
+		vector<float> samples_out;
+		// TODO: Allow using audio from the other card(s) as well.
+		for (unsigned frame_num = 0; frame_num < card_copy[0].dropped_frames + 1; ++frame_num) {
+			for (unsigned card_index = 0; card_index < NUM_CARDS; ++card_index) {
+				samples_out.resize((48000 / 60) * 2);
+				{
+					unique_lock<mutex> lock(cards[card_index].audio_mutex);
+					if (!cards[card_index].resampler->get_output_samples(pts(), &samples_out[0], 48000 / 60)) {
+						printf("Card %d reported previous underrun.\n", card_index);
+					}
+				}
+				if (card_index == 0) {
+					h264_encoder->add_audio(pts_int, move(samples_out));
+				}
+			}
+			if (frame_num != card_copy[0].dropped_frames) {
+				// For dropped frames, increase the pts.
+				++dropped_frames;
+				pts_int += TIMEBASE / 60;
+			}
+		}
+
+		// If the first card is reporting a corrupted or otherwise dropped frame,
+		// just increase the pts (skipping over this frame) and don't try to compute anything new.
+		if (card_copy[0].new_frame->len == 0) {
+			++dropped_frames;
+			pts_int += TIMEBASE / 60;
+			continue;
+		}
+
 		for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
 			CaptureCard *card = &card_copy[card_index];
-			if (!card->new_data_ready)
+			if (!card->new_data_ready || card->new_frame->len == 0)
 				continue;
 
 			assert(card->new_frame != nullptr);
@@ -276,17 +378,18 @@ void Mixer::thread_func()
 
 			// The new texture might still be uploaded,
 			// tell the GPU to wait until it's there.
-			if (card->new_data_ready_fence)
+			if (card->new_data_ready_fence) {
 				glWaitSync(card->new_data_ready_fence, /*flags=*/0, GL_TIMEOUT_IGNORED);
-			check_error();
-			glDeleteSync(card->new_data_ready_fence);
-			check_error();
+				check_error();
+				glDeleteSync(card->new_data_ready_fence);
+				check_error();
+			}
 			const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)card->new_frame->userdata;
 			theme->set_input_textures(card_index, userdata->tex_y, userdata->tex_cbcr);
 		}
 
 		// Get the main chain from the theme, and set its state immediately.
-		pair<EffectChain *, function<void()>> theme_main_chain = theme->get_chain(0, frame / 60.0f, WIDTH, HEIGHT);
+		pair<EffectChain *, function<void()>> theme_main_chain = theme->get_chain(0, pts(), WIDTH, HEIGHT);
 		EffectChain *chain = theme_main_chain.first;
 		theme_main_chain.second();
 
@@ -314,14 +417,6 @@ void Mixer::thread_func()
 		RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
 		check_error();
 
-		// Resample the audio as needed.
-		// TODO: Allow using audio from the other card(s) as well.
-		double pts = frame / 60.0;
-		cards[0].resampler->add_input_samples(pts, card_copy[0].new_frame_audio.data(), card_copy[0].new_frame_audio.size() / 2);
-		vector<float> samples_out;
-		samples_out.resize((48000 / 60) * 2);
-		cards[0].resampler->get_output_samples(pts, &samples_out[0], 48000 / 60);
-
 		// Make sure the H.264 gets a reference to all the
 		// input frames needed, so that they are not released back
 		// until the rendering is done.
@@ -329,7 +424,9 @@ void Mixer::thread_func()
 		for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
 			input_frames.push_back(bmusb_current_rendering_frame[card_index]);
 		}
-		h264_encoder->end_frame(fence, frame * (TIMEBASE / 60), move(samples_out), input_frames);
+		h264_encoder->end_frame(fence, pts_int, input_frames);
+		++frame;
+		pts_int += TIMEBASE / 60;
 
 		// The live frame just shows the RGBA texture we just rendered.
 		// It owns rgba_tex now.
@@ -346,7 +443,7 @@ void Mixer::thread_func()
 		// Set up preview and any additional channels.
 		for (int i = 1; i < theme->get_num_channels() + 2; ++i) {
 			DisplayFrame display_frame;
-			pair<EffectChain *, function<void()>> chain = theme->get_chain(i, frame / 60.0f, WIDTH, HEIGHT);  // FIXME: dimensions
+			pair<EffectChain *, function<void()>> chain = theme->get_chain(i, pts(), WIDTH, HEIGHT);  // FIXME: dimensions
 			display_frame.chain = chain.first;
 			display_frame.setup_chain = chain.second;
 			display_frame.ready_fence = fence;
@@ -359,8 +456,8 @@ void Mixer::thread_func()
 		double elapsed = now.tv_sec - start.tv_sec +
 			1e-9 * (now.tv_nsec - start.tv_nsec);
 		if (frame % 100 == 0) {
-			printf("%d frames in %.3f seconds = %.1f fps (%.1f ms/frame)\n",
-				frame, elapsed, frame / elapsed,
+			printf("%d frames (%d dropped) in %.3f seconds = %.1f fps (%.1f ms/frame)\n",
+				frame, dropped_frames, elapsed, frame / elapsed,
 				1e3 * elapsed / frame);
 		//	chain->print_phase_timing();
 		}
@@ -458,7 +555,7 @@ void Mixer::quit()
 
 void Mixer::transition_clicked(int transition_num)
 {
-	theme->transition_clicked(transition_num, frame / 60.0);
+	theme->transition_clicked(transition_num, pts());
 }
 
 void Mixer::channel_clicked(int preview_num)

@@ -50,7 +50,7 @@ public:
 
 	// Note: pts is always in seconds.
 	void add_input_samples(double pts, const float *samples, ssize_t num_samples);
-	void get_output_samples(double pts, float *samples, ssize_t num_samples);
+	bool get_output_samples(double pts, float *samples, ssize_t num_samples);  // Returns false if underrun.
 
 private:
 	void init_loop_filter(double bandwidth_hz);
@@ -80,7 +80,7 @@ private:
 	// How much delay we are expected to have, in input samples.
 	// If actual delay drifts too much away from this, we will start
 	// changing the resampling ratio to compensate.
-	double expected_delay = 1600.0;
+	double expected_delay = 4800.0;
 
 	// Input samples not yet fed into the resampler.
 	// TODO: Use a circular buffer instead, for efficiency.
