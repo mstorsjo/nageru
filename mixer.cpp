@@ -424,7 +424,8 @@ void Mixer::thread_func()
 		for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
 			input_frames.push_back(bmusb_current_rendering_frame[card_index]);
 		}
-		h264_encoder->end_frame(fence, pts_int, input_frames);
+		const int64_t av_delay = TIMEBASE / 10;  // Corresponds to the fixed delay in resampler.h. TODO: Make less hard-coded.
+		h264_encoder->end_frame(fence, pts_int + av_delay, input_frames);
 		++frame;
 		pts_int += TIMEBASE / 60;
 

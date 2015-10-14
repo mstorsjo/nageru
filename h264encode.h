@@ -73,9 +73,9 @@ public:
 private:
 	struct storage_task {
 		unsigned long long display_order;
-		unsigned long long encode_order;
 		int frame_type;
 		std::vector<float> audio;
+		int64_t pts, dts;
 	};
 
 	void copy_thread_func();
@@ -102,10 +102,10 @@ private:
 	struct PendingFrame {
 		RefCountedGLsync fence;
 		std::vector<RefCountedFrame> input_frames;
+		int64_t pts;
 	};
 	std::map<int, PendingFrame> pending_video_frames;  // under frame_queue_mutex
 	std::map<int64_t, std::vector<float>> pending_audio_frames;  // under frame_queue_mutex
-	std::map<int, int64_t> timestamps;  // under frame_queue_mutex
 	QSurface *surface;
 
 	AVFormatContext *avctx;

@@ -586,11 +586,51 @@ static int build_packed_slice_buffer(unsigned char **header_buffer)
                                            {IDR(PBB)(PBB)}.
 */
 
-/*
- * Return displaying order with specified periods and encoding order
- * displaying_order: displaying order
- * frame_type: frame type 
- */
+// General pts/dts strategy:
+//
+// Getting pts and dts right with variable frame rate (VFR) and B-frames can be a
+// bit tricky. We assume first of all that the frame rate never goes _above_
+// <frame_rate>, which gives us a frame period N. The decoder can always decode
+// in at least this speed, as long at dts <= pts (the frame is not attempted
+// presented before it is decoded). Furthermore, we never have longer chains of
+// B-frames than a fixed constant C. (In a B-frame chain, we say that the base
+// I/P-frame has order O=0, the B-frame depending on it directly has order O=1,
+// etc. The last frame in the chain, which no B-frames depend on, is the “tip”
+// frame, with an order O <= C.)
+//
+// Many strategies are possible, but we establish these rules:
+//
+//  - Tip frames have dts = pts - (C-O)*N.
+//  - Non-tip frames have dts = dts_last + N.
+//
+// An example, with C=2 and N=10 and the data flow showed with arrows:
+//
+//        I  B  P  B  B  P
+//   pts: 30 40 50 60 70 80
+//        ↓  ↓     ↓
+//   dts: 10 30 20 60 50←40
+//         |  |  ↑        ↑
+//         `--|--'        |
+//             `----------'
+//
+// To show that this works fine also with irregular spacings, let's say that
+// the third frame is delayed a bit (something earlier was dropped). Now the
+// situation looks like this:
+//
+//        I  B  P  B  B   P
+//   pts: 30 40 80 90 100 110
+//        ↓  ↓     ↓
+//   dts: 10 30 20 90 50←40
+//         |  |  ↑        ↑
+//         `--|--'        |
+//             `----------'
+//
+// The resetting on every tip frame makes sure dts never ends up lagging a lot
+// behind pts, and the subtraction of (C-O)*N makes sure pts <= dts.
+//
+// In the output of this function, if <dts_lag> is >= 0, it means to reset the
+// dts from the current pts minus <dts_lag>, while if it's -1, the frame is not
+// a tip frame and should be given a dts based on the previous one.
 #define FRAME_P 0
 #define FRAME_B 1
 #define FRAME_I 2
@@ -599,9 +639,11 @@ void encoding2display_order(
     unsigned long long encoding_order, int intra_period,
     int intra_idr_period, int ip_period,
     unsigned long long *displaying_order,
-    int *frame_type)
+    int *frame_type, int *pts_lag)
 {
     int encoding_order_gop = 0;
+
+    *pts_lag = 0;
 
     if (intra_period == 1) { /* all are I/IDR frames */
         *displaying_order = encoding_order;
@@ -615,29 +657,47 @@ void encoding2display_order(
     if (intra_period == 0)
         intra_idr_period = 0;
 
-    /* new sequence like
-     * IDR PPPPP IPPPPP
-     * IDR (PBB)(PBB)(IBB)(PBB)
-     */
-    encoding_order_gop = (intra_idr_period == 0)? encoding_order:
-        (encoding_order % (intra_idr_period + ((ip_period == 1)?0:1)));
+    if (ip_period == 1) {
+        // No B-frames, sequence is like IDR PPPPP IPPPPP.
+        encoding_order_gop = (intra_idr_period == 0) ? encoding_order : (encoding_order % intra_idr_period);
+        *displaying_order = encoding_order;
+
+        if (encoding_order_gop == 0) { /* the first frame */
+            *frame_type = FRAME_IDR;
+        } else if (intra_period != 0 && /* have I frames */
+                   encoding_order_gop >= 2 &&
+                   (encoding_order_gop % intra_period == 0)) {
+            *frame_type = FRAME_I;
+        } else {
+            *frame_type = FRAME_P;
+        }
+        return;
+    } 
+
+    // We have B-frames. Sequence is like IDR (PBB)(PBB)(IBB)(PBB).
+    encoding_order_gop = (intra_idr_period == 0) ? encoding_order : (encoding_order % (intra_idr_period + 1));
+    *pts_lag = -1;  // Most frames are not tip frames.
          
     if (encoding_order_gop == 0) { /* the first frame */
         *frame_type = FRAME_IDR;
         *displaying_order = encoding_order;
+        // IDR frames are a special case; I honestly can't find the logic behind
+        // why this is the right thing, but it seems to line up nicely in practice :-)
+        *pts_lag = TIMEBASE / frame_rate;
     } else if (((encoding_order_gop - 1) % ip_period) != 0) { /* B frames */
-	*frame_type = FRAME_B;
+        *frame_type = FRAME_B;
         *displaying_order = encoding_order - 1;
-    } else if ((intra_period != 0) && /* have I frames */
-               (encoding_order_gop >= 2) &&
-               ((ip_period == 1 && encoding_order_gop % intra_period == 0) || /* for IDR PPPPP IPPPP */
-                /* for IDR (PBB)(PBB)(IBB) */
-                (ip_period >= 2 && ((encoding_order_gop - 1) / ip_period % (intra_period / ip_period)) == 0))) {
-	*frame_type = FRAME_I;
-	*displaying_order = encoding_order + ip_period - 1;
+        if ((encoding_order_gop % ip_period) == 0) {
+            *pts_lag = 0;  // Last B-frame.
+        }
+    } else if (intra_period != 0 && /* have I frames */
+               encoding_order_gop >= 2 &&
+               ((encoding_order_gop - 1) / ip_period % (intra_period / ip_period)) == 0) {
+        *frame_type = FRAME_I;
+        *displaying_order = encoding_order + ip_period - 1;
     } else {
-	*frame_type = FRAME_P;
-	*displaying_order = encoding_order + ip_period - 1;
+        *frame_type = FRAME_P;
+        *displaying_order = encoding_order + ip_period - 1;
     }
 }
 
@@ -1578,6 +1638,8 @@ int H264Encoder::save_codeddata(storage_task task)
 
     string data;
 
+    const int64_t global_delay = (ip_period - 1) * (TIMEBASE / frame_rate);  // So we never get negative dts.
+
     va_status = vaMapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf, (void **)(&buf_list));
     CHECK_VASTATUS(va_status, "vaMapBuffer");
     while (buf_list != NULL) {
@@ -1588,23 +1650,13 @@ int H264Encoder::save_codeddata(storage_task task)
     }
     vaUnmapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf);
 
-    const int64_t pts_dts_delay = (ip_period - 1) * (TIMEBASE / frame_rate);  // FIXME: Wrong for variable frame rate.
-    const int64_t av_delay = TIMEBASE / 10;  // Corresponds to the fixed delay in resampler.h. TODO: Make less hard-coded.
-    int64_t pts, dts;
     {
-        {
-             unique_lock<mutex> lock(frame_queue_mutex);
-             assert(timestamps.count(task.display_order));
-             assert(timestamps.count(task.encode_order));
-             pts = timestamps[task.display_order];
-             dts = timestamps[task.encode_order];
-        }
         // Add video.
         AVPacket pkt;
         memset(&pkt, 0, sizeof(pkt));
         pkt.buf = nullptr;
-        pkt.pts = av_rescale_q(pts + av_delay + pts_dts_delay, AVRational{1, TIMEBASE}, avstream_video->time_base);
-        pkt.dts = av_rescale_q(dts + av_delay, AVRational{1, TIMEBASE}, avstream_video->time_base);
+        pkt.pts = av_rescale_q(task.pts + global_delay, AVRational{1, TIMEBASE}, avstream_video->time_base);
+        pkt.dts = av_rescale_q(task.dts + global_delay, AVRational{1, TIMEBASE}, avstream_video->time_base);
         pkt.data = reinterpret_cast<uint8_t *>(&data[0]);
         pkt.size = data.size();
         pkt.stream_index = 0;
@@ -1625,7 +1677,7 @@ int H264Encoder::save_codeddata(storage_task task)
              unique_lock<mutex> lock(frame_queue_mutex);
              if (pending_audio_frames.empty()) break;
              auto it = pending_audio_frames.begin();
-             if (it->first > int(pts)) break;
+             if (it->first > task.pts) break;
              audio_pts = it->first;
              audio = move(it->second);
              pending_audio_frames.erase(it); 
@@ -1649,17 +1701,13 @@ int H264Encoder::save_codeddata(storage_task task)
         int got_output;
         avcodec_encode_audio2(avstream_audio->codec, &pkt, frame, &got_output);
         if (got_output) {
-            pkt.pts = av_rescale_q(audio_pts + pts_dts_delay, AVRational{1, TIMEBASE}, avstream_audio->time_base);
+            pkt.pts = av_rescale_q(audio_pts + global_delay, AVRational{1, TIMEBASE}, avstream_audio->time_base);
             pkt.dts = pkt.pts;
             pkt.stream_index = 1;
             av_interleaved_write_frame(avctx, &pkt);
         }
         // TODO: Delayed frames.
         avcodec_free_frame(&frame);
-    }
-    {
-        unique_lock<mutex> lock(frame_queue_mutex);
-        timestamps.erase(task.encode_order - (ip_period - 1));
     }
 
 #if 0
@@ -1955,8 +2003,7 @@ void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const std::vect
 {
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
-		pending_video_frames[current_storage_frame] = PendingFrame{ fence, input_frames };
-		timestamps[current_storage_frame] = pts;
+		pending_video_frames[current_storage_frame] = PendingFrame{ fence, input_frames, pts };
 		++current_storage_frame;
 	}
 	frame_queue_nonempty.notify_one();
@@ -1964,10 +2011,12 @@ void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const std::vect
 
 void H264Encoder::copy_thread_func()
 {
+	int64_t last_dts = -1;
 	for ( ;; ) {
 		PendingFrame frame;
+		int pts_lag;
 		encoding2display_order(current_frame_encoding, intra_period, intra_idr_period, ip_period,
-				       &current_frame_display, &current_frame_type);
+				       &current_frame_display, &current_frame_type, &pts_lag);
 		if (current_frame_type == FRAME_IDR) {
 			numShortTerm = 0;
 			current_frame_num = 0;
@@ -2019,12 +2068,24 @@ void H264Encoder::copy_thread_func()
 		va_status = vaEndPicture(va_dpy, context_id);
 		CHECK_VASTATUS(va_status, "vaEndPicture");
 
+		// Determine the pts and dts of this frame.
+		int64_t pts = frame.pts;
+		int64_t dts;
+		if (pts_lag == -1) {
+			assert(last_dts != -1);
+			dts = last_dts + (TIMEBASE / frame_rate);
+		} else {
+			dts = pts - pts_lag;
+		}
+		last_dts = dts;
+
 		// so now the data is done encoding (well, async job kicked off)...
 		// we send that to the storage thread
 		storage_task tmp;
 		tmp.display_order = current_frame_display;
-		tmp.encode_order = current_frame_encoding;
 		tmp.frame_type = current_frame_type;
+		tmp.pts = pts;
+		tmp.dts = dts;
 		storage_task_enqueue(move(tmp));
 		
 		update_ReferenceFrames();
