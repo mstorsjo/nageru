@@ -1,5 +1,6 @@
 #define WIDTH 1280
 #define HEIGHT 720
+#define EXTRAHEIGHT 30
 
 #undef Success
 
@@ -103,7 +104,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 		CaptureCard *card = &cards[card_index];
 		card->usb = new BMUSBCapture(0x1edb, card_index == 0 ? 0xbd3b : 0xbd4f);
 		card->usb->set_frame_callback(bind(&Mixer::bm_frame, this, card_index, _1, _2, _3, _4, _5, _6, _7));
-		card->frame_allocator.reset(new PBOFrameAllocator(WIDTH * (HEIGHT+30) * 2 + 44, WIDTH, HEIGHT));
+		card->frame_allocator.reset(new PBOFrameAllocator(WIDTH * (HEIGHT+EXTRAHEIGHT) * 2 + 44, WIDTH, HEIGHT));
 		card->usb->set_video_frame_allocator(card->frame_allocator.get());
 		card->surface = create_surface(format);
 		card->usb->set_dequeue_thread_callbacks(
@@ -241,7 +242,7 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 		if (card->should_quit) return;
 	}
 
-	if (video_frame.len - video_offset != WIDTH * (HEIGHT+30) * 2) {
+	if (video_frame.len - video_offset != WIDTH * (HEIGHT+EXTRAHEIGHT) * 2) {
 		if (video_frame.len != 0) {
 			printf("Card %d: Dropping video frame with wrong length (%ld)\n",
 				card_index, video_frame.len - video_offset);
@@ -276,7 +277,7 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 	// Upload the textures.
 	glBindTexture(GL_TEXTURE_2D, userdata->tex_y);
 	check_error();
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET((WIDTH * (HEIGHT+30) * 2 + 44) / 2 + WIDTH * 25 + 22));
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET((WIDTH * (HEIGHT+EXTRAHEIGHT) * 2 + 44) / 2 + WIDTH * 25 + 22));
 	check_error();
 	glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr);
 	check_error();
