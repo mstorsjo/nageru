@@ -45,13 +45,14 @@ extern "C" {
 #include "ref_counted_frame.h"
 #include "ref_counted_gl_sync.h"
 
+class HTTPD;
 class QSurface;
 
 #define SURFACE_NUM 16 /* 16 surfaces for source YUV */
 
 class H264Encoder {
 public:
-	H264Encoder(QSurface *surface, int width, int height, const char *output_filename);
+	H264Encoder(QSurface *surface, int width, int height, const char *output_filename, HTTPD *httpd);
 	~H264Encoder();
 	//void add_frame(FrameAllocator::Frame frame, GLsync fence);
 
@@ -111,6 +112,7 @@ private:
 	AVFormatContext *avctx;
 	AVStream *avstream_video;
 	AVStream *avstream_audio;
+	HTTPD *httpd;
 };
 
 #endif

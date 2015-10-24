@@ -26,6 +26,7 @@
 #include <thread>
 
 #include "context.h"
+#include "httpd.h"
 #include "timebase.h"
 
 class QOpenGLContext;
@@ -1666,6 +1667,7 @@ int H264Encoder::save_codeddata(storage_task task)
             pkt.flags = 0;
         }
         //pkt.duration = 1;
+        httpd->add_packet(pkt);
         av_interleaved_write_frame(avctx, &pkt);
     }
     // Encode and add all audio frames up to and including the pts of this video frame.
@@ -1704,6 +1706,7 @@ int H264Encoder::save_codeddata(storage_task task)
             pkt.pts = av_rescale_q(audio_pts + global_delay, AVRational{1, TIMEBASE}, avstream_audio->time_base);
             pkt.dts = pkt.pts;
             pkt.stream_index = 1;
+            httpd->add_packet(pkt);
             av_interleaved_write_frame(avctx, &pkt);
         }
         // TODO: Delayed frames.
@@ -1820,11 +1823,10 @@ static int print_input()
 
 
 //H264Encoder::H264Encoder(SDL_Window *window, SDL_GLContext context, int width, int height, const char *output_filename) 
-H264Encoder::H264Encoder(QSurface *surface, int width, int height, const char *output_filename)
-	: current_storage_frame(0), surface(surface)
+H264Encoder::H264Encoder(QSurface *surface, int width, int height, const char *output_filename, HTTPD *httpd)
+	: current_storage_frame(0), surface(surface), httpd(httpd)
 	//: width(width), height(height), current_encoding_frame(0)
 {
-	av_register_all();
 	avctx = avformat_alloc_context();
 	avctx->oformat = av_guess_format(NULL, output_filename, NULL);
 	strcpy(avctx->filename, output_filename);

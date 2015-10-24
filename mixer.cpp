@@ -74,6 +74,8 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	: mixer_surface(create_surface(format)),
 	  h264_encoder_surface(create_surface(format))
 {
+	httpd.start(9095);
+
 	CHECK(init_movit(MOVIT_SHADER_DIR, MOVIT_DEBUG_OFF));
 	check_error();
 
@@ -97,7 +99,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	display_chain->set_dither_bits(0);  // Don't bother.
 	display_chain->finalize();
 
-	h264_encoder.reset(new H264Encoder(h264_encoder_surface, WIDTH, HEIGHT, "test.mp4"));
+	h264_encoder.reset(new H264Encoder(h264_encoder_surface, WIDTH, HEIGHT, "test.ts", &httpd));
 
 	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
 		printf("Configuring card %d...\n", card_index);

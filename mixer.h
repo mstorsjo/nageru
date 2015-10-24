@@ -17,6 +17,7 @@
 #include "theme.h"
 #include "resampler.h"
 #include "timebase.h"
+#include "httpd.h"
 
 #define NUM_CARDS 2
 
@@ -93,6 +94,8 @@ private:
 	void subsample_chroma(GLuint src_tex, GLuint dst_dst);
 	void release_display_frame(DisplayFrame *frame);
 	double pts() { return double(pts_int) / TIMEBASE; }
+
+	HTTPD httpd;
 
 	QSurface *mixer_surface, *h264_encoder_surface;
 	std::unique_ptr<movit::ResourcePool> resource_pool;
