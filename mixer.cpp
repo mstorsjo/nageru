@@ -104,7 +104,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
 		printf("Configuring card %d...\n", card_index);
 		CaptureCard *card = &cards[card_index];
-		card->usb = new BMUSBCapture(0x1edb, card_index == 0 ? 0xbd3b : 0xbd4f);
+		card->usb = new BMUSBCapture(card_index);
 		card->usb->set_frame_callback(bind(&Mixer::bm_frame, this, card_index, _1, _2, _3, _4, _5, _6, _7));
 		card->frame_allocator.reset(new PBOFrameAllocator(WIDTH * (HEIGHT+EXTRAHEIGHT) * 2 + 44, WIDTH, HEIGHT));
 		card->usb->set_video_frame_allocator(card->frame_allocator.get());
