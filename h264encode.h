@@ -52,7 +52,7 @@ class QSurface;
 
 class H264Encoder {
 public:
-	H264Encoder(QSurface *surface, int width, int height, const char *output_filename, HTTPD *httpd);
+	H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd);
 	~H264Encoder();
 	//void add_frame(FrameAllocator::Frame frame, GLsync fence);
 
@@ -109,9 +109,7 @@ private:
 	std::map<int64_t, std::vector<float>> pending_audio_frames;  // under frame_queue_mutex
 	QSurface *surface;
 
-	AVFormatContext *avctx;
-	AVStream *avstream_video;
-	AVStream *avstream_audio;
+	AVCodecContext *context_audio;
 	HTTPD *httpd;
 };
 

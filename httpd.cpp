@@ -11,7 +11,19 @@ extern "C" {
 
 using namespace std;
 
-HTTPD::HTTPD() {}
+HTTPD::HTTPD(const char *output_filename, int width, int height)
+	: width(width), height(height)
+{
+	AVFormatContext *avctx = avformat_alloc_context();
+	avctx->oformat = av_guess_format(NULL, output_filename, NULL);
+	strcpy(avctx->filename, output_filename);
+	if (avio_open2(&avctx->pb, output_filename, AVIO_FLAG_WRITE, &avctx->interrupt_callback, NULL) < 0) {
+		fprintf(stderr, "%s: avio_open2() failed\n", output_filename);
+		exit(1);
+	}
+
+	file_mux.reset(new Mux(avctx, width, height));
+}
 
 void HTTPD::start(int port)
 {
@@ -21,11 +33,12 @@ void HTTPD::start(int port)
 			 &answer_to_connection_thunk, this, MHD_OPTION_END);
 }
 
-void HTTPD::add_packet(const AVPacket &pkt)
+void HTTPD::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 {
 	for (Stream *stream : streams) {
-		stream->add_packet(pkt);
+		stream->add_packet(pkt, pts, dts);
 	}
+	file_mux->add_packet(pkt, pts, dts);
 }
 
 int HTTPD::answer_to_connection_thunk(void *cls, MHD_Connection *connection,
@@ -45,7 +58,7 @@ int HTTPD::answer_to_connection(MHD_Connection *connection,
 	printf("url %s\n", url);
 	AVOutputFormat *oformat = av_guess_format("mpegts", nullptr, nullptr);
 	assert(oformat != nullptr);
-	HTTPD::Stream *stream = new HTTPD::Stream(oformat);
+	HTTPD::Stream *stream = new HTTPD::Stream(oformat, width, height);
 	streams.push_back(stream);
 	MHD_Response *response = MHD_create_response_from_callback(
 		(size_t)-1, 1048576, &HTTPD::Stream::reader_callback_thunk, stream, &HTTPD::free_stream);
@@ -61,15 +74,9 @@ void HTTPD::free_stream(void *cls)
 	delete stream;
 }
 
-HTTPD::Stream::Stream(AVOutputFormat *oformat)
+HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height)
+	: avctx(avctx)
 {
-	avctx = avformat_alloc_context();
-	avctx->oformat = oformat;
-	uint8_t *buf = (uint8_t *)av_malloc(1048576);
-	avctx->pb = avio_alloc_context(buf, 1048576, 1, this, nullptr, &HTTPD::Stream::write_packet_thunk, nullptr);
-	avctx->flags = AVFMT_FLAG_CUSTOM_IO;
-
-	// TODO: Unify with the code in h264encoder.cpp.
 	AVCodec *codec_video = avcodec_find_encoder(AV_CODEC_ID_H264);
 	avstream_video = avformat_new_stream(avctx, codec_video);
 	if (avstream_video == nullptr) {
@@ -77,8 +84,8 @@ HTTPD::Stream::Stream(AVOutputFormat *oformat)
 		exit(1);
 	}
 	avstream_video->time_base = AVRational{1, TIMEBASE};
-	avstream_video->codec->width = 1280;  // FIXME
-	avstream_video->codec->height = 720;  // FIXME
+	avstream_video->codec->width = width;
+	avstream_video->codec->height = height;
 	avstream_video->codec->time_base = AVRational{1, TIMEBASE};
 	avstream_video->codec->ticks_per_frame = 1;  // or 2?
 
@@ -102,9 +109,41 @@ HTTPD::Stream::Stream(AVOutputFormat *oformat)
 	}
 }
 
-HTTPD::Stream::~Stream()
+HTTPD::Mux::~Mux()
 {
+	av_write_trailer(avctx);
 	avformat_free_context(avctx);
+}
+
+void HTTPD::Mux::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
+{
+	AVPacket pkt_copy;
+	av_copy_packet(&pkt_copy, &pkt);
+	if (pkt.stream_index == 0) {
+		pkt_copy.pts = av_rescale_q(pts, AVRational{1, TIMEBASE}, avstream_video->time_base);
+		pkt_copy.dts = av_rescale_q(dts, AVRational{1, TIMEBASE}, avstream_video->time_base);
+	} else if (pkt.stream_index == 1) {
+		pkt_copy.pts = av_rescale_q(pts, AVRational{1, TIMEBASE}, avstream_audio->time_base);
+		pkt_copy.dts = av_rescale_q(dts, AVRational{1, TIMEBASE}, avstream_audio->time_base);
+	} else {
+		assert(false);
+	}
+
+	if (av_interleaved_write_frame(avctx, &pkt_copy) < 0) {
+		fprintf(stderr, "av_interleaved_write_frame() failed\n");
+		exit(1);
+	}
+}
+
+HTTPD::Stream::Stream(AVOutputFormat *oformat, int width, int height)
+{
+	AVFormatContext *avctx = avformat_alloc_context();
+	avctx->oformat = oformat;
+	uint8_t *buf = (uint8_t *)av_malloc(1048576);
+	avctx->pb = avio_alloc_context(buf, 1048576, 1, this, nullptr, &HTTPD::Stream::write_packet_thunk, nullptr);
+	avctx->flags = AVFMT_FLAG_CUSTOM_IO;
+
+	mux.reset(new Mux(avctx, width, height));
 }
 
 ssize_t HTTPD::Stream::reader_callback_thunk(void *cls, uint64_t pos, char *buf, size_t max)
@@ -142,24 +181,9 @@ ssize_t HTTPD::Stream::reader_callback(uint64_t pos, char *buf, size_t max)
 	return ret;
 }
 
-void HTTPD::Stream::add_packet(const AVPacket &pkt)
+void HTTPD::Stream::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 {
-	AVPacket pkt_copy;
-	av_copy_packet(&pkt_copy, &pkt);
-	if (pkt.stream_index == 0) {
-		pkt_copy.pts = av_rescale_q(pkt.pts, AVRational{1, TIMEBASE}, avstream_video->time_base);
-		pkt_copy.dts = av_rescale_q(pkt.dts, AVRational{1, TIMEBASE}, avstream_video->time_base);
-	} else if (pkt.stream_index == 1) {
-		pkt_copy.pts = av_rescale_q(pkt.pts, AVRational{1, TIMEBASE}, avstream_audio->time_base);
-		pkt_copy.dts = av_rescale_q(pkt.dts, AVRational{1, TIMEBASE}, avstream_audio->time_base);
-	} else {
-		assert(false);
-	}
-
-	if (av_interleaved_write_frame(avctx, &pkt_copy) < 0) {
-		fprintf(stderr, "av_interleaved_write_frame() failed\n");
-		exit(1);
-	}
+	mux->add_packet(pkt, pts, dts);
 }
 
 int HTTPD::Stream::write_packet_thunk(void *opaque, uint8_t *buf, int buf_size)

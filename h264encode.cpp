@@ -1656,8 +1656,6 @@ int H264Encoder::save_codeddata(storage_task task)
         AVPacket pkt;
         memset(&pkt, 0, sizeof(pkt));
         pkt.buf = nullptr;
-        pkt.pts = av_rescale_q(task.pts + global_delay, AVRational{1, TIMEBASE}, avstream_video->time_base);
-        pkt.dts = av_rescale_q(task.dts + global_delay, AVRational{1, TIMEBASE}, avstream_video->time_base);
         pkt.data = reinterpret_cast<uint8_t *>(&data[0]);
         pkt.size = data.size();
         pkt.stream_index = 0;
@@ -1667,8 +1665,7 @@ int H264Encoder::save_codeddata(storage_task task)
             pkt.flags = 0;
         }
         //pkt.duration = 1;
-        httpd->add_packet(pkt);
-        av_interleaved_write_frame(avctx, &pkt);
+        httpd->add_packet(pkt, task.pts + global_delay, task.dts + global_delay);
     }
     // Encode and add all audio frames up to and including the pts of this video frame.
     // (They can never be queued to us after the video frame they belong to, only before.)
@@ -1684,6 +1681,7 @@ int H264Encoder::save_codeddata(storage_task task)
              audio = move(it->second);
              pending_audio_frames.erase(it); 
         }
+
         AVFrame *frame = avcodec_alloc_frame();
         frame->nb_samples = audio.size() / 2;
         frame->format = AV_SAMPLE_FMT_FLT;
@@ -1701,13 +1699,10 @@ int H264Encoder::save_codeddata(storage_task task)
         pkt.data = nullptr;
         pkt.size = 0;
         int got_output;
-        avcodec_encode_audio2(avstream_audio->codec, &pkt, frame, &got_output);
+        avcodec_encode_audio2(context_audio, &pkt, frame, &got_output);
         if (got_output) {
-            pkt.pts = av_rescale_q(audio_pts + global_delay, AVRational{1, TIMEBASE}, avstream_audio->time_base);
-            pkt.dts = pkt.pts;
             pkt.stream_index = 1;
-            httpd->add_packet(pkt);
-            av_interleaved_write_frame(avctx, &pkt);
+            httpd->add_packet(pkt, audio_pts + global_delay, audio_pts + global_delay);
         }
         // TODO: Delayed frames.
         avcodec_free_frame(&frame);
@@ -1821,53 +1816,19 @@ static int print_input()
     return 0;
 }
 
-
-//H264Encoder::H264Encoder(SDL_Window *window, SDL_GLContext context, int width, int height, const char *output_filename) 
-H264Encoder::H264Encoder(QSurface *surface, int width, int height, const char *output_filename, HTTPD *httpd)
+H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
 	: current_storage_frame(0), surface(surface), httpd(httpd)
-	//: width(width), height(height), current_encoding_frame(0)
 {
-	avctx = avformat_alloc_context();
-	avctx->oformat = av_guess_format(NULL, output_filename, NULL);
-	strcpy(avctx->filename, output_filename);
-	if (avio_open2(&avctx->pb, output_filename, AVIO_FLAG_WRITE, &avctx->interrupt_callback, NULL) < 0) {
-		fprintf(stderr, "%s: avio_open2() failed\n", output_filename);
-		exit(1);
-	}
-	AVCodec *codec_video = avcodec_find_encoder(AV_CODEC_ID_H264);
-	avstream_video = avformat_new_stream(avctx, codec_video);
-	if (avstream_video == nullptr) {
-		fprintf(stderr, "%s: avformat_new_stream() failed\n", output_filename);
-		exit(1);
-	}
-	avstream_video->time_base = AVRational{1, TIMEBASE};
-	avstream_video->codec->width = width;
-	avstream_video->codec->height = height;
-	avstream_video->codec->time_base = AVRational{1, TIMEBASE};
-	avstream_video->codec->ticks_per_frame = 1;  // or 2?
-
 	AVCodec *codec_audio = avcodec_find_encoder(AV_CODEC_ID_MP3);
-	avstream_audio = avformat_new_stream(avctx, codec_audio);
-	if (avstream_audio == nullptr) {
-		fprintf(stderr, "%s: avformat_new_stream() failed\n", output_filename);
-		exit(1);
-	}
-	avstream_audio->time_base = AVRational{1, TIMEBASE};
-	avstream_audio->codec->bit_rate = 256000;
-	avstream_audio->codec->sample_rate = 48000;
-	avstream_audio->codec->sample_fmt = AV_SAMPLE_FMT_FLTP;
-	avstream_audio->codec->channels = 2;
-	avstream_audio->codec->channel_layout = AV_CH_LAYOUT_STEREO;
-	avstream_audio->codec->time_base = AVRational{1, TIMEBASE};
-
-	/* open it */
-	if (avcodec_open2(avstream_audio->codec, codec_audio, NULL) < 0) {
+	context_audio = avcodec_alloc_context3(codec_audio);
+	context_audio->bit_rate = 256000;
+	context_audio->sample_rate = 48000;
+	context_audio->sample_fmt = AV_SAMPLE_FMT_FLTP;
+	context_audio->channels = 2;
+	context_audio->channel_layout = AV_CH_LAYOUT_STEREO;
+	context_audio->time_base = AVRational{1, TIMEBASE};
+	if (avcodec_open2(context_audio, codec_audio, NULL) < 0) {
 		fprintf(stderr, "Could not open codec\n");
-		exit(1);
-	}
-
-	if (avformat_write_header(avctx, NULL) < 0) {
-		fprintf(stderr, "%s: avformat_write_header() failed\n", output_filename);
 		exit(1);
 	}
 
@@ -1922,9 +1883,6 @@ H264Encoder::~H264Encoder()
 
 	release_encode();
 	deinit_va();
-
-	av_write_trailer(avctx);
-	avformat_free_context(avctx);
 }
 
 bool H264Encoder::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)

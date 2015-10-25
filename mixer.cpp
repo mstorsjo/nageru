@@ -71,7 +71,8 @@ void convert_fixed24_to_fp32(float *dst, size_t out_channels, const uint8_t *src
 }  // namespace
 
 Mixer::Mixer(const QSurfaceFormat &format)
-	: mixer_surface(create_surface(format)),
+	: httpd("test.ts", WIDTH, HEIGHT),
+	  mixer_surface(create_surface(format)),
 	  h264_encoder_surface(create_surface(format))
 {
 	httpd.start(9095);
@@ -99,7 +100,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	display_chain->set_dither_bits(0);  // Don't bother.
 	display_chain->finalize();
 
-	h264_encoder.reset(new H264Encoder(h264_encoder_surface, WIDTH, HEIGHT, "test.ts", &httpd));
+	h264_encoder.reset(new H264Encoder(h264_encoder_surface, WIDTH, HEIGHT, &httpd));
 
 	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
 		printf("Configuring card %d...\n", card_index);
