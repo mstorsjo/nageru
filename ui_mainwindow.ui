@@ -59,6 +59,12 @@
          <layout class="QVBoxLayout" name="verticalLayout_2">
           <item>
            <widget class="QPushButton" name="transition_btn1">
+            <property name="minimumSize">
+             <size>
+              <width>115</width>
+              <height>0</height>
+             </size>
+            </property>
             <property name="text">
              <string>Cut</string>
             </property>
@@ -66,6 +72,12 @@
           </item>
           <item>
            <widget class="QPushButton" name="transition_btn2">
+            <property name="minimumSize">
+             <size>
+              <width>115</width>
+              <height>0</height>
+             </size>
+            </property>
             <property name="text">
              <string>Fade</string>
             </property>
@@ -73,6 +85,12 @@
           </item>
           <item>
            <widget class="QPushButton" name="transition_btn3">
+            <property name="minimumSize">
+             <size>
+              <width>115</width>
+              <height>0</height>
+             </size>
+            </property>
             <property name="text">
              <string>Wipe</string>
             </property>
