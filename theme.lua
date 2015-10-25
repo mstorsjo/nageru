@@ -6,7 +6,6 @@
 -- Themes are written in Lua, which reflects a simplified form of the Movit API
 -- where all the low-level details (such as texture formats) are handled by the
 -- C++ side and you generally just build chains.
-io.write("hello from lua\n")
 
 local transition_start = -2.0
 local transition_end = -1.0
