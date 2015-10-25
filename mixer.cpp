@@ -117,7 +117,6 @@ Mixer::Mixer(const QSurfaceFormat &format)
 					printf("failed to create bmusb context\n");
 					exit(1);
 				}
-				printf("inited!\n");
 			},
 			[this]{
 				resource_pool->clean_context();
