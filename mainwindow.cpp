@@ -5,6 +5,7 @@
 #include <string>
 #include <QSignalMapper>
 #include <QMetaType>
+#include <QShortcut>
 
 #include "context.h"
 #include "mixer.h"
@@ -37,6 +38,23 @@ MainWindow::MainWindow()
 		connect(ui->preview1, SIGNAL(clicked()), mapper, SLOT(map()));
 		connect(ui->preview2, SIGNAL(clicked()), mapper, SLOT(map()));
 		connect(ui->preview3, SIGNAL(clicked()), mapper, SLOT(map()));
+
+		connect(mapper, SIGNAL(mapped(int)), this, SLOT(channel_clicked(int)));
+	}
+
+	// Hook up the preview keyboard keys.
+	{
+		QSignalMapper *mapper = new QSignalMapper(this);
+		QShortcut *shortcut1 = new QShortcut(QKeySequence(Qt::Key_1), this);
+		connect(shortcut1, SIGNAL(activated()), mapper, SLOT(map()));
+		QShortcut *shortcut2 = new QShortcut(QKeySequence(Qt::Key_2), this);
+		connect(shortcut2, SIGNAL(activated()), mapper, SLOT(map()));
+		QShortcut *shortcut3 = new QShortcut(QKeySequence(Qt::Key_3), this);
+		connect(shortcut3, SIGNAL(activated()), mapper, SLOT(map()));
+		mapper->setMapping(shortcut1, 0),
+		mapper->setMapping(shortcut2, 1);
+		mapper->setMapping(shortcut3, 2);
+
 		connect(mapper, SIGNAL(mapped(int)), this, SLOT(channel_clicked(int)));
 	}
 
