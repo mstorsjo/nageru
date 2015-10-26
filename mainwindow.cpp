@@ -6,6 +6,7 @@
 #include <QSignalMapper>
 #include <QMetaType>
 #include <QShortcut>
+#include <QResizeEvent>
 
 #include "context.h"
 #include "mixer.h"
@@ -84,11 +85,14 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 {
 	QMainWindow::resizeEvent(event);
 
+	int width = event->size().width();
+	int height = event->size().height();
+
 	// Allocate the height; the most important part is to keep the main displays
 	// at 16:9 if at all possible.
-	double me_width = (width() - ui->transition_btn2->width()) / 2.0;
-	double me_height = me_width * 9.0 / 16.0 + ui->label_preview->height();
-	double me_proportion = me_height / height();
+	double me_width = (width - ui->transition_btn2->width()) / 2.0;
+	double me_height = me_width * 9.0 / 16.0 + ui->label_preview->height();  // FIXME: label_preview changes height.
+	double me_proportion = me_height / height;
 
 	// TODO: Scale the widths when we need to do this.
 	if (me_proportion > 0.8) {
@@ -96,17 +100,17 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 	}
 
 	// The previews will be constrained by the remaining height, and the width.
-	// FIXME: spacing=
-	double preview_height = std::min(height() - me_height, (width() / 4.0) * 9.0 / 16.0);
-	double preview_proportion = preview_height / height();
+	// FIXME: spacing?
+	double preview_height = std::min(height - me_height, (width / 4.0) * 9.0 / 16.0);
+	double preview_proportion = preview_height / height;
 
 	ui->vertical_layout->setStretch(0, lrintf(1000 * me_proportion));
-	ui->vertical_layout->setStretch(1, lrintf(1000 * (1.0 - me_proportion - preview_proportion)));
+	ui->vertical_layout->setStretch(1, std::max<int>(1, lrintf(1000 * (1.0 - me_proportion - preview_proportion))));
 	ui->vertical_layout->setStretch(2, lrintf(1000 * preview_proportion));
 
 	// Set the widths for the previews.
 	double preview_width = preview_height * 16.0 / 9.0;
-	double preview_width_proportion = preview_width / width();  // FIXME: spacing?
+	double preview_width_proportion = preview_width / width;  // FIXME: spacing?
 
 	ui->preview_displays->setStretch(0, lrintf(1000 * preview_width_proportion));
 	ui->preview_displays->setStretch(1, lrintf(1000 * preview_width_proportion));
