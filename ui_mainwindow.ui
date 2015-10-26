@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>948</width>
-    <height>597</height>
+    <width>902</width>
+    <height>590</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -25,7 +25,7 @@
    </property>
    <layout class="QGridLayout" name="gridLayout">
     <item row="0" column="0">
-     <layout class="QVBoxLayout" name="verticalLayout" stretch="2,0,1">
+     <layout class="QVBoxLayout" name="vertical_layout" stretch="0,0,0">
       <item>
        <layout class="QHBoxLayout" name="me_displays" stretch="0,0,0">
         <item>
@@ -34,7 +34,7 @@
            <number>0</number>
           </property>
           <item>
-           <widget class="GLWidget" name="me_preview">
+           <widget class="GLWidget" name="me_preview" native="true">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
               <horstretch>1</horstretch>
@@ -44,7 +44,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QLabel" name="label">
+           <widget class="QLabel" name="label_preview">
             <property name="text">
              <string>Preview</string>
             </property>
@@ -104,7 +104,7 @@
            <number>0</number>
           </property>
           <item>
-           <widget class="GLWidget" name="me_live">
+           <widget class="GLWidget" name="me_live" native="true">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
               <horstretch>1</horstretch>
@@ -126,7 +126,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QLabel" name="label_2">
+           <widget class="QLabel" name="label_live">
             <property name="text">
              <string>Live</string>
             </property>
@@ -146,19 +146,19 @@
         </property>
         <property name="sizeHint" stdset="0">
          <size>
-          <width>0</width>
-          <height>0</height>
+          <width>20</width>
+          <height>40</height>
          </size>
         </property>
        </spacer>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_5">
+       <layout class="QHBoxLayout" name="preview_displays">
         <property name="topMargin">
          <number>0</number>
         </property>
         <item>
-         <widget class="GLWidget" name="preview1">
+         <widget class="GLWidget" name="preview1" native="true">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
             <horstretch>1</horstretch>
@@ -168,7 +168,7 @@
          </widget>
         </item>
         <item>
-         <widget class="GLWidget" name="preview2">
+         <widget class="GLWidget" name="preview2" native="true">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
             <horstretch>1</horstretch>
@@ -178,7 +178,7 @@
          </widget>
         </item>
         <item>
-         <widget class="GLWidget" name="preview3">
+         <widget class="GLWidget" name="preview3" native="true">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
             <horstretch>1</horstretch>
@@ -188,7 +188,7 @@
          </widget>
         </item>
         <item>
-         <widget class="QGLWidget" name="preview4">
+         <widget class="QGLWidget" name="preview4" native="true">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
             <horstretch>1</horstretch>
@@ -221,7 +221,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>948</width>
+     <width>902</width>
      <height>19</height>
     </rect>
    </property>
@@ -243,8 +243,13 @@
  <customwidgets>
   <customwidget>
    <class>GLWidget</class>
-   <extends>QGLWidget</extends>
+   <extends>QWidget</extends>
    <header>glwidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>QGLWidget</class>
+   <extends>QWidget</extends>
+   <header>qglwidget.h</header>
   </customwidget>
  </customwidgets>
  <resources/>
