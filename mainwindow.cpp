@@ -85,38 +85,42 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 {
 	QMainWindow::resizeEvent(event);
 
-	int width = event->size().width();
-	int height = event->size().height();
+	// Ask for a relayout, but only after the event loop is done doing relayout
+	// on everything else.
+	QMetaObject::invokeMethod(this, "relayout", Qt::QueuedConnection);
+}
+
+void MainWindow::relayout()
+{
+	int width = size().width();
+	int height = size().height();
 
 	// Allocate the height; the most important part is to keep the main displays
 	// at 16:9 if at all possible.
-	double me_width = (width - ui->transition_btn2->width()) / 2.0;
-	double me_height = me_width * 9.0 / 16.0 + ui->label_preview->height();  // FIXME: label_preview changes height.
-	double me_proportion = me_height / height;
+	double me_width = ui->me_preview->width();
+	double me_height = me_width * 9.0 / 16.0 + ui->label_preview->height();
 
 	// TODO: Scale the widths when we need to do this.
-	if (me_proportion > 0.8) {
-		me_proportion = 0.8;
+	if (me_height / double(height) > 0.8) {
+		me_height = height * 0.8;
 	}
 
 	// The previews will be constrained by the remaining height, and the width.
 	// FIXME: spacing?
 	double preview_height = std::min(height - me_height, (width / 4.0) * 9.0 / 16.0);
-	double preview_proportion = preview_height / height;
 
-	ui->vertical_layout->setStretch(0, lrintf(1000 * me_proportion));
-	ui->vertical_layout->setStretch(1, std::max<int>(1, lrintf(1000 * (1.0 - me_proportion - preview_proportion))));
-	ui->vertical_layout->setStretch(2, lrintf(1000 * preview_proportion));
+	ui->vertical_layout->setStretch(0, lrintf(me_height));
+	ui->vertical_layout->setStretch(1, std::max<int>(1, lrintf(height - me_height - preview_height)));
+	ui->vertical_layout->setStretch(2, lrintf(preview_height));
 
 	// Set the widths for the previews.
-	double preview_width = preview_height * 16.0 / 9.0;
-	double preview_width_proportion = preview_width / width;  // FIXME: spacing?
+	double preview_width = preview_height * 16.0 / 9.0;  // FIXME: spacing?
 
-	ui->preview_displays->setStretch(0, lrintf(1000 * preview_width_proportion));
-	ui->preview_displays->setStretch(1, lrintf(1000 * preview_width_proportion));
-	ui->preview_displays->setStretch(2, lrintf(1000 * preview_width_proportion));
-	ui->preview_displays->setStretch(3, lrintf(1000 * preview_width_proportion));
-	ui->preview_displays->setStretch(4, lrintf(1000 * (1.0 - 4.0 * preview_width_proportion)));
+	ui->preview_displays->setStretch(0, lrintf(preview_width));
+	ui->preview_displays->setStretch(1, lrintf(preview_width));
+	ui->preview_displays->setStretch(2, lrintf(preview_width));
+	ui->preview_displays->setStretch(3, lrintf(preview_width));
+	ui->preview_displays->setStretch(4, lrintf(width - 4.0 * preview_width));
 }
 
 void MainWindow::set_transition_names(vector<string> transition_names)

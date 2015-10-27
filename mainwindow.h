@@ -23,6 +23,7 @@ public slots:
 	void transition_clicked(int transition_number);
 	void channel_clicked(int channel_number);
 	void set_transition_names(std::vector<std::string> transition_names);
+	void relayout();
 
 private:
 	Ui::MainWindow *ui;
