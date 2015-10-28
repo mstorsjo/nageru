@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>902</width>
-    <height>590</height>
+    <width>1089</width>
+    <height>664</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -27,7 +27,7 @@
     <item row="0" column="0">
      <layout class="QVBoxLayout" name="vertical_layout" stretch="0,0,0">
       <item>
-       <layout class="QHBoxLayout" name="me_displays" stretch="0,0,0">
+       <layout class="QHBoxLayout" name="me_displays" stretch="0,0,0,0">
         <item>
          <layout class="QVBoxLayout" name="verticalLayout_3">
           <property name="leftMargin">
@@ -137,6 +137,16 @@
           </item>
          </layout>
         </item>
+        <item>
+         <widget class="VUMeter" name="vu_meter" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>30</width>
+            <height>0</height>
+           </size>
+          </property>
+         </widget>
+        </item>
        </layout>
       </item>
       <item>
@@ -221,7 +231,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>902</width>
+     <width>1089</width>
      <height>19</height>
     </rect>
    </property>
@@ -250,6 +260,12 @@
    <class>QGLWidget</class>
    <extends>QWidget</extends>
    <header>qglwidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>VUMeter</class>
+   <extends>QWidget</extends>
+   <header>vumeter.h</header>
+   <container>1</container>
   </customwidget>
  </customwidgets>
  <resources/>

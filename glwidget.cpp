@@ -3,6 +3,7 @@
 #include <qtextstream.h>  // Needs to come before egl.h.
 #include <qcursor.h>  // Needs to come before egl.h.
 #include <qcoreevent.h>  // Needs to come before egl.h.
+#include <qevent.h>  // Needs to come before egl.h.
 #include <epoxy/gl.h>
 #include <epoxy/egl.h>
 #include <QSurfaceFormat>
@@ -17,6 +18,7 @@
 #include "context.h"
 #include "mixer.h"
 #include "ref_counted_gl_sync.h"
+#include "vumeter.h"
 
 class MainWindow;
 class QSurface;
@@ -46,6 +48,9 @@ void GLWidget::initializeGL()
 	static std::once_flag flag;
 	std::call_once(flag, [this]{
 		global_mixer = new Mixer(QGLFormat::toSurfaceFormat(format()));
+		global_mixer->set_audio_level_callback([this](float level){
+			global_vu_meter->set_level(level);
+		});
 		global_mixer->start();
 	});
 	global_mixer->set_frame_ready_callback(output, [this]{

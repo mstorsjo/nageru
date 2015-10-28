@@ -7,6 +7,7 @@
 #undef Success
 #include <movit/effect_chain.h>
 #include <movit/flat_input.h>
+#include <ebur128.h>
 #include <functional>
 
 #include "bmusb/bmusb.h"
@@ -78,6 +79,12 @@ public:
 	void set_frame_ready_callback(Output output, new_frame_ready_callback_t callback)
 	{
 		output_channel[output].set_frame_ready_callback(callback);
+	}
+
+	typedef std::function<void(float)> audio_level_callback_t;
+	void set_audio_level_callback(audio_level_callback_t callback)
+	{
+		audio_level_callback = callback;
 	}
 
 	std::vector<std::string> get_transition_names()
@@ -155,6 +162,9 @@ private:
 
 	std::thread mixer_thread;
 	bool should_quit = false;
+
+	audio_level_callback_t audio_level_callback = nullptr;
+	ebur128_state *r128_state = nullptr;
 };
 
 extern Mixer *global_mixer;

@@ -146,6 +146,8 @@ Mixer::Mixer(const QSurfaceFormat &format)
 		"    gl_FragColor = texture2D(cbcr_tex, tc0); \n"
 		"} \n";
 	cbcr_program_num = resource_pool->compile_glsl_program(cbcr_vert_shader, cbcr_frag_shader);
+
+	r128_state = ebur128_init(2, 48000, EBUR128_MODE_SAMPLE_PEAK | EBUR128_MODE_M | EBUR128_MODE_S | EBUR128_MODE_I | EBUR128_MODE_LRA);
 }
 
 Mixer::~Mixer()
@@ -161,6 +163,8 @@ Mixer::~Mixer()
 		}
 		cards[card_index].usb->stop_dequeue_thread();
 	}
+
+	ebur128_destroy(&r128_state);
 }
 
 namespace {
@@ -352,6 +356,7 @@ void Mixer::thread_func()
 					}
 				}
 				if (card_index == 0) {
+					ebur128_add_frames_float(r128_state, samples_out.data(), samples_out.size() / 2);
 					h264_encoder->add_audio(pts_int, move(samples_out));
 				}
 			}
@@ -361,6 +366,12 @@ void Mixer::thread_func()
 				pts_int += TIMEBASE / 60;
 			}
 		}
+
+		if (audio_level_callback != nullptr) {
+			double loudness_s;
+			ebur128_loudness_shortterm(r128_state, &loudness_s);
+			audio_level_callback(loudness_s);
+		}	
 
 		// If the first card is reporting a corrupted or otherwise dropped frame,
 		// just increase the pts (skipping over this frame) and don't try to compute anything new.

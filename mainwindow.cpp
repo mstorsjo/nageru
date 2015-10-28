@@ -79,6 +79,8 @@ MainWindow::MainWindow()
 	qRegisterMetaType<std::vector<std::string>>("std::vector<std::string>");
 	connect(ui->preview1, SIGNAL(transition_names_updated(std::vector<std::string>)),
 	        this, SLOT(set_transition_names(std::vector<std::string>)));
+
+	global_vu_meter = ui->vu_meter;  // global_mixer does not exist yet, so need to delay the hookup.
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event)
