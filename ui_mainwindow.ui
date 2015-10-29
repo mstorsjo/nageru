@@ -141,7 +141,7 @@
          <widget class="VUMeter" name="vu_meter" native="true">
           <property name="minimumSize">
            <size>
-            <width>30</width>
+            <width>20</width>
             <height>0</height>
            </size>
           </property>
