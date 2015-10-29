@@ -13,9 +13,9 @@ class VUMeter : public QWidget
 public:
 	VUMeter(QWidget *parent);
 
-	void set_level(float level) {
+	void set_level(float level_lufs) {
 		std::unique_lock<std::mutex> lock(level_mutex);
-		this->level = level;
+		this->level_lufs = level_lufs;
 		update();
 	}
 
@@ -23,7 +23,7 @@ private:
 	void paintEvent(QPaintEvent *event) override;
 
 	std::mutex level_mutex;
-	float level = -HUGE_VAL;
+	float level_lufs = -HUGE_VAL;
 };
 
 extern VUMeter *global_vu_meter;
