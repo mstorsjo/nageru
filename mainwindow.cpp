@@ -1,5 +1,4 @@
 #include "mainwindow.h"
-#include "window.h"
 #include <thread>
 #include <vector>
 #include <string>

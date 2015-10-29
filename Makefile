@@ -4,8 +4,8 @@ CXXFLAGS := -O2 -march=native -g -std=gnu++11 -Wall -Wno-deprecated-declarations
 LDFLAGS=$(shell pkg-config --libs $(PKG_MODULES)) -lEGL -lGL -pthread -lva -lva-drm -lva-x11 -lX11 -lavformat -lavcodec -lavutil -lzita-resampler -lebur128
 
 # Qt objects
-OBJS=glwidget.o main.o mainwindow.o window.o vumeter.o
-OBJS += glwidget.moc.o mainwindow.moc.o window.moc.o vumeter.moc.o
+OBJS=glwidget.o main.o mainwindow.o vumeter.o
+OBJS += glwidget.moc.o mainwindow.moc.o vumeter.moc.o
 
 # Mixer objects
 OBJS += h264encode.o mixer.o bmusb/bmusb.o pbo_frame_allocator.o context.o ref_counted_frame.o theme.o resampler.o httpd.o
