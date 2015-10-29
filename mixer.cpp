@@ -368,10 +368,12 @@ void Mixer::thread_func()
 		}
 
 		if (audio_level_callback != nullptr) {
-			double loudness_s;
+			double loudness_s, peak_level_l, peak_level_r;
 			ebur128_loudness_shortterm(r128_state, &loudness_s);
-			audio_level_callback(loudness_s);
-		}	
+			ebur128_sample_peak(r128_state, 0, &peak_level_l);
+			ebur128_sample_peak(r128_state, 1, &peak_level_r);
+			audio_level_callback(loudness_s, 20.0 * log10(max(peak_level_l, peak_level_r)));
+		}
 
 		// If the first card is reporting a corrupted or otherwise dropped frame,
 		// just increase the pts (skipping over this frame) and don't try to compute anything new.
