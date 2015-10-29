@@ -100,6 +100,11 @@ void MainWindow::mixer_created(Mixer *mixer)
 		char buf[256];
 		snprintf(buf, sizeof(buf), "%.1f", peak_db);
 		ui->peak_display->setText(buf);
+		if (peak_db > -0.1f) {  // -0.1 dBFS is EBU peak limit.
+			ui->peak_display->setStyleSheet("QLabel { background-color: red; color: white; }");
+		} else {
+			ui->peak_display->setStyleSheet("");
+		}
 	});
 }
 
