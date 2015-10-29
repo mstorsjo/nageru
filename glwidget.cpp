@@ -48,8 +48,12 @@ void GLWidget::initializeGL()
 	static std::once_flag flag;
 	std::call_once(flag, [this]{
 		global_mixer = new Mixer(QGLFormat::toSurfaceFormat(format()));
-		global_mixer->set_audio_level_callback([this](float level){
-			global_vu_meter->set_level(level);
+		global_mixer->set_audio_level_callback([this](float level_lufs, float peak_db){
+			global_vu_meter->set_level(level_lufs);
+
+			char buf[256];
+			snprintf(buf, sizeof(buf), "%.1f", peak_db);
+			global_peak_display->setText(buf);
 		});
 		global_mixer->start();
 	});

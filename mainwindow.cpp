@@ -80,7 +80,9 @@ MainWindow::MainWindow()
 	connect(ui->preview1, SIGNAL(transition_names_updated(std::vector<std::string>)),
 	        this, SLOT(set_transition_names(std::vector<std::string>)));
 
-	global_vu_meter = ui->vu_meter;  // global_mixer does not exist yet, so need to delay the hookup.
+	// global_mixer does not exist yet, so need to delay the actual hookups.
+	global_vu_meter = ui->vu_meter;
+	global_peak_display = ui->peak_display;
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event)

@@ -2,6 +2,7 @@
 #define VUMETER_H
 
 #include <QWidget>
+#include <QLabel>
 #include <QPaintEvent>
 
 #include <mutex>
@@ -27,5 +28,6 @@ private:
 };
 
 extern VUMeter *global_vu_meter;
+extern QLabel *global_peak_display;
 
 #endif
