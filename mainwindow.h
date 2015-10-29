@@ -9,6 +9,7 @@ namespace Ui {
 class MainWindow;
 }  // namespace Ui
 
+class Mixer;
 class QPushButton;
 
 class MainWindow : public QMainWindow
@@ -17,7 +18,8 @@ class MainWindow : public QMainWindow
 
 public:
 	MainWindow();
-	void resizeEvent(QResizeEvent* event) override;
+	void resizeEvent(QResizeEvent *event) override;
+	void mixer_created(Mixer *mixer);
 
 public slots:
 	void transition_clicked(int transition_number);
@@ -29,5 +31,7 @@ private:
 	Ui::MainWindow *ui;
 	QPushButton *transition_btn1, *transition_btn2, *transition_btn3;
 };
+
+extern MainWindow *global_mainwindow;
 
 #endif

@@ -16,9 +16,12 @@ using namespace std;
 
 Q_DECLARE_METATYPE(std::vector<std::string>);
 
+MainWindow *global_mainwindow = nullptr;
+
 MainWindow::MainWindow()
 	: ui(new Ui::MainWindow)
 {
+	global_mainwindow = this;
 	ui->setupUi(this);
 
 	ui->me_live->set_output(Mixer::OUTPUT_LIVE);
@@ -78,10 +81,6 @@ MainWindow::MainWindow()
 	qRegisterMetaType<std::vector<std::string>>("std::vector<std::string>");
 	connect(ui->preview1, SIGNAL(transition_names_updated(std::vector<std::string>)),
 	        this, SLOT(set_transition_names(std::vector<std::string>)));
-
-	// global_mixer does not exist yet, so need to delay the actual hookups.
-	global_vu_meter = ui->vu_meter;
-	global_peak_display = ui->peak_display;
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event)
@@ -91,6 +90,17 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 	// Ask for a relayout, but only after the event loop is done doing relayout
 	// on everything else.
 	QMetaObject::invokeMethod(this, "relayout", Qt::QueuedConnection);
+}
+
+void MainWindow::mixer_created(Mixer *mixer)
+{
+	mixer->set_audio_level_callback([this](float level_lufs, float peak_db){
+		ui->vu_meter->set_level(level_lufs);
+
+		char buf[256];
+		snprintf(buf, sizeof(buf), "%.1f", peak_db);
+		ui->peak_display->setText(buf);
+	});
 }
 
 void MainWindow::relayout()

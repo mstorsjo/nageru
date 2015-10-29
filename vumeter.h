@@ -27,7 +27,4 @@ private:
 	float level_lufs = -HUGE_VAL;
 };
 
-extern VUMeter *global_vu_meter;
-extern QLabel *global_peak_display;
-
 #endif
