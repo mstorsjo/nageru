@@ -18,9 +18,6 @@ int lufs_to_pos(float level_lu, int height)
 
 }  // namespace
 
-VUMeter *global_vu_meter = nullptr;
-QLabel *global_peak_display = nullptr;
-
 VUMeter::VUMeter(QWidget *parent)
 	: QWidget(parent)
 {
