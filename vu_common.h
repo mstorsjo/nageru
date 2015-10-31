@@ -4,6 +4,6 @@
 #include <QPainter>
 
 int lufs_to_pos(float level_lu, int height);
-void draw_vu_meter(QPainter &painter, float level_lu, int width, int height, int margin);
+void draw_vu_meter(QPainter &painter, float range_low_lu, float range_high_lu, int width, int height, int margin);
 
 #endif // !defined(_VU_COMMON_H)
