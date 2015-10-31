@@ -1,28 +1,9 @@
 #include <QPainter>
 
 #include "vumeter.h"
+#include "vu_common.h"
 
 using namespace std;
-
-namespace {
-
-int lufs_to_pos(float level_lu, int height)
-{
-	const float min_level = 9.0f;    // y=0 is top of screen, so “min” is the loudest level.
-	const float max_level = -18.0f;
-
-	// Handle -inf.
-	if (level_lu < max_level) {
-		return height - 1;
-	}
-
-	int y = lrintf(height * (level_lu - min_level) / (max_level - min_level));
-	y = std::max(y, 0);
-	y = std::min(y, height - 1);
-	return y;
-}
-
-}  // namespace
 
 VUMeter::VUMeter(QWidget *parent)
 	: QWidget(parent)
