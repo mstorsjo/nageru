@@ -147,7 +147,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 		"} \n";
 	cbcr_program_num = resource_pool->compile_glsl_program(cbcr_vert_shader, cbcr_frag_shader);
 
-	r128_state = ebur128_init(2, 48000, EBUR128_MODE_SAMPLE_PEAK | EBUR128_MODE_M | EBUR128_MODE_S | EBUR128_MODE_I | EBUR128_MODE_LRA);
+	r128_state = ebur128_init(2, 48000, EBUR128_MODE_TRUE_PEAK | EBUR128_MODE_M | EBUR128_MODE_S | EBUR128_MODE_I | EBUR128_MODE_LRA);
 }
 
 Mixer::~Mixer()
@@ -373,8 +373,8 @@ void Mixer::thread_func()
 			ebur128_loudness_shortterm(r128_state, &loudness_s);
 			ebur128_loudness_global(r128_state, &loudness_i);
 			ebur128_loudness_range(r128_state, &lra);
-			ebur128_sample_peak(r128_state, 0, &peak_level_l);
-			ebur128_sample_peak(r128_state, 1, &peak_level_r);
+			ebur128_true_peak(r128_state, 0, &peak_level_l);
+			ebur128_true_peak(r128_state, 1, &peak_level_r);
 
 			// FIXME: This is wrong. We need proper support from libebur128 for this.
 			double loudness_range_low = loudness_i - 0.5 * lra;
