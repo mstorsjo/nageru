@@ -71,12 +71,17 @@ void GLWidget::paintGL()
 	Mixer::DisplayFrame frame;
 	if (!global_mixer->get_display_frame(output, &frame)) {
 		glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+		check_error();
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		check_error();
 		return;
 	}
 
+	check_error();
 	glWaitSync(frame.ready_fence.get(), /*flags=*/0, GL_TIMEOUT_IGNORED);
+	check_error();
 	frame.setup_chain();
+	check_error();
 	frame.chain->render_to_screen();
 	check_error();
 }

@@ -426,6 +426,7 @@ void Mixer::thread_func()
 		GLuint cbcr_full_tex = resource_pool->create_2d_texture(GL_RG8, WIDTH, HEIGHT);
 		GLuint rgba_tex = resource_pool->create_2d_texture(GL_RGB565, WIDTH, HEIGHT);  // Saves texture bandwidth, although dithering gets messed up.
 		GLuint fbo = resource_pool->create_fbo(y_tex, cbcr_full_tex, rgba_tex);
+		check_error();
 		chain->render_to_fbo(fbo, WIDTH, HEIGHT);
 		resource_pool->release_fbo(fbo);
 
