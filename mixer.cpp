@@ -147,7 +147,8 @@ Mixer::Mixer(const QSurfaceFormat &format)
 		"} \n";
 	cbcr_program_num = resource_pool->compile_glsl_program(cbcr_vert_shader, cbcr_frag_shader);
 
-	r128_state = ebur128_init(2, 48000, EBUR128_MODE_TRUE_PEAK | EBUR128_MODE_M | EBUR128_MODE_S | EBUR128_MODE_I | EBUR128_MODE_LRA);
+	r128.init(2, 48000);
+	r128.integr_start();
 }
 
 Mixer::~Mixer()
@@ -163,8 +164,6 @@ Mixer::~Mixer()
 		}
 		cards[card_index].usb->stop_dequeue_thread();
 	}
-
-	ebur128_destroy(&r128_state);
 }
 
 namespace {
@@ -176,6 +175,30 @@ int unwrap_timecode(uint16_t current_wrapped, int last)
 		return (last & ~0xffff) | current_wrapped;
 	} else {
 		return 0x10000 + ((last & ~0xffff) | current_wrapped);
+	}
+}
+
+float find_peak(const vector<float> &samples)
+{
+	float m = fabs(samples[0]);
+	for (size_t i = 1; i < samples.size(); ++i) {
+		m = std::max(m, fabs(samples[i]));
+	}
+	return m;
+}
+
+void deinterleave_samples(const vector<float> &in, vector<float> *out_l, vector<float> *out_r)
+{
+	size_t num_samples = in.size() / 2;
+	out_l->resize(num_samples);
+	out_r->resize(num_samples);
+
+	const float *inptr = in.data();
+	float *lptr = &(*out_l)[0];
+	float *rptr = &(*out_r)[0];
+	for (size_t i = 0; i < num_samples; ++i) {
+		*lptr++ = *inptr++;
+		*rptr++ = *inptr++;
 	}
 }
 
@@ -356,7 +379,11 @@ void Mixer::thread_func()
 					}
 				}
 				if (card_index == 0) {
-					ebur128_add_frames_float(r128_state, samples_out.data(), samples_out.size() / 2);
+					vector<float> left, right;
+					peak = std::max(peak, find_peak(samples_out));
+					deinterleave_samples(samples_out, &left, &right);
+					float *ptrs[] = { left.data(), right.data() };
+					r128.process(left.size(), ptrs);
 					h264_encoder->add_audio(pts_int, move(samples_out));
 				}
 			}
@@ -368,19 +395,12 @@ void Mixer::thread_func()
 		}
 
 		if (audio_level_callback != nullptr) {
-			double loudness_s, loudness_i, peak_level_l, peak_level_r;
-			double lra;
-			ebur128_loudness_shortterm(r128_state, &loudness_s);
-			ebur128_loudness_global(r128_state, &loudness_i);
-			ebur128_loudness_range(r128_state, &lra);
-			ebur128_true_peak(r128_state, 0, &peak_level_l);
-			ebur128_true_peak(r128_state, 1, &peak_level_r);
+			double loudness_s = r128.loudness_S();
+			double loudness_i = r128.integrated();
+			double loudness_range_low = r128.range_min();
+			double loudness_range_high = r128.range_max();
 
-			// FIXME: This is wrong. We need proper support from libebur128 for this.
-			double loudness_range_low = loudness_i - 0.5 * lra;
-			double loudness_range_high = loudness_i + 0.5 * lra;
-
-			audio_level_callback(loudness_s, 20.0 * log10(max(peak_level_l, peak_level_r)),
+			audio_level_callback(loudness_s, 20.0 * log10(peak),
 			                     loudness_i, loudness_range_low, loudness_range_high);
 		}
 

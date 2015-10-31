@@ -7,7 +7,6 @@
 #undef Success
 #include <movit/effect_chain.h>
 #include <movit/flat_input.h>
-#include <ebur128.h>
 #include <functional>
 
 #include "bmusb/bmusb.h"
@@ -19,6 +18,7 @@
 #include "resampler.h"
 #include "timebase.h"
 #include "httpd.h"
+#include "ebu_r128_proc.h"
 
 #define NUM_CARDS 2
 
@@ -164,7 +164,10 @@ private:
 	bool should_quit = false;
 
 	audio_level_callback_t audio_level_callback = nullptr;
-	ebur128_state *r128_state = nullptr;
+	Ebu_r128_proc r128;
+
+	// TODO: Implement oversampled peak detection.
+	float peak = 0.0f;
 };
 
 extern Mixer *global_mixer;
