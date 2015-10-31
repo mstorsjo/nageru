@@ -27,7 +27,7 @@
     <item row="0" column="0">
      <layout class="QVBoxLayout" name="vertical_layout" stretch="0,0,0">
       <item>
-       <layout class="QHBoxLayout" name="me_displays" stretch="0,0,0,0">
+       <layout class="QHBoxLayout" name="me_displays" stretch="0,0,0,0,0">
         <item>
          <layout class="QVBoxLayout" name="verticalLayout_3">
           <property name="leftMargin">
@@ -138,9 +138,12 @@
          </layout>
         </item>
         <item>
-         <layout class="QVBoxLayout" name="verticalLayout_4" stretch="1,0">
+         <layout class="QVBoxLayout" name="vu_meter_vertical_layout" stretch="1,0">
           <property name="leftMargin">
            <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>4</number>
           </property>
           <item>
            <layout class="QHBoxLayout" name="horizontalLayout">
@@ -264,6 +267,119 @@
           </item>
          </layout>
         </item>
+        <item>
+         <layout class="QVBoxLayout" name="lra_vertical_layout" stretch="1,0">
+          <property name="spacing">
+           <number>3</number>
+          </property>
+          <property name="leftMargin">
+           <number>0</number>
+          </property>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_2">
+            <item>
+             <widget class="LRAMeter" name="lra_meter" native="true">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>24</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="palette">
+               <palette>
+                <active>
+                 <colorrole role="Base">
+                  <brush brushstyle="SolidPattern">
+                   <color alpha="255">
+                    <red>255</red>
+                    <green>255</green>
+                    <blue>255</blue>
+                   </color>
+                  </brush>
+                 </colorrole>
+                 <colorrole role="Window">
+                  <brush brushstyle="SolidPattern">
+                   <color alpha="255">
+                    <red>0</red>
+                    <green>239</green>
+                    <blue>219</blue>
+                   </color>
+                  </brush>
+                 </colorrole>
+                </active>
+                <inactive>
+                 <colorrole role="Base">
+                  <brush brushstyle="SolidPattern">
+                   <color alpha="255">
+                    <red>255</red>
+                    <green>255</green>
+                    <blue>255</blue>
+                   </color>
+                  </brush>
+                 </colorrole>
+                 <colorrole role="Window">
+                  <brush brushstyle="SolidPattern">
+                   <color alpha="255">
+                    <red>0</red>
+                    <green>239</green>
+                    <blue>219</blue>
+                   </color>
+                  </brush>
+                 </colorrole>
+                </inactive>
+                <disabled>
+                 <colorrole role="Base">
+                  <brush brushstyle="SolidPattern">
+                   <color alpha="255">
+                    <red>0</red>
+                    <green>239</green>
+                    <blue>219</blue>
+                   </color>
+                  </brush>
+                 </colorrole>
+                 <colorrole role="Window">
+                  <brush brushstyle="SolidPattern">
+                   <color alpha="255">
+                    <red>0</red>
+                    <green>239</green>
+                    <blue>219</blue>
+                   </color>
+                  </brush>
+                 </colorrole>
+                </disabled>
+               </palette>
+              </property>
+              <property name="autoFillBackground">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButton">
+            <property name="maximumSize">
+             <size>
+              <width>30</width>
+              <height>20</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>RST</string>
+            </property>
+            <property name="checked">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
        </layout>
       </item>
       <item>
@@ -382,6 +498,12 @@
    <class>VUMeter</class>
    <extends>QWidget</extends>
    <header>vumeter.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>LRAMeter</class>
+   <extends>QWidget</extends>
+   <header>lrameter.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

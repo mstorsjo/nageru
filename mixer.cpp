@@ -368,11 +368,20 @@ void Mixer::thread_func()
 		}
 
 		if (audio_level_callback != nullptr) {
-			double loudness_s, peak_level_l, peak_level_r;
+			double loudness_s, loudness_i, peak_level_l, peak_level_r;
+			double lra;
 			ebur128_loudness_shortterm(r128_state, &loudness_s);
+			ebur128_loudness_global(r128_state, &loudness_i);
+			ebur128_loudness_range(r128_state, &lra);
 			ebur128_sample_peak(r128_state, 0, &peak_level_l);
 			ebur128_sample_peak(r128_state, 1, &peak_level_r);
-			audio_level_callback(loudness_s, 20.0 * log10(max(peak_level_l, peak_level_r)));
+
+			// FIXME: This is wrong. We need proper support from libebur128 for this.
+			double loudness_range_low = loudness_i - 0.5 * lra;
+			double loudness_range_high = loudness_i + 0.5 * lra;
+
+			audio_level_callback(loudness_s, 20.0 * log10(max(peak_level_l, peak_level_r)),
+			                     loudness_i, loudness_range_low, loudness_range_high);
 		}
 
 		// If the first card is reporting a corrupted or otherwise dropped frame,

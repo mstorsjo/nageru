@@ -38,7 +38,7 @@ void VUMeter::paintEvent(QPaintEvent *event)
 		if (level == -1 || level == 0) {
 			painter.fillRect(1, min_y, width() - 2, max_y - min_y, Qt::green);
 		} else {
-			painter.fillRect(1, min_y, width() - 2, max_y - min_y, Qt::darkGray);
+			painter.fillRect(1, min_y, width() - 2, max_y - min_y, QColor(80, 80, 80));
 		}
 	}
 

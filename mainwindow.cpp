@@ -94,8 +94,9 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 
 void MainWindow::mixer_created(Mixer *mixer)
 {
-	mixer->set_audio_level_callback([this](float level_lufs, float peak_db){
+	mixer->set_audio_level_callback([this](float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs){
 		ui->vu_meter->set_level(level_lufs);
+		ui->lra_meter->set_levels(global_level_lufs, range_low_lufs, range_high_lufs);
 
 		char buf[256];
 		snprintf(buf, sizeof(buf), "%.1f", peak_db);

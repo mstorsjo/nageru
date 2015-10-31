@@ -81,7 +81,7 @@ public:
 		output_channel[output].set_frame_ready_callback(callback);
 	}
 
-	typedef std::function<void(float, float)> audio_level_callback_t;
+	typedef std::function<void(float, float, float, float, float)> audio_level_callback_t;
 	void set_audio_level_callback(audio_level_callback_t callback)
 	{
 		audio_level_callback = callback;
