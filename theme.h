@@ -12,6 +12,17 @@
 #include <movit/effect_chain.h>
 #include <movit/ycbcr_input.h>
 
+class NonBouncingYCbCrInput : public movit::YCbCrInput {
+public:
+	NonBouncingYCbCrInput(const movit::ImageFormat &image_format,
+	                      const movit::YCbCrFormat &ycbcr_format,
+	                      unsigned width, unsigned height,
+	                      movit::YCbCrInputSplitting ycbcr_input_splitting = movit::YCBCR_INPUT_PLANAR)
+	    : movit::YCbCrInput(image_format, ycbcr_format, width, height, ycbcr_input_splitting) {}
+
+	bool override_disable_bounce() const override { return true; }
+};
+
 class Theme {
 public:
 	Theme(const char *filename, movit::ResourcePool *resource_pool);
@@ -44,7 +55,7 @@ private:
 
 class LiveInputWrapper {
 public:
-	LiveInputWrapper(Theme *theme, movit::EffectChain *chain);
+	LiveInputWrapper(Theme *theme, movit::EffectChain *chain, bool override_bounce);
 
 	void connect_signal(int signal_num);
 	movit::YCbCrInput *get_input() const

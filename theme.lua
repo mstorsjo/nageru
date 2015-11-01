@@ -21,9 +21,9 @@ local preview_signal_num = 1
 -- The main live chain.
 function make_sbs_chain(hq)
 	local chain = EffectChain.new(16, 9)
-	local input0 = chain:add_live_input()
+	local input0 = chain:add_live_input(true)
 	input0:connect_signal(0)
-	local input1 = chain:add_live_input()
+	local input1 = chain:add_live_input(true)
 	input1:connect_signal(1)
 
 	local resample_effect = nil
@@ -75,8 +75,8 @@ local main_chain_lq = make_sbs_chain(false)
 
 -- A chain to fade between two inputs (live chain only)
 local fade_chain_hq = EffectChain.new(16, 9)
-local fade_chain_hq_input0 = fade_chain_hq:add_live_input()
-local fade_chain_hq_input1 = fade_chain_hq:add_live_input()
+local fade_chain_hq_input0 = fade_chain_hq:add_live_input(true)
+local fade_chain_hq_input1 = fade_chain_hq:add_live_input(true)
 fade_chain_hq_input0:connect_signal(0)
 fade_chain_hq_input1:connect_signal(1)
 local fade_chain_mix_effect = fade_chain_hq:add_effect(MixEffect.new(), fade_chain_hq_input0, fade_chain_hq_input1)
@@ -84,13 +84,13 @@ fade_chain_hq:finalize(true)
 
 -- A chain to show a single input on screen (HQ version).
 local simple_chain_hq = EffectChain.new(16, 9)
-local simple_chain_hq_input = simple_chain_hq:add_live_input()
+local simple_chain_hq_input = simple_chain_hq:add_live_input(true)
 simple_chain_hq_input:connect_signal(0)  -- First input card. Can be changed whenever you want.
 simple_chain_hq:finalize(true)
 
 -- A chain to show a single input on screen (LQ version).
 local simple_chain_lq = EffectChain.new(16, 9)
-local simple_chain_lq_input = simple_chain_lq:add_live_input()
+local simple_chain_lq_input = simple_chain_lq:add_live_input(true)
 simple_chain_lq_input:connect_signal(0)  -- First input card. Can be changed whenever you want.
 simple_chain_lq:finalize(false)
 

@@ -78,10 +78,11 @@ int EffectChain_new(lua_State* L)
 
 int EffectChain_add_live_input(lua_State* L)
 {
-	assert(lua_gettop(L) == 1);
+	assert(lua_gettop(L) == 2);
 	Theme *theme = get_theme_updata(L);
 	EffectChain *chain = (EffectChain *)luaL_checkudata(L, 1, "EffectChain");
-	return wrap_lua_object<LiveInputWrapper>(L, "LiveInputWrapper", theme, chain);
+	bool override_bounce = checkbool(L, 2);
+	return wrap_lua_object<LiveInputWrapper>(L, "LiveInputWrapper", theme, chain, override_bounce);
 }
 
 int EffectChain_add_effect(lua_State* L)
@@ -311,7 +312,7 @@ const luaL_Reg MixEffect_funcs[] = {
 
 }  // namespace
 
-LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain)
+LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain, bool override_bounce)
 	: theme(theme)
 {
 	ImageFormat inout_format;
@@ -328,7 +329,11 @@ LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain)
 	input_ycbcr_format.luma_coefficients = YCBCR_REC_601;
 	input_ycbcr_format.full_range = false;
 
-	input = new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
+	if (override_bounce) {
+		input = new NonBouncingYCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
+	} else {
+		input = new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
+	}
 	chain->add_input(input);
 }
 

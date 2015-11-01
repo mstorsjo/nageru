@@ -80,6 +80,10 @@ Mixer::Mixer(const QSurfaceFormat &format)
 	CHECK(init_movit(MOVIT_SHADER_DIR, MOVIT_DEBUG_OFF));
 	check_error();
 
+	// Since we allow non-bouncing 4:2:2 YCbCrInputs, effective subpixel precision
+	// will be halved when sampling them, and we need to compensate here.
+	movit_texel_subpixel_precision /= 2.0;
+
 	resource_pool.reset(new ResourcePool);
 	theme.reset(new Theme("theme.lua", resource_pool.get()));
 	output_channel[OUTPUT_LIVE].parent = this;
