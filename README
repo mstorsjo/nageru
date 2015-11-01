@@ -4,7 +4,7 @@ Nageru is a live video mixer, based around the standard M/E workflow.
 Features (those marked with * are still in progress or not started yet):
 
  - High performance on modest hardware (720p60 with two input streams
-   on my Thinkpad X240); almost all pixel processing is done on the GPU.
+   on my Thinkpad X240[1]); almost all pixel processing is done on the GPU.
 
  - High output quality; Lanczos3 scaling, subpixel precision everywhere,
    white balance adjustment (*), mix of 16- and 32-bit floating point
@@ -18,6 +18,11 @@ Features (those marked with * are still in progress or not started yet):
    event; Lua code is responsible for setting up the pixel proessing
    pipelines causing transitions etc., so that the visual look is consistent
    between operators.
+
+[1] For reference, that is: Core i7 4600U (dualcore 2.10GHz, clocks down
+to 800 MHz after 30 seconds due to thermal constraints), Intel HD Graphics
+4400 (ie., without the extra L4 cache from Iris Pro), single-channel DDR3 RAM
+(so 12.8 GB/sec theoretical memory bandwidth, shared between CPU and GPU).
 
 
 Nageru is in alpha stage. It currently needs:
@@ -53,7 +58,9 @@ To start it, just hook up your requipment, type “make” and then “./nageru�
 It is strongly recommended to have the rights to run at real-time priority;
 it will make the USB3 threads do so, which will make them a lot more stable.
 (A reasonable hack for testing is probably just to run it as root using sudo,
-although you might not want to do that in production.)
+although you might not want to do that in production.) Note also that if you
+are running a desktop compositor, it will steal significant amounts of GPU
+performance.
 
 Nageru will open a HTTP server at port 9095, where you can extract a live
 H264+MP3 signal in MPEG-TS mux (e.g. http://127.0.0.1:9095/stream.ts).
