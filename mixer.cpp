@@ -7,27 +7,20 @@
 #include "mixer.h"
 
 #include <assert.h>
-#include <effect.h>
-#include <effect_chain.h>
-#include <effect_util.h>
 #include <epoxy/egl.h>
-#include <features.h>
-#include <image_format.h>
 #include <init.h>
-#include <overlay_effect.h>
-#include <padding_effect.h>
-#include <resample_effect.h>
-#include <resource_pool.h>
-#include <saturation_effect.h>
+#include <movit/effect_chain.h>
+#include <movit/effect_util.h>
+#include <movit/flat_input.h>
+#include <movit/image_format.h>
+#include <movit/resource_pool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
 #include <time.h>
 #include <util.h>
-#include <white_balance_effect.h>
-#include <ycbcr.h>
-#include <ycbcr_input.h>
+#include <algorithm>
 #include <cmath>
 #include <condition_variable>
 #include <cstddef>
@@ -35,6 +28,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "bmusb/bmusb.h"

@@ -3,10 +3,10 @@
 #ifndef LRAMETER_H
 #define LRAMETER_H
 
-#include <QWidget>
+#include <math.h>
 #include <QLabel>
 #include <QPaintEvent>
-
+#include <QWidget>
 #include <mutex>
 
 class LRAMeter : public QWidget

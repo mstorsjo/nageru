@@ -9,14 +9,22 @@
 // way, namely having one ffmpeg mux per output.
 
 #include <microhttpd.h>
-#include <deque>
-#include <string>
-#include <mutex>
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/types.h>
 #include <condition_variable>
+#include <deque>
+#include <memory>
+#include <mutex>
+#include <string>
 #include <vector>
 
+struct MHD_Connection;
+
 extern "C" {
+#include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libavformat/avio.h>
 }
 
 class HTTPD {

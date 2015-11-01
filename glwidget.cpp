@@ -9,20 +9,21 @@
 #include <QSurfaceFormat>
 
 #include "glwidget.h"
-#include "mainwindow.h"
 
 #include <movit/resource_pool.h>
 #include <stdio.h>
+#include <functional>
 #include <mutex>
 
 #include "context.h"
+#include "effect_chain.h"
 #include "flags.h"
+#include "mainwindow.h"
 #include "mixer.h"
+#include "qnamespace.h"
 #include "ref_counted_gl_sync.h"
-#include "vumeter.h"
 
-class MainWindow;
-class QSurface;
+class QMouseEvent;
 class QWidget;
 
 #undef Success

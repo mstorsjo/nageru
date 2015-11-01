@@ -1,16 +1,28 @@
 #include "mainwindow.h"
-#include <thread>
-#include <vector>
+
+#include <math.h>
+#include <stdio.h>
+#include <algorithm>
 #include <string>
-#include <QSignalMapper>
+#include <vector>
+#include <QBoxLayout>
+#include <QKeySequence>
+#include <QLabel>
 #include <QMetaType>
-#include <QShortcut>
+#include <QPushButton>
 #include <QResizeEvent>
+#include <QShortcut>
+#include <QSignalMapper>
+#include <QSize>
+#include <QString>
 
-#include "context.h"
+#include "glwidget.h"
+#include "lrameter.h"
 #include "mixer.h"
-
 #include "ui_mainwindow.h"
+#include "vumeter.h"
+
+class QResizeEvent;
 
 using namespace std;
 

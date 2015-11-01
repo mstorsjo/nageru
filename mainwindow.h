@@ -2,8 +2,10 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include <vector>
 #include <string>
+#include <vector>
+
+class QResizeEvent;
 
 namespace Ui {
 class MainWindow;

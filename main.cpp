@@ -1,3 +1,8 @@
+extern "C" {
+#include <libavformat/avformat.h>
+}
+#include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <epoxy/gl.h>
 

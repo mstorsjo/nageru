@@ -27,9 +27,12 @@
 #define _H264ENCODE_H
 
 extern "C" {
+#include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 }
 #include <epoxy/gl.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <atomic>
 #include <condition_variable>
 #include <map>

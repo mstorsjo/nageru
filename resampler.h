@@ -40,9 +40,10 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include <zita-resampler/vresampler.h>
-
 #include <deque>
+#include <memory>
 
 class Resampler {
 public:

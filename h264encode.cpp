@@ -7,11 +7,11 @@
 #include <assert.h>
 #include <epoxy/egl.h>
 #include <libavcodec/avcodec.h>
-#include <libavformat/avio.h>
-#include <libavutil/mathematics.h>
+#include <libavutil/channel_layout.h>
+#include <libavutil/frame.h>
 #include <libavutil/rational.h>
+#include <libavutil/samplefmt.h>
 #include <libdrm/drm_fourcc.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,10 +20,13 @@
 #include <va/va_enc_h264.h>
 #include <va/va_x11.h>
 #include <condition_variable>
+#include <cstdint>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <string>
 #include <thread>
+#include <utility>
 
 #include "context.h"
 #include "httpd.h"

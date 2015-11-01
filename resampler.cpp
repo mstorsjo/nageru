@@ -18,9 +18,10 @@
 
 #include "resampler.h"
 
+#include <math.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
-#include <math.h>
 #include <zita-resampler/vresampler.h>
 
 Resampler::Resampler(unsigned freq_in, unsigned freq_out, unsigned num_channels)

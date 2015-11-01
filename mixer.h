@@ -5,20 +5,39 @@
 
 #include <epoxy/gl.h>
 #undef Success
+#include <stdbool.h>
+#include <stdint.h>
+
 #include <movit/effect_chain.h>
 #include <movit/flat_input.h>
+#include <condition_variable>
+#include <cstddef>
 #include <functional>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
 
 #include "bmusb/bmusb.h"
+#include "ebu_r128_proc.h"
 #include "h264encode.h"
+#include "httpd.h"
 #include "pbo_frame_allocator.h"
 #include "ref_counted_frame.h"
 #include "ref_counted_gl_sync.h"
-#include "theme.h"
 #include "resampler.h"
+#include "theme.h"
 #include "timebase.h"
-#include "httpd.h"
-#include "ebu_r128_proc.h"
+
+class H264Encoder;
+class QSurface;
+namespace movit {
+class Effect;
+class EffectChain;
+class FlatInput;
+class ResourcePool;
+}  // namespace movit
 
 namespace movit {
 class YCbCrInput;

@@ -3,9 +3,14 @@
 
 #include <epoxy/gl.h>
 #include <QGLWidget>
+#include <string>
+#include <vector>
 
 #include "mixer.h"
+#include "qgl.h"
+#include "qobjectdefs.h"
 
+class QMouseEvent;
 class QWidget;
 
 namespace movit {

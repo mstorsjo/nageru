@@ -1,16 +1,24 @@
 #ifndef _THEME_H
 #define _THEME_H 1
 
-#include <stdio.h>
-#include <lua.h>
+#include <epoxy/gl.h>
 #include <lauxlib.h>
-
-#include <functional>
-#include <mutex>
-#include <utility>
-
+#include <lua.h>
 #include <movit/effect_chain.h>
 #include <movit/ycbcr_input.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <functional>
+#include <mutex>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace movit {
+class ResourcePool;
+struct ImageFormat;
+struct YCbCrFormat;
+}  // namespace movit
 
 #define MAX_CARDS 16
 

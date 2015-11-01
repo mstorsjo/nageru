@@ -1,5 +1,6 @@
 #include "pbo_frame_allocator.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <cstddef>

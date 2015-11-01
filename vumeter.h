@@ -1,10 +1,10 @@
 #ifndef VUMETER_H
 #define VUMETER_H
 
-#include <QWidget>
+#include <math.h>
 #include <QLabel>
 #include <QPaintEvent>
-
+#include <QWidget>
 #include <mutex>
 
 class VUMeter : public QWidget

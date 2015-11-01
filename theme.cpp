@@ -1,20 +1,29 @@
-#include <stdio.h>
+#include "theme.h"
+
+#include <assert.h>
+#include <lauxlib.h>
 #include <lua.h>
 #include <lualib.h>
-#include <lauxlib.h>
+#include <movit/effect.h>
+#include <movit/effect_chain.h>
+#include <movit/image_format.h>
+#include <movit/mix_effect.h>
+#include <movit/overlay_effect.h>
+#include <movit/padding_effect.h>
+#include <movit/resample_effect.h>
+#include <movit/resize_effect.h>
+#include <movit/white_balance_effect.h>
+#include <movit/ycbcr.h>
+#include <movit/ycbcr_input.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <cstddef>
 #include <new>
 #include <utility>
 
-#include <movit/effect_chain.h>
-#include <movit/ycbcr_input.h>
-#include <movit/white_balance_effect.h>
-#include <movit/resample_effect.h>
-#include <movit/padding_effect.h>
-#include <movit/overlay_effect.h>
-#include <movit/resize_effect.h>
-#include <movit/mix_effect.h>
-
-#include "theme.h"
+namespace movit {
+class ResourcePool;
+}  // namespace movit
 
 #define WIDTH 1280  // FIXME
 #define HEIGHT 720  // FIXME

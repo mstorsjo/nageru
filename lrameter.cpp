@@ -1,7 +1,11 @@
-#include <QPainter>
-
 #include "lrameter.h"
+
+#include <QPainter>
+#include <QPalette>
+#include <QPen>
 #include "vu_common.h"
+
+class QPaintEvent;
 
 using namespace std;
 

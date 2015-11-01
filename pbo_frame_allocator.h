@@ -2,6 +2,8 @@
 #define _PBO_FRAME_ALLOCATOR 1
 
 #include <epoxy/gl.h>
+#include <stddef.h>
+#include <memory>
 #include <mutex>
 #include <queue>
 

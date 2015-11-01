@@ -1,13 +1,25 @@
-#include <string.h>
-#include <microhttpd.h>
 #include <assert.h>
+#include <microhttpd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
+#include <libavutil/channel_layout.h>
+#include <libavutil/mathematics.h>
+#include <libavutil/mem.h>
+#include <libavutil/pixfmt.h>
+#include <libavutil/rational.h>
+#include <libavutil/samplefmt.h>
 }
 
 #include "httpd.h"
+
 #include "timebase.h"
+
+struct MHD_Connection;
+struct MHD_Response;
 
 using namespace std;
 
