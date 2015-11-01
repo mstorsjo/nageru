@@ -94,7 +94,7 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height)
 	// Note that the H.264 stream also contains this information and depending on the
 	// mux, this might simply get ignored. See sps_rbsp().
 	avstream_video->codec->color_primaries = AVCOL_PRI_BT709;  // RGB colorspace (inout_format.color_space).
-	avstream_video->codec->color_trc = AVCOL_TRC_BT709;  // Gamma curve (inout_format.gamma_curve).
+	avstream_video->codec->color_trc = AVCOL_TRC_UNSPECIFIED;  // Gamma curve (inout_format.gamma_curve).
 	avstream_video->codec->colorspace = AVCOL_SPC_SMPTE170M;  // YUV colorspace (output_ycbcr_format.luma_coefficients).
 	avstream_video->codec->color_range = AVCOL_RANGE_MPEG;  // Full vs. limited range (output_ycbcr_format.full_range).
 	avstream_video->codec->chroma_sample_location = AVCHROMA_LOC_LEFT;  // Chroma sample location. See chroma_offset_0[] in Mixer::subsample_chroma().

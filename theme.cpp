@@ -129,12 +129,10 @@ int EffectChain_finalize(lua_State* L)
 	ImageFormat inout_format;
 	inout_format.color_space = COLORSPACE_REC_709;
 
-	// Gamma curve depends on the input signal, and we don't really get any
-	// indications. A camera would be expected to do Rec. 709, but
-	// I haven't checked if any do in practice. However, computers _do_ output
-	// in sRGB gamma (ie., they don't convert from sRGB to Rec. 709), and
-	// I wouldn't really be surprised if most non-professional cameras do, too.
-	// So we pick sRGB as the least evil here.
+	// Output gamma is tricky. We should output Rec. 709 for TV, except that
+	// we expect to run with web players and others that don't really care and
+	// just output with no conversion. So that means we'll need to output sRGB,
+	// even though H.264 has no setting for that (we use “unspecified”).
 	inout_format.gamma_curve = GAMMA_sRGB;
 
 	if (is_main_chain) {
@@ -337,6 +335,13 @@ LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain, bool overri
 {
 	ImageFormat inout_format;
 	inout_format.color_space = COLORSPACE_sRGB;
+
+	// Gamma curve depends on the input signal, and we don't really get any
+	// indications. A camera would be expected to do Rec. 709, but
+	// I haven't checked if any do in practice. However, computers _do_ output
+	// in sRGB gamma (ie., they don't convert from sRGB to Rec. 709), and
+	// I wouldn't really be surprised if most non-professional cameras do, too.
+	// So we pick sRGB as the least evil here.
 	inout_format.gamma_curve = GAMMA_sRGB;
 
 	// The Blackmagic driver docs claim that the device outputs Y'CbCr
