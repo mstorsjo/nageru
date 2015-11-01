@@ -1,0 +1,5 @@
+*.d
+*.o
+*.moc.cpp
+ui_mainwindow.h
+nageru
