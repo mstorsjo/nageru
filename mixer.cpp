@@ -227,12 +227,6 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 		return;
 	}
 
-	// Convert the audio to stereo fp32 and add it.
-	size_t num_samples = (audio_frame.len - audio_offset) / 8 / 3;
-	vector<float> audio;
-	audio.resize(num_samples * 2);
-	convert_fixed24_to_fp32(&audio[0], 2, audio_frame.data + audio_offset, 8, num_samples);
-
 	int unwrapped_timecode = timecode;
 	int dropped_frames = 0;
 	if (card->last_timecode != -1) {
@@ -240,6 +234,12 @@ void Mixer::bm_frame(int card_index, uint16_t timecode,
 		dropped_frames = unwrapped_timecode - card->last_timecode - 1;
 	}
 	card->last_timecode = unwrapped_timecode;
+
+	// Convert the audio to stereo fp32 and add it.
+	size_t num_samples = (audio_frame.len >= audio_offset) ? (audio_frame.len - audio_offset) / 8 / 3 : 0;
+	vector<float> audio;
+	audio.resize(num_samples * 2);
+	convert_fixed24_to_fp32(&audio[0], 2, audio_frame.data + audio_offset, 8, num_samples);
 
 	// Add the audio.
 	{
