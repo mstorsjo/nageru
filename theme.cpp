@@ -343,8 +343,6 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool)
 	L = luaL_newstate();
         luaL_openlibs(L);
 
-	printf("constructing, this=%p\n", this);
-       
 	register_class("EffectChain", EffectChain_funcs); 
 	register_class("LiveInputWrapper", LiveInputWrapper_funcs); 
 	register_class("WhiteBalanceEffect", WhiteBalanceEffect_funcs);
