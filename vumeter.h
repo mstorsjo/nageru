@@ -17,7 +17,7 @@ public:
 	void set_level(float level_lufs) {
 		std::unique_lock<std::mutex> lock(level_mutex);
 		this->level_lufs = level_lufs;
-		update();
+		QMetaObject::invokeMethod(this, "update", Qt::AutoConnection);
 	}
 
 private:

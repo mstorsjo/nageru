@@ -21,7 +21,7 @@ public:
 		this->level_lufs = level_lufs;
 		this->range_low_lufs = range_low_lufs;
 		this->range_high_lufs = range_high_lufs;
-		update();
+		QMetaObject::invokeMethod(this, "update", Qt::AutoConnection);
 	}
 
 private:
