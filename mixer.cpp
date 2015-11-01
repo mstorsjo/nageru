@@ -70,8 +70,9 @@ void convert_fixed24_to_fp32(float *dst, size_t out_channels, const uint8_t *src
 
 }  // namespace
 
-Mixer::Mixer(const QSurfaceFormat &format)
+Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	: httpd("test.ts", WIDTH, HEIGHT),
+	  num_cards(num_cards),
 	  mixer_surface(create_surface(format)),
 	  h264_encoder_surface(create_surface(format))
 {
@@ -106,7 +107,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 
 	h264_encoder.reset(new H264Encoder(h264_encoder_surface, WIDTH, HEIGHT, &httpd));
 
-	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
+	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 		printf("Configuring card %d...\n", card_index);
 		CaptureCard *card = &cards[card_index];
 		card->usb = new BMUSBCapture(card_index);
@@ -132,7 +133,7 @@ Mixer::Mixer(const QSurfaceFormat &format)
 
 	BMUSBCapture::start_bm_thread();
 
-	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
+	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 		cards[card_index].usb->start_bm_capture();
 	}
 
@@ -160,7 +161,7 @@ Mixer::~Mixer()
 	resource_pool->release_glsl_program(cbcr_program_num);
 	BMUSBCapture::stop_bm_thread();
 
-	for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
+	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 		{
 			unique_lock<mutex> lock(bmusb_mutex);
 			cards[card_index].should_quit = true;  // Unblock thread.
@@ -208,7 +209,7 @@ void deinterleave_samples(const vector<float> &in, vector<float> *out_l, vector<
 
 }  // namespace
 
-void Mixer::bm_frame(int card_index, uint16_t timecode,
+void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
                      FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,
 		     FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format)
 {
@@ -348,7 +349,7 @@ void Mixer::thread_func()
 	int dropped_frames = 0;
 
 	while (!should_quit) {
-		CaptureCard card_copy[NUM_CARDS];
+		CaptureCard card_copy[MAX_CARDS];
 
 		{
 			unique_lock<mutex> lock(bmusb_mutex);
@@ -357,7 +358,7 @@ void Mixer::thread_func()
 			// TODO: Make configurable, and with a timeout.
 			cards[0].new_data_ready_changed.wait(lock, [this]{ return cards[0].new_data_ready; });
 
-			for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
+			for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 				CaptureCard *card = &cards[card_index];
 				card_copy[card_index].usb = card->usb;
 				card_copy[card_index].new_data_ready = card->new_data_ready;
@@ -374,7 +375,7 @@ void Mixer::thread_func()
 		vector<float> samples_out;
 		// TODO: Allow using audio from the other card(s) as well.
 		for (unsigned frame_num = 0; frame_num < card_copy[0].dropped_frames + 1; ++frame_num) {
-			for (unsigned card_index = 0; card_index < NUM_CARDS; ++card_index) {
+			for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 				samples_out.resize((48000 / 60) * 2);
 				{
 					unique_lock<mutex> lock(cards[card_index].audio_mutex);
@@ -408,6 +409,16 @@ void Mixer::thread_func()
 			                     loudness_i, loudness_range_low, loudness_range_high);
 		}
 
+		for (unsigned card_index = 1; card_index < num_cards; ++card_index) {
+			if (card_copy[card_index].new_data_ready && card_copy[card_index].new_frame->len == 0) {
+				++card_copy[card_index].dropped_frames;
+			}
+			if (card_copy[card_index].dropped_frames > 0) {
+				printf("Card %u dropped %d frames before this\n",
+					card_index, int(card_copy[card_index].dropped_frames));
+			}
+		}
+
 		// If the first card is reporting a corrupted or otherwise dropped frame,
 		// just increase the pts (skipping over this frame) and don't try to compute anything new.
 		if (card_copy[0].new_frame->len == 0) {
@@ -416,7 +427,7 @@ void Mixer::thread_func()
 			continue;
 		}
 
-		for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
+		for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 			CaptureCard *card = &card_copy[card_index];
 			if (!card->new_data_ready || card->new_frame->len == 0)
 				continue;
@@ -471,7 +482,7 @@ void Mixer::thread_func()
 		// input frames needed, so that they are not released back
 		// until the rendering is done.
 		vector<RefCountedFrame> input_frames;
-		for (int card_index = 0; card_index < NUM_CARDS; ++card_index) {
+		for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 			input_frames.push_back(bmusb_current_rendering_frame[card_index]);
 		}
 		const int64_t av_delay = TIMEBASE / 10;  // Corresponds to the fixed delay in resampler.h. TODO: Make less hard-coded.
@@ -498,7 +509,11 @@ void Mixer::thread_func()
 			display_frame.chain = chain.first;
 			display_frame.setup_chain = chain.second;
 			display_frame.ready_fence = fence;
-			display_frame.input_frames = { bmusb_current_rendering_frame[0], bmusb_current_rendering_frame[1] };  // FIXME: possible to do better?
+
+			// FIXME: possible to do better?
+			for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
+				display_frame.input_frames.push_back(bmusb_current_rendering_frame[card_index]);
+			}
 			display_frame.temp_textures = {};
 			output_channel[i].output_frame(display_frame);
 		}

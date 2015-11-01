@@ -16,6 +16,7 @@
 #include <mutex>
 
 #include "context.h"
+#include "flags.h"
 #include "mixer.h"
 #include "ref_counted_gl_sync.h"
 #include "vumeter.h"
@@ -47,7 +48,7 @@ void GLWidget::initializeGL()
 
 	static std::once_flag flag;
 	std::call_once(flag, [this]{
-		global_mixer = new Mixer(QGLFormat::toSurfaceFormat(format()));
+		global_mixer = new Mixer(QGLFormat::toSurfaceFormat(format()), global_flags.num_cards);
 		global_mainwindow->mixer_created(global_mixer);
 		global_mixer->start();
 	});

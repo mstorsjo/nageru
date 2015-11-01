@@ -20,7 +20,7 @@
 #include "httpd.h"
 #include "ebu_r128_proc.h"
 
-#define NUM_CARDS 2
+#define MAX_CARDS 16
 
 namespace movit {
 class YCbCrInput;
@@ -31,7 +31,7 @@ class QSurfaceFormat;
 class Mixer {
 public:
 	// The surface format is used for offscreen destinations for OpenGL contexts we need.
-	Mixer(const QSurfaceFormat &format);
+	Mixer(const QSurfaceFormat &format, unsigned num_cards);
 	~Mixer();
 	void start();
 	void quit();
@@ -93,7 +93,7 @@ public:
 	}
 
 private:
-	void bm_frame(int card_index, uint16_t timecode,
+	void bm_frame(unsigned card_index, uint16_t timecode,
 		FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,
 		FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format);
 	void place_rectangle(movit::Effect *resample_effect, movit::Effect *padding_effect, float x0, float y0, float x1, float y1);
@@ -103,6 +103,7 @@ private:
 	double pts() { return double(pts_int) / TIMEBASE; }
 
 	HTTPD httpd;
+	unsigned num_cards;
 
 	QSurface *mixer_surface, *h264_encoder_surface;
 	std::unique_ptr<movit::ResourcePool> resource_pool;
@@ -137,9 +138,9 @@ private:
 		std::unique_ptr<Resampler> resampler;  // Under audio_mutex.
 		int last_timecode = -1;  // Unwrapped.
 	};
-	CaptureCard cards[NUM_CARDS];  // protected by <bmusb_mutex>
+	CaptureCard cards[MAX_CARDS];  // protected by <bmusb_mutex>
 
-	RefCountedFrame bmusb_current_rendering_frame[NUM_CARDS];
+	RefCountedFrame bmusb_current_rendering_frame[MAX_CARDS];
 
 	class OutputChannel {
 	public:

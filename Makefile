@@ -8,7 +8,7 @@ OBJS=glwidget.o main.o mainwindow.o vumeter.o lrameter.o vu_common.o
 OBJS += glwidget.moc.o mainwindow.moc.o vumeter.moc.o lrameter.moc.o
 
 # Mixer objects
-OBJS += h264encode.o mixer.o bmusb/bmusb.o pbo_frame_allocator.o context.o ref_counted_frame.o theme.o resampler.o httpd.o ebu_r128_proc.o
+OBJS += h264encode.o mixer.o bmusb/bmusb.o pbo_frame_allocator.o context.o ref_counted_frame.o theme.o resampler.o httpd.o ebu_r128_proc.o flags.o
 
 %.o: %.cpp
 	$(CXX) -MMD -MP $(CPPFLAGS) $(CXXFLAGS) -o $@ -c $<
