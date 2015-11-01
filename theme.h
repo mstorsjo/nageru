@@ -26,7 +26,6 @@ public:
 class Theme {
 public:
 	Theme(const char *filename, movit::ResourcePool *resource_pool);
-	void register_class(const char *class_name, const luaL_Reg *funcs);
 
 	std::pair<movit::EffectChain *, std::function<void()>>
 	get_chain(unsigned num, float t, unsigned width, unsigned height);
@@ -44,6 +43,8 @@ public:
 	void channel_clicked(int preview_num);
 
 private:
+	void register_class(const char *class_name, const luaL_Reg *funcs);
+
 	std::mutex m;
 	lua_State *L;
 	movit::ResourcePool *resource_pool;
