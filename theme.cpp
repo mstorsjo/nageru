@@ -376,22 +376,27 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool)
 	}
 
 	num_channels = luaL_checknumber(L, 1);
+	lua_pop(L, 1);
+	assert(lua_gettop(L) == 0);
 }
 
 void Theme::register_class(const char *class_name, const luaL_Reg *funcs)
 {
+	assert(lua_gettop(L) == 0);
 	luaL_newmetatable(L, class_name);
 	lua_pushlightuserdata(L, this);
 	luaL_setfuncs(L, funcs, 1);
 	lua_pushvalue(L, -1);
 	lua_setfield(L, -2, "__index");
 	lua_setglobal(L, class_name);
+	assert(lua_gettop(L) == 0);
 }
 
 pair<EffectChain *, function<void()>>
 Theme::get_chain(unsigned num, float t, unsigned width, unsigned height)
 {
 	unique_lock<mutex> lock(m);
+	assert(lua_gettop(L) == 0);
 	lua_getglobal(L, "get_chain");  /* function to be called */
 	lua_pushnumber(L, num);
 	lua_pushnumber(L, t);
@@ -411,6 +416,7 @@ Theme::get_chain(unsigned num, float t, unsigned width, unsigned height)
 	lua_pushvalue(L, -1);
 	int funcref = luaL_ref(L, LUA_REGISTRYINDEX);  // TODO: leak!
 	lua_pop(L, 2);
+	assert(lua_gettop(L) == 0);
 	return make_pair(chain, [this, funcref]{
 		unique_lock<mutex> lock(m);
 
@@ -420,6 +426,7 @@ Theme::get_chain(unsigned num, float t, unsigned width, unsigned height)
 			fprintf(stderr, "error running chain setup callback: %s\n", lua_tostring(L, -1));
 			exit(1);
 		}
+		assert(lua_gettop(L) == 0);
 	});
 }
 
@@ -439,6 +446,8 @@ std::vector<std::string> Theme::get_transition_names(float t)
 		ret.push_back(lua_tostring(L, -1));
 		lua_pop(L, 1);
 	}
+	lua_pop(L, 1);
+	assert(lua_gettop(L) == 0);
 	return ret;
 }	
 
@@ -459,6 +468,7 @@ void Theme::transition_clicked(int transition_num, float t)
 		fprintf(stderr, "error running function `transition_clicked': %s\n", lua_tostring(L, -1));
 		exit(1);
 	}
+	assert(lua_gettop(L) == 0);
 }
 
 void Theme::channel_clicked(int preview_num)
@@ -471,4 +481,5 @@ void Theme::channel_clicked(int preview_num)
 		fprintf(stderr, "error running function `channel_clicked': %s\n", lua_tostring(L, -1));
 		exit(1);
 	}
+	assert(lua_gettop(L) == 0);
 }
