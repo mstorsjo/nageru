@@ -343,7 +343,7 @@ static void sps_rbsp(bitstream *bs)
         bitstream_put_ui(bs, 1, 1); /* video_signal_type_present_flag */
         {
             bitstream_put_ui(bs, 5, 3);  /* video_format (5 = Unspecified) */
-            bitstream_put_ui(bs, 0, 1);  /* video_full_range_flag */
+            bitstream_put_ui(bs, 1, 1);  /* video_full_range_flag */
             bitstream_put_ui(bs, 1, 1);  /* colour_description_present_flag */
             {
                 bitstream_put_ui(bs, 1, 8);  /* colour_primaries (1 = BT.709) */

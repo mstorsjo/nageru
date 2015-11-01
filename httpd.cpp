@@ -96,7 +96,7 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height)
 	avstream_video->codec->color_primaries = AVCOL_PRI_BT709;  // RGB colorspace (inout_format.color_space).
 	avstream_video->codec->color_trc = AVCOL_TRC_BT709;  // Gamma curve (inout_format.gamma_curve).
 	avstream_video->codec->colorspace = AVCOL_SPC_BT709;  // YUV colorspace (output_ycbcr_format.luma_coefficients).
-	avstream_video->codec->color_range = AVCOL_RANGE_MPEG;  // Full vs. limited range (output_ycbcr_format.full_range).
+	avstream_video->codec->color_range = AVCOL_RANGE_JPEG;  // Full vs. limited range (output_ycbcr_format.full_range).
 	avstream_video->codec->chroma_sample_location = AVCHROMA_LOC_LEFT;  // Chroma sample location. See chroma_offset_0[] in Mixer::subsample_chroma().
 	avstream_video->codec->field_order = AV_FIELD_PROGRESSIVE;
 

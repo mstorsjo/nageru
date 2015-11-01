@@ -136,7 +136,7 @@ int EffectChain_finalize(lua_State* L)
 		output_ycbcr_format.chroma_subsampling_x = 1;
 		output_ycbcr_format.chroma_subsampling_y = 1;
 		output_ycbcr_format.luma_coefficients = YCBCR_REC_709;
-		output_ycbcr_format.full_range = false;
+		output_ycbcr_format.full_range = true;
 		output_ycbcr_format.num_levels = 256;
 
 		chain->add_ycbcr_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED, output_ycbcr_format, YCBCR_OUTPUT_SPLIT_Y_AND_CBCR);
