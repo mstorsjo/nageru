@@ -493,8 +493,10 @@ std::vector<std::string> Theme::get_transition_names(float t)
 void Theme::connect_signal(YCbCrInput *input, int signal_num)
 {
 	if (signal_num >= int(num_cards)) {
-		fprintf(stderr, "WARNING: Theme asked for input %d, but we only have %u card(s).\n", signal_num, num_cards);
-		fprintf(stderr, "Mapping to card %d instead.\n", signal_num % num_cards);
+		if (signals_warned_about.insert(signal_num).second) {
+			fprintf(stderr, "WARNING: Theme asked for input %d, but we only have %u card(s).\n", signal_num, num_cards);
+			fprintf(stderr, "Mapping to card %d instead.\n", signal_num % num_cards);
+		}
 		signal_num %= num_cards;
 	}
 	input->set_texture_num(0, input_textures[signal_num].tex_y);

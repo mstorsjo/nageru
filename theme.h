@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <functional>
 #include <mutex>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -63,6 +64,7 @@ private:
 	} input_textures[MAX_CARDS];
 	int num_channels;
 	unsigned num_cards;
+	std::set<int> signals_warned_about;
 };
 
 class LiveInputWrapper {
