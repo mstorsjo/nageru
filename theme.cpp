@@ -128,7 +128,15 @@ int EffectChain_finalize(lua_State* L)
 	// what's put in the H.264 stream (sps_rbsp()).
 	ImageFormat inout_format;
 	inout_format.color_space = COLORSPACE_REC_709;
-	inout_format.gamma_curve = GAMMA_REC_709;
+
+	// Gamma curve depends on the input signal, and we don't really get any
+	// indications. A camera would be expected to do Rec. 709, but
+	// I haven't checked if any do in practice. However, computers _do_ output
+	// in sRGB gamma (ie., they don't convert from sRGB to Rec. 709), and
+	// I wouldn't really be surprised if most non-professional cameras do, too.
+	// So we pick sRGB as the least evil here.
+	inout_format.gamma_curve = GAMMA_sRGB;
+
 	if (is_main_chain) {
 		YCbCrFormat output_ycbcr_format;
 		// We actually output 4:2:0 in the end, but chroma subsampling
