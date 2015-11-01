@@ -20,8 +20,6 @@
 #include "httpd.h"
 #include "ebu_r128_proc.h"
 
-#define MAX_CARDS 16
-
 namespace movit {
 class YCbCrInput;
 }

@@ -12,6 +12,8 @@
 #include <movit/effect_chain.h>
 #include <movit/ycbcr_input.h>
 
+#define MAX_CARDS 16
+
 class NonBouncingYCbCrInput : public movit::YCbCrInput {
 public:
 	NonBouncingYCbCrInput(const movit::ImageFormat &image_format,
@@ -25,7 +27,7 @@ public:
 
 class Theme {
 public:
-	Theme(const char *filename, movit::ResourcePool *resource_pool);
+	Theme(const char *filename, movit::ResourcePool *resource_pool, unsigned num_cards);
 
 	std::pair<movit::EffectChain *, std::function<void()>>
 	get_chain(unsigned num, float t, unsigned width, unsigned height);
@@ -50,8 +52,9 @@ private:
 	movit::ResourcePool *resource_pool;
 	struct {
 		GLuint tex_y = 0, tex_cbcr = 0;
-	} input_textures[16];  // FIXME
+	} input_textures[MAX_CARDS];
 	int num_channels;
+	unsigned num_cards;
 };
 
 class LiveInputWrapper {

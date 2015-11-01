@@ -86,7 +86,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	movit_texel_subpixel_precision /= 2.0;
 
 	resource_pool.reset(new ResourcePool);
-	theme.reset(new Theme("theme.lua", resource_pool.get()));
+	theme.reset(new Theme("theme.lua", resource_pool.get(), num_cards));
 	output_channel[OUTPUT_LIVE].parent = this;
 	output_channel[OUTPUT_PREVIEW].parent = this;
 	output_channel[OUTPUT_INPUT0].parent = this;

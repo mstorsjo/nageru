@@ -372,8 +372,8 @@ void LiveInputWrapper::connect_signal(int signal_num)
 	theme->connect_signal(input, signal_num);
 }
 
-Theme::Theme(const char *filename, ResourcePool *resource_pool)
-	: resource_pool(resource_pool)
+Theme::Theme(const char *filename, ResourcePool *resource_pool, unsigned num_cards)
+	: resource_pool(resource_pool), num_cards(num_cards)
 {
 	L = luaL_newstate();
         luaL_openlibs(L);
@@ -483,6 +483,11 @@ std::vector<std::string> Theme::get_transition_names(float t)
 
 void Theme::connect_signal(YCbCrInput *input, int signal_num)
 {
+	if (signal_num >= int(num_cards)) {
+		fprintf(stderr, "WARNING: Theme asked for input %d, but we only have %u card(s).\n", signal_num, num_cards);
+		fprintf(stderr, "Mapping to card %d instead.\n", signal_num % num_cards);
+		signal_num %= num_cards;
+	}
 	input->set_texture_num(0, input_textures[signal_num].tex_y);
 	input->set_texture_num(1, input_textures[signal_num].tex_cbcr);
 }
