@@ -123,15 +123,21 @@ int EffectChain_finalize(lua_State* L)
 	bool is_main_chain = checkbool(L, 2);
 
 	// Add outputs as needed.
+	// NOTE: If you change any details about the output format, you will need to
+	// also update what's given to the muxer (HTTPD::Mux constructor) and
+	// what's put in the H.264 stream (sps_rbsp()).
 	ImageFormat inout_format;
-	inout_format.color_space = COLORSPACE_sRGB;
-	inout_format.gamma_curve = GAMMA_sRGB;
+	inout_format.color_space = COLORSPACE_REC_709;
+	inout_format.gamma_curve = GAMMA_REC_709;
 	if (is_main_chain) {
 		YCbCrFormat output_ycbcr_format;
+		// We actually output 4:2:0 in the end, but chroma subsampling
+		// happens in a pass not run by Movit (see Mixer::subsample_chroma()).
 		output_ycbcr_format.chroma_subsampling_x = 1;
 		output_ycbcr_format.chroma_subsampling_y = 1;
 		output_ycbcr_format.luma_coefficients = YCBCR_REC_709;
 		output_ycbcr_format.full_range = false;
+		output_ycbcr_format.num_levels = 256;
 
 		chain->add_ycbcr_output(inout_format, OUTPUT_ALPHA_FORMAT_POSTMULTIPLIED, output_ycbcr_format, YCBCR_OUTPUT_SPLIT_Y_AND_CBCR);
 		chain->set_dither_bits(8);
@@ -319,6 +325,11 @@ LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain, bool overri
 	inout_format.color_space = COLORSPACE_sRGB;
 	inout_format.gamma_curve = GAMMA_sRGB;
 
+	// The Blackmagic driver docs claim that the device outputs Y'CbCr
+	// according to Rec. 601, but practical testing indicates it definitely
+	// is Rec. 709 (at least up to errors attributable to rounding errors).
+	// Perhaps 601 was only to indicate the subsampling positions, not the
+	// colorspace itself? Tested with a Lenovo X1 gen 3 as input.
 	YCbCrFormat input_ycbcr_format;
 	input_ycbcr_format.chroma_subsampling_x = 2;
 	input_ycbcr_format.chroma_subsampling_y = 1;
@@ -326,7 +337,7 @@ LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain, bool overri
 	input_ycbcr_format.cr_x_position = 0.0;
 	input_ycbcr_format.cb_y_position = 0.5;
 	input_ycbcr_format.cr_y_position = 0.5;
-	input_ycbcr_format.luma_coefficients = YCBCR_REC_601;
+	input_ycbcr_format.luma_coefficients = YCBCR_REC_709;
 	input_ycbcr_format.full_range = false;
 
 	if (override_bounce) {

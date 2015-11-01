@@ -89,6 +89,17 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height)
 	avstream_video->codec->time_base = AVRational{1, TIMEBASE};
 	avstream_video->codec->ticks_per_frame = 1;  // or 2?
 
+	// Colorspace details. Closely correspond to settings in EffectChain_finalize,
+	// as noted in each comment.
+	// Note that the H.264 stream also contains this information and depending on the
+	// mux, this might simply get ignored. See sps_rbsp().
+	avstream_video->codec->color_primaries = AVCOL_PRI_BT709;  // RGB colorspace (inout_format.color_space).
+	avstream_video->codec->color_trc = AVCOL_TRC_BT709;  // Gamma curve (inout_format.gamma_curve).
+	avstream_video->codec->colorspace = AVCOL_SPC_BT709;  // YUV colorspace (output_ycbcr_format.luma_coefficients).
+	avstream_video->codec->color_range = AVCOL_RANGE_MPEG;  // Full vs. limited range (output_ycbcr_format.full_range).
+	avstream_video->codec->chroma_sample_location = AVCHROMA_LOC_LEFT;  // Chroma sample location. See chroma_offset_0[] in Mixer::subsample_chroma().
+	avstream_video->codec->field_order = AV_FIELD_PROGRESSIVE;
+
 	AVCodec *codec_audio = avcodec_find_encoder(AV_CODEC_ID_MP3);
 	avstream_audio = avformat_new_stream(avctx, codec_audio);
 	if (avstream_audio == nullptr) {
