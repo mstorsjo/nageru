@@ -44,9 +44,6 @@ GLWidget::~GLWidget()
 
 void GLWidget::initializeGL()
 {
-	printf("egl context=%p\n", eglGetCurrentContext());
-	//printf("threads: %p %p\n", QThread::currentThread(), qGuiApp->thread());
-
 	static std::once_flag flag;
 	std::call_once(flag, [this]{
 		global_mixer = new Mixer(QGLFormat::toSurfaceFormat(format()), global_flags.num_cards);
