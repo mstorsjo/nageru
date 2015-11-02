@@ -109,6 +109,11 @@ public:
 		return theme->get_transition_names(pts());
 	}
 
+	unsigned get_num_channels() const
+	{
+		return theme->get_num_channels();
+	}
+
 private:
 	void bm_frame(unsigned card_index, uint16_t timecode,
 		FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,

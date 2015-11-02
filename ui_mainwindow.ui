@@ -44,6 +44,9 @@
            </widget>
           </item>
           <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_3"/>
+          </item>
+          <item>
            <widget class="QLabel" name="label_preview">
             <property name="text">
              <string>Preview</string>
@@ -243,8 +246,6 @@
               <property name="autoFillBackground">
                <bool>true</bool>
               </property>
-              <zorder>peak_display</zorder>
-              <zorder>peak_display</zorder>
              </widget>
             </item>
            </layout>
@@ -387,6 +388,9 @@
         <property name="orientation">
          <enum>Qt::Vertical</enum>
         </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Preferred</enum>
+        </property>
         <property name="sizeHint" stdset="0">
          <size>
           <width>20</width>
@@ -396,59 +400,22 @@
        </spacer>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="preview_displays">
+       <layout class="QHBoxLayout" name="preview_displays" stretch="0">
         <property name="topMargin">
          <number>0</number>
         </property>
-        <item>
-         <widget class="GLWidget" name="preview1" native="true">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-            <horstretch>1</horstretch>
-            <verstretch>1</verstretch>
-           </sizepolicy>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="GLWidget" name="preview2" native="true">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-            <horstretch>1</horstretch>
-            <verstretch>1</verstretch>
-           </sizepolicy>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="GLWidget" name="preview3" native="true">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-            <horstretch>1</horstretch>
-            <verstretch>1</verstretch>
-           </sizepolicy>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QGLWidget" name="preview4" native="true">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-            <horstretch>1</horstretch>
-            <verstretch>1</verstretch>
-           </sizepolicy>
-          </property>
-         </widget>
-        </item>
         <item>
          <spacer name="horizontalSpacer">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
           </property>
+          <property name="sizeType">
+           <enum>QSizePolicy::Preferred</enum>
+          </property>
           <property name="sizeHint" stdset="0">
            <size>
             <width>0</width>
-            <height>0</height>
+            <height>40</height>
            </size>
           </property>
          </spacer>
@@ -488,11 +455,6 @@
    <class>GLWidget</class>
    <extends>QWidget</extends>
    <header>glwidget.h</header>
-  </customwidget>
-  <customwidget>
-   <class>QGLWidget</class>
-   <extends>QWidget</extends>
-   <header>qglwidget.h</header>
   </customwidget>
   <customwidget>
    <class>VUMeter</class>

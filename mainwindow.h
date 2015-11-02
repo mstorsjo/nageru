@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+class GLWidget;
 class QResizeEvent;
 
 namespace Ui {
@@ -32,6 +33,7 @@ public slots:
 private:
 	Ui::MainWindow *ui;
 	QPushButton *transition_btn1, *transition_btn2, *transition_btn3;
+	std::vector<GLWidget *> previews;
 };
 
 extern MainWindow *global_mainwindow;
