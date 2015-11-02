@@ -46,6 +46,8 @@ public:
 		input_textures[signal_num].tex_cbcr = tex_cbcr;
 	}
 	int get_num_channels() { return num_channels; }
+	std::string get_channel_name(unsigned channel);
+	bool get_supports_set_wb(unsigned channel);
 
 	std::vector<std::string> get_transition_names(float t);
 

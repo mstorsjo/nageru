@@ -1,5 +1,6 @@
 *.d
 *.o
 *.moc.cpp
+ui_display.h
 ui_mainwindow.h
 nageru

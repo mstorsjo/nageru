@@ -19,6 +19,7 @@
 #include "glwidget.h"
 #include "lrameter.h"
 #include "mixer.h"
+#include "ui_display.h"
 #include "ui_mainwindow.h"
 #include "vumeter.h"
 
@@ -77,14 +78,20 @@ void MainWindow::mixer_created(Mixer *mixer)
 	QSignalMapper *mapper = new QSignalMapper(this);
 
 	for (unsigned i = 0; i < num_previews; ++i) {
-		GLWidget *preview = new GLWidget(this);
-		preview->set_output(Mixer::Output(Mixer::OUTPUT_INPUT0 + i));
+		Mixer::Output output = Mixer::Output(Mixer::OUTPUT_INPUT0 + i);
+
+		QWidget *preview = new QWidget(this);
+		Ui::Display *ui_display = new Ui::Display;
+		ui_display->setupUi(preview);
+		ui_display->label->setText(mixer->get_channel_name(output).c_str());
+		ui_display->wb_button->setVisible(mixer->get_supports_set_wb(output));
+		ui_display->display->set_output(output);
 		ui->preview_displays->insertWidget(previews.size(), preview, 1);
-		previews.push_back(preview);
+		previews.push_back(ui_display);
 
 		// Hook up the click.
-		mapper->setMapping(preview, i);
-		connect(preview, SIGNAL(clicked()), mapper, SLOT(map()));
+		mapper->setMapping(ui_display->display, i);
+		connect(ui_display->display, SIGNAL(clicked()), mapper, SLOT(map()));
 
 		// Hook up the keyboard key.
 		QShortcut *shortcut = new QShortcut(QKeySequence(Qt::Key_1 + i), this);
@@ -126,11 +133,12 @@ void MainWindow::relayout()
 
 	// The previews will be constrained by the remaining height, and the width.
 	// FIXME: spacing?
-	double preview_height = std::min(height - me_height, (width / double(previews.size())) * 9.0 / 16.0);
+	double preview_label_height = previews[0]->label->height();
+	double preview_height = std::min(height - me_height - preview_label_height, (width / double(previews.size())) * 9.0 / 16.0);
 
 	ui->vertical_layout->setStretch(0, lrintf(me_height));
 	ui->vertical_layout->setStretch(1, std::max<int>(1, lrintf(height - me_height - preview_height)));
-	ui->vertical_layout->setStretch(2, lrintf(preview_height));
+	ui->vertical_layout->setStretch(2, lrintf(preview_height + preview_label_height));
 
 	// Set the widths for the previews.
 	double preview_width = preview_height * 16.0 / 9.0;  // FIXME: spacing?

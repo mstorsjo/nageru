@@ -111,6 +111,16 @@ public:
 		return theme->get_num_channels();
 	}
 
+	std::string get_channel_name(unsigned channel) const
+	{
+		return theme->get_channel_name(channel);
+	}
+
+	bool get_supports_set_wb(unsigned channel) const
+	{
+		return theme->get_supports_set_wb(channel);
+	}
+
 private:
 	void bm_frame(unsigned card_index, uint16_t timecode,
 		FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,

@@ -100,6 +100,24 @@ function num_channels()
 	return 3
 end
 
+-- Returns the name for each additional channel (starting from 2).
+-- Called only once for each channel, at the start of the program.
+function channel_name(channel)
+	if channel == 2 then
+		return "Input 1"
+	elseif channel == 3 then
+		return "Input 2"
+	else
+		return "Side-by-side"
+	end
+end
+
+-- Returns if a given channel supports setting white balance (starting from 2).
+-- Called only once for each channel, at the start of the program.
+function supports_set_wb(channel)
+	return channel == 2 or channel == 3
+end
+
 function finish_transitions(t)
 	-- If live is 2 (SBS) but de-facto single, make it so.
 	if live_signal_num == 2 and t >= transition_end and zoom_dst == 1.0 then
