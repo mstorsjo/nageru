@@ -47,10 +47,10 @@ MainWindow::MainWindow()
 		mapper->setMapping(ui->transition_btn1, 0),
 		mapper->setMapping(ui->transition_btn2, 1);
 		mapper->setMapping(ui->transition_btn3, 2);
-		connect(ui->transition_btn1, SIGNAL(clicked()), mapper, SLOT(map()));
-		connect(ui->transition_btn2, SIGNAL(clicked()), mapper, SLOT(map()));
-		connect(ui->transition_btn3, SIGNAL(clicked()), mapper, SLOT(map()));
-		connect(mapper, SIGNAL(mapped(int)), this, SLOT(transition_clicked(int)));
+		connect(ui->transition_btn1, &QPushButton::clicked, mapper, static_cast<void (QSignalMapper::*)()>(&QSignalMapper::map));
+		connect(ui->transition_btn2, &QPushButton::clicked, mapper, static_cast<void (QSignalMapper::*)()>(&QSignalMapper::map));
+		connect(ui->transition_btn3, &QPushButton::clicked, mapper, static_cast<void (QSignalMapper::*)()>(&QSignalMapper::map));
+		connect(mapper, static_cast<void (QSignalMapper::*)(int)>(&QSignalMapper::mapped), this, &MainWindow::transition_clicked);
 	}
 
 	// Aiee...
@@ -58,8 +58,7 @@ MainWindow::MainWindow()
 	transition_btn2 = ui->transition_btn2;
 	transition_btn3 = ui->transition_btn3;
 	qRegisterMetaType<std::vector<std::string>>("std::vector<std::string>");
-	connect(ui->me_preview, SIGNAL(transition_names_updated(std::vector<std::string>)),
-	        this, SLOT(set_transition_names(std::vector<std::string>)));
+	connect(ui->me_preview, &GLWidget::transition_names_updated, this, &MainWindow::set_transition_names);
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event)
@@ -91,15 +90,15 @@ void MainWindow::mixer_created(Mixer *mixer)
 
 		// Hook up the click.
 		mapper->setMapping(ui_display->display, i);
-		connect(ui_display->display, SIGNAL(clicked()), mapper, SLOT(map()));
+		connect(ui_display->display, &GLWidget::clicked, mapper, static_cast<void (QSignalMapper::*)()>(&QSignalMapper::map));
 
 		// Hook up the keyboard key.
 		QShortcut *shortcut = new QShortcut(QKeySequence(Qt::Key_1 + i), this);
 		mapper->setMapping(shortcut, i);
-		connect(shortcut, SIGNAL(activated()), mapper, SLOT(map()));
+		connect(shortcut, &QShortcut::activated, mapper, static_cast<void (QSignalMapper::*)()>(&QSignalMapper::map));
 	}
 
-	connect(mapper, SIGNAL(mapped(int)), this, SLOT(channel_clicked(int)));
+	connect(mapper, static_cast<void (QSignalMapper::*)(int)>(&QSignalMapper::mapped), this, &MainWindow::channel_clicked);
 
 	mixer->set_audio_level_callback([this](float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs){
 		ui->vu_meter->set_level(level_lufs);
