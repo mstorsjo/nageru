@@ -81,10 +81,9 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 
 	resource_pool.reset(new ResourcePool);
 	theme.reset(new Theme("theme.lua", resource_pool.get(), num_cards));
-	output_channel[OUTPUT_LIVE].parent = this;
-	output_channel[OUTPUT_PREVIEW].parent = this;
-	output_channel[OUTPUT_INPUT0].parent = this;
-	output_channel[OUTPUT_INPUT1].parent = this;
+	for (unsigned i = 0; i < NUM_OUTPUTS; ++i) {
+		output_channel[i].parent = this;
+	}
 
 	ImageFormat inout_format;
 	inout_format.color_space = COLORSPACE_sRGB;

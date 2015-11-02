@@ -59,11 +59,8 @@ public:
 	enum Output {
 		OUTPUT_LIVE = 0,
 		OUTPUT_PREVIEW,
-		OUTPUT_INPUT0,
-		OUTPUT_INPUT1,
-		OUTPUT_INPUT2,
-		OUTPUT_INPUT3,
-		NUM_OUTPUTS
+		OUTPUT_INPUT0,  // 1, 2, 3, up to 15 follow numerically.
+		NUM_OUTPUTS = 18
 	};
 
 	struct DisplayFrame {
