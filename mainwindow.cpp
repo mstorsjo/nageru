@@ -12,7 +12,6 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QShortcut>
-#include <QSignalMapper>
 #include <QSize>
 #include <QString>
 
@@ -42,16 +41,9 @@ MainWindow::MainWindow()
 
 	// Hook up the transition buttons.
 	// TODO: Make them dynamic.
-	{
-		QSignalMapper *mapper = new QSignalMapper(this);
-		mapper->setMapping(ui->transition_btn1, 0),
-		mapper->setMapping(ui->transition_btn2, 1);
-		mapper->setMapping(ui->transition_btn3, 2);
-		connect(ui->transition_btn1, &QPushButton::clicked, mapper, static_cast<void (QSignalMapper::*)()>(&QSignalMapper::map));
-		connect(ui->transition_btn2, &QPushButton::clicked, mapper, static_cast<void (QSignalMapper::*)()>(&QSignalMapper::map));
-		connect(ui->transition_btn3, &QPushButton::clicked, mapper, static_cast<void (QSignalMapper::*)()>(&QSignalMapper::map));
-		connect(mapper, static_cast<void (QSignalMapper::*)(int)>(&QSignalMapper::mapped), this, &MainWindow::transition_clicked);
-	}
+	connect(ui->transition_btn1, &QPushButton::clicked, std::bind(&MainWindow::transition_clicked, this, 0));
+	connect(ui->transition_btn2, &QPushButton::clicked, std::bind(&MainWindow::transition_clicked, this, 1));
+	connect(ui->transition_btn3, &QPushButton::clicked, std::bind(&MainWindow::transition_clicked, this, 2));
 
 	// Aiee...
 	transition_btn1 = ui->transition_btn1;
@@ -74,7 +66,6 @@ void MainWindow::mixer_created(Mixer *mixer)
 {
 	// Make the previews.
 	unsigned num_previews = mixer->get_num_channels();
-	QSignalMapper *mapper = new QSignalMapper(this);
 
 	for (unsigned i = 0; i < num_previews; ++i) {
 		Mixer::Output output = Mixer::Output(Mixer::OUTPUT_INPUT0 + i);
@@ -89,16 +80,12 @@ void MainWindow::mixer_created(Mixer *mixer)
 		previews.push_back(ui_display);
 
 		// Hook up the click.
-		mapper->setMapping(ui_display->display, i);
-		connect(ui_display->display, &GLWidget::clicked, mapper, static_cast<void (QSignalMapper::*)()>(&QSignalMapper::map));
+		connect(ui_display->display, &GLWidget::clicked, std::bind(&MainWindow::channel_clicked, this, i));
 
 		// Hook up the keyboard key.
 		QShortcut *shortcut = new QShortcut(QKeySequence(Qt::Key_1 + i), this);
-		mapper->setMapping(shortcut, i);
-		connect(shortcut, &QShortcut::activated, mapper, static_cast<void (QSignalMapper::*)()>(&QSignalMapper::map));
+		connect(shortcut, &QShortcut::activated, std::bind(&MainWindow::channel_clicked, this, i));
 	}
-
-	connect(mapper, static_cast<void (QSignalMapper::*)(int)>(&QSignalMapper::mapped), this, &MainWindow::channel_clicked);
 
 	mixer->set_audio_level_callback([this](float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs){
 		ui->vu_meter->set_level(level_lufs);
