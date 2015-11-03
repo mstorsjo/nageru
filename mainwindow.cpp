@@ -213,11 +213,15 @@ double srgb_to_linear(double x)
 
 void MainWindow::set_white_balance(int channel_number, int x, int y)
 {
-	// FIXME: This is wrong. We should really reset the white balance and then
-	// re-render, but renderToPixmap() crashes for me.
+	// Set the white balance to neutral for the grab. It's probably going to
+	// flicker a bit, but hopefully this display is not live anyway.
+	global_mixer->set_wb(Mixer::OUTPUT_INPUT0 + channel_number, 0.5, 0.5, 0.5);
+	previews[channel_number]->display->updateGL();
 	QRgb reference_color = previews[channel_number]->display->grabFrameBuffer().pixel(x, y);
+
 	double r = srgb_to_linear(qRed(reference_color) / 255.0);
 	double g = srgb_to_linear(qGreen(reference_color) / 255.0);
 	double b = srgb_to_linear(qBlue(reference_color) / 255.0);
 	global_mixer->set_wb(Mixer::OUTPUT_INPUT0 + channel_number, r, g, b);
+	previews[channel_number]->display->updateGL();
 }
