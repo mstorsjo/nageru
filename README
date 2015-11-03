@@ -15,9 +15,9 @@ Features (those marked with * are still in progress or not started yet):
    fixed EQ (*), level meters conforming to EBU R128.
 
  - Theme engine encapsulating the design demands of each individual
-   event; Lua code is responsible for setting up the pixel proessing
-   pipelines causing transitions etc., so that the visual look is consistent
-   between operators.
+   event; Lua code is responsible for setting up the pixel processing
+   pipelines, running transitions etc., so that the visual look is
+   consistent between operators.
 
 [1] For reference, that is: Core i7 4600U (dualcore 2.10GHz, clocks down
 to 800 MHz after 30 seconds due to thermal constraints), Intel HD Graphics
