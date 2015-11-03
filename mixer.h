@@ -121,6 +121,11 @@ public:
 		return theme->get_supports_set_wb(channel);
 	}
 
+	void set_wb(unsigned channel, double r, double g, double b) const
+	{
+		theme->set_wb(channel, r, g, b);
+	}
+
 private:
 	void bm_frame(unsigned card_index, uint16_t timecode,
 		FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,

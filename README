@@ -7,7 +7,7 @@ Features (those marked with * are still in progress or not started yet):
    on my Thinkpad X240[1]); almost all pixel processing is done on the GPU.
 
  - High output quality; Lanczos3 scaling, subpixel precision everywhere,
-   white balance adjustment (*), mix of 16- and 32-bit floating point
+   white balance adjustment, mix of 16- and 32-bit floating point
    for intermediate calculations, dithered output.
 
  - Proper sound support: Syncing of multiple unrelated sources through

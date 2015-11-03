@@ -43,6 +43,8 @@ int main(int argc, char *argv[])
 	mainWindow.resize(QSize(1500, 685));
 	mainWindow.show();
 
+	app.installEventFilter(&mainWindow);  // For white balance color picking.
+
 	int rc = app.exec();
 	global_mixer->quit();
 	delete global_mixer;

@@ -249,6 +249,24 @@ int Effect_set_int(lua_State *L)
 	return 0;
 }
 
+int Effect_set_vec3(lua_State *L)
+{
+	assert(lua_gettop(L) == 5);
+	Effect *effect = (Effect *)get_effect(L, 1);
+	size_t len;
+	const char* cstr = lua_tolstring(L, 2, &len);
+	std::string key(cstr, len);
+	float v[3];
+	v[0] = luaL_checknumber(L, 3);
+	v[1] = luaL_checknumber(L, 4);
+	v[2] = luaL_checknumber(L, 5);
+	if (!effect->set_vec3(key, v)) {
+		luaL_error(L, "Effect refused set_vec3(\"%s\", %f, %f, %f) (invalid key?)", cstr,
+			v[0], v[1], v[2]);
+	}
+	return 0;
+}
+
 int Effect_set_vec4(lua_State *L)
 {
 	assert(lua_gettop(L) == 6);
@@ -285,6 +303,7 @@ const luaL_Reg WhiteBalanceEffect_funcs[] = {
 	{ "new", WhiteBalanceEffect_new },
 	{ "set_float", Effect_set_float },
 	{ "set_int", Effect_set_int },
+	{ "set_vec3", Effect_set_vec3 },
 	{ "set_vec4", Effect_set_vec4 },
 	{ NULL, NULL }
 };
@@ -293,6 +312,7 @@ const luaL_Reg ResampleEffect_funcs[] = {
 	{ "new", ResampleEffect_new },
 	{ "set_float", Effect_set_float },
 	{ "set_int", Effect_set_int },
+	{ "set_vec3", Effect_set_vec3 },
 	{ "set_vec4", Effect_set_vec4 },
 	{ NULL, NULL }
 };
@@ -301,6 +321,7 @@ const luaL_Reg PaddingEffect_funcs[] = {
 	{ "new", PaddingEffect_new },
 	{ "set_float", Effect_set_float },
 	{ "set_int", Effect_set_int },
+	{ "set_vec3", Effect_set_vec3 },
 	{ "set_vec4", Effect_set_vec4 },
 	{ NULL, NULL }
 };
@@ -309,6 +330,7 @@ const luaL_Reg IntegralPaddingEffect_funcs[] = {
 	{ "new", IntegralPaddingEffect_new },
 	{ "set_float", Effect_set_float },
 	{ "set_int", Effect_set_int },
+	{ "set_vec3", Effect_set_vec3 },
 	{ "set_vec4", Effect_set_vec4 },
 	{ NULL, NULL }
 };
@@ -317,6 +339,7 @@ const luaL_Reg OverlayEffect_funcs[] = {
 	{ "new", OverlayEffect_new },
 	{ "set_float", Effect_set_float },
 	{ "set_int", Effect_set_int },
+	{ "set_vec3", Effect_set_vec3 },
 	{ "set_vec4", Effect_set_vec4 },
 	{ NULL, NULL }
 };
@@ -325,6 +348,7 @@ const luaL_Reg ResizeEffect_funcs[] = {
 	{ "new", ResizeEffect_new },
 	{ "set_float", Effect_set_float },
 	{ "set_int", Effect_set_int },
+	{ "set_vec3", Effect_set_vec3 },
 	{ "set_vec4", Effect_set_vec4 },
 	{ NULL, NULL }
 };
@@ -333,6 +357,7 @@ const luaL_Reg MixEffect_funcs[] = {
 	{ "new", MixEffect_new },
 	{ "set_float", Effect_set_float },
 	{ "set_int", Effect_set_int },
+	{ "set_vec3", Effect_set_vec3 },
 	{ "set_vec4", Effect_set_vec4 },
 	{ NULL, NULL }
 };
@@ -499,6 +524,22 @@ bool Theme::get_supports_set_wb(unsigned channel)
 	lua_pop(L, 1);
 	assert(lua_gettop(L) == 0);
 	return ret;
+}
+
+void Theme::set_wb(unsigned channel, double r, double g, double b)
+{
+	unique_lock<mutex> lock(m);
+	lua_getglobal(L, "set_wb");
+	lua_pushnumber(L, channel);
+	lua_pushnumber(L, r);
+	lua_pushnumber(L, g);
+	lua_pushnumber(L, b);
+	if (lua_pcall(L, 4, 0, 0) != 0) {
+		fprintf(stderr, "error running function `set_wb': %s\n", lua_tostring(L, -1));
+		exit(1);
+	}
+
+	assert(lua_gettop(L) == 0);
 }
 
 std::vector<std::string> Theme::get_transition_names(float t)

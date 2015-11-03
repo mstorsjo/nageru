@@ -74,7 +74,6 @@ void MainWindow::mixer_created(Mixer *mixer)
 		Ui::Display *ui_display = new Ui::Display;
 		ui_display->setupUi(preview);
 		ui_display->label->setText(mixer->get_channel_name(output).c_str());
-		ui_display->wb_button->setVisible(mixer->get_supports_set_wb(output));
 		ui_display->display->set_output(output);
 		ui->preview_displays->insertWidget(previews.size(), preview, 1);
 		previews.push_back(ui_display);
@@ -85,6 +84,10 @@ void MainWindow::mixer_created(Mixer *mixer)
 		// Hook up the keyboard key.
 		QShortcut *shortcut = new QShortcut(QKeySequence(Qt::Key_1 + i), this);
 		connect(shortcut, &QShortcut::activated, std::bind(&MainWindow::channel_clicked, this, i));
+
+		// Hook up the white balance button (irrelevant if invisible).
+		ui_display->wb_button->setVisible(mixer->get_supports_set_wb(output));
+		connect(ui_display->wb_button, &QPushButton::clicked, std::bind(&MainWindow::wb_button_clicked, this, i));
 	}
 
 	mixer->set_audio_level_callback([this](float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs){
@@ -163,5 +166,58 @@ void MainWindow::transition_clicked(int transition_number)
 
 void MainWindow::channel_clicked(int channel_number)
 {
-	global_mixer->channel_clicked(channel_number);
+	if (current_wb_pick_display == channel_number) {
+		// The picking was already done from eventFilter(), since we don't get
+		// the mouse pointer here.
+	} else {
+		global_mixer->channel_clicked(channel_number);
+	}
+}
+
+void MainWindow::wb_button_clicked(int channel_number)
+{
+	current_wb_pick_display = channel_number;
+	QApplication::setOverrideCursor(Qt::CrossCursor);
+}
+
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+	if (current_wb_pick_display != -1 &&
+	    event->type() == QEvent::MouseButtonRelease &&
+	    watched->isWidgetType()) {
+		QApplication::restoreOverrideCursor();
+		if (watched == previews[current_wb_pick_display]->display) {
+			const QMouseEvent *mouse_event = (QMouseEvent *)event;
+			set_white_balance(current_wb_pick_display, mouse_event->x(), mouse_event->y());
+		} else {
+			// The user clicked on something else, give up.
+			// (The click goes through, which might not be ideal, but, yes.)
+			current_wb_pick_display = -1;
+		}
+	}
+	return false;
+}
+
+namespace {
+
+double srgb_to_linear(double x)
+{
+	if (x < 0.04045) {
+		return x / 12.92;
+	} else {
+		return pow((x + 0.055) / 1.055, 2.4);
+	}
+}
+
+}  // namespace
+
+void MainWindow::set_white_balance(int channel_number, int x, int y)
+{
+	// FIXME: This is wrong. We should really reset the white balance and then
+	// re-render, but renderToPixmap() crashes for me.
+	QRgb reference_color = previews[channel_number]->display->grabFrameBuffer().pixel(x, y);
+	double r = srgb_to_linear(qRed(reference_color) / 255.0);
+	double g = srgb_to_linear(qGreen(reference_color) / 255.0);
+	double b = srgb_to_linear(qBlue(reference_color) / 255.0);
+	global_mixer->set_wb(Mixer::OUTPUT_INPUT0 + channel_number, r, g, b);
 }

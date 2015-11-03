@@ -28,13 +28,18 @@ public:
 public slots:
 	void transition_clicked(int transition_number);
 	void channel_clicked(int channel_number);
+	void wb_button_clicked(int channel_number);
 	void set_transition_names(std::vector<std::string> transition_names);
 	void relayout();
 
 private:
+	bool eventFilter(QObject *watched, QEvent *event) override;
+	void set_white_balance(int channel_number, int x, int y);
+
 	Ui::MainWindow *ui;
 	QPushButton *transition_btn1, *transition_btn2, *transition_btn3;
 	std::vector<Ui::Display *> previews;
+	int current_wb_pick_display = -1;
 };
 
 extern MainWindow *global_mainwindow;

@@ -15,6 +15,9 @@ local zoom_poi = 0   -- which input to zoom in on
 local fade_src = 0.0
 local fade_dst = 1.0
 
+local input0_neutral_color = {0.5, 0.5, 0.5}
+local input1_neutral_color = {0.5, 0.5, 0.5}
+
 local live_signal_num = 0
 local preview_signal_num = 1
 
@@ -23,15 +26,17 @@ function make_sbs_chain(hq)
 	local chain = EffectChain.new(16, 9)
 	local input0 = chain:add_live_input(true)
 	input0:connect_signal(0)
+	local input0_wb_effect = chain:add_effect(WhiteBalanceEffect.new())
 	local input1 = chain:add_live_input(true)
 	input1:connect_signal(1)
+	local input1_wb_effect = chain:add_effect(WhiteBalanceEffect.new())
 
 	local resample_effect = nil
 	local resize_effect = nil
 	if (hq) then
-		resample_effect = chain:add_effect(ResampleEffect.new(), input0)
+		resample_effect = chain:add_effect(ResampleEffect.new(), input0_wb_effect)
 	else
-		resize_effect = chain:add_effect(ResizeEffect.new(), input0)
+		resize_effect = chain:add_effect(ResizeEffect.new(), input0_wb_effect)
 	end
 
 	local padding_effect = chain:add_effect(IntegralPaddingEffect.new())
@@ -40,14 +45,10 @@ function make_sbs_chain(hq)
 	local resample2_effect = nil
 	local resize2_effect = nil
 	if (hq) then
-		resample2_effect = chain:add_effect(ResampleEffect.new(), input1)
+		resample2_effect = chain:add_effect(ResampleEffect.new(), input1_wb_effect)
 	else
-		resize2_effect = chain:add_effect(ResizeEffect.new(), input1)
+		resize2_effect = chain:add_effect(ResizeEffect.new(), input1_wb_effect)
 	end
-	-- Effect *saturation_effect = chain->add_effect(new SaturationEffect())
-	-- CHECK(saturation_effect->set_float("saturation", 0.3f))
-	local wb_effect = chain:add_effect(WhiteBalanceEffect.new())
-	wb_effect:set_float("output_color_temperature", 3500.0)
 	local padding2_effect = chain:add_effect(IntegralPaddingEffect.new())
 
 	chain:add_effect(OverlayEffect.new(), padding_effect, padding2_effect)
@@ -57,12 +58,14 @@ function make_sbs_chain(hq)
 		chain = chain,
 		input0 = {
 			input = input0,
+			white_balance_effect = input0_wb_effect,
 			resample_effect = resample_effect,
 			resize_effect = resize_effect,
 			padding_effect = padding_effect
 		},
 		input1 = {
 			input = input1,
+			white_balance_effect = input1_wb_effect,
 			resample_effect = resample2_effect,
 			resize_effect = resize2_effect,
 			padding_effect = padding2_effect
@@ -76,22 +79,26 @@ local main_chain_lq = make_sbs_chain(false)
 -- A chain to fade between two inputs (live chain only)
 local fade_chain_hq = EffectChain.new(16, 9)
 local fade_chain_hq_input0 = fade_chain_hq:add_live_input(true)
+local fade_chain_hq_wb0_effect = fade_chain_hq:add_effect(WhiteBalanceEffect.new())
 local fade_chain_hq_input1 = fade_chain_hq:add_live_input(true)
+local fade_chain_hq_wb1_effect = fade_chain_hq:add_effect(WhiteBalanceEffect.new())
 fade_chain_hq_input0:connect_signal(0)
 fade_chain_hq_input1:connect_signal(1)
-local fade_chain_mix_effect = fade_chain_hq:add_effect(MixEffect.new(), fade_chain_hq_input0, fade_chain_hq_input1)
+local fade_chain_mix_effect = fade_chain_hq:add_effect(MixEffect.new(), fade_chain_hq_wb0_effect, fade_chain_hq_wb1_effect)
 fade_chain_hq:finalize(true)
 
 -- A chain to show a single input on screen (HQ version).
 local simple_chain_hq = EffectChain.new(16, 9)
 local simple_chain_hq_input = simple_chain_hq:add_live_input(true)
 simple_chain_hq_input:connect_signal(0)  -- First input card. Can be changed whenever you want.
+local simple_chain_hq_wb_effect = simple_chain_hq:add_effect(WhiteBalanceEffect.new())
 simple_chain_hq:finalize(true)
 
 -- A chain to show a single input on screen (LQ version).
 local simple_chain_lq = EffectChain.new(16, 9)
 local simple_chain_lq_input = simple_chain_lq:add_live_input(true)
 simple_chain_lq_input:connect_signal(0)  -- First input card. Can be changed whenever you want.
+local simple_chain_lq_wb_effect = simple_chain_lq:add_effect(WhiteBalanceEffect.new())
 simple_chain_lq:finalize(false)
 
 -- Returns the number of outputs in addition to the live (0) and preview (1).
@@ -116,6 +123,16 @@ end
 -- Called only once for each channel, at the start of the program.
 function supports_set_wb(channel)
 	return channel == 2 or channel == 3
+end
+
+-- Gets called with a new gray point when the white balance is changing.
+-- The color is in linear light (not sRGB gamma).
+function set_wb(channel, red, green, blue)
+	if channel == 2 then
+		input0_neutral_color = { red, green, blue }
+	elseif channel == 3 then
+		input1_neutral_color = { red, green, blue }
+	end
 end
 
 function finish_transitions(t)
@@ -269,12 +286,19 @@ function get_chain(num, t, width, height)
 		if live_signal_num == 0 or live_signal_num == 1 then  -- Plain inputs.
 			prepare = function()
 				simple_chain_hq_input:connect_signal(live_signal_num)
+				if live_signal_num == 0 then
+					set_neutral_color(simple_chain_hq_wb_effect, input0_neutral_color)
+				else
+					set_neutral_color(simple_chain_hq_wb_effect, input1_neutral_color)
+				end
 			end
 			return simple_chain_hq, prepare
 		elseif live_signal_num == 3 then  -- Fade.
 			prepare = function()
 				fade_chain_hq_input0:connect_signal(0)
+				set_neutral_color(fade_chain_hq_wb0_effect, input0_neutral_color)
 				fade_chain_hq_input1:connect_signal(1)
+				set_neutral_color(fade_chain_hq_wb1_effect, input1_neutral_color)
 				local tt = (t - transition_start) / (transition_end - transition_start)
 				if tt < 0.0 then
 					tt = 0.0
@@ -300,6 +324,7 @@ function get_chain(num, t, width, height)
 			-- Special case: Show only the single image on screen.
 			prepare = function()
 				simple_chain_hq_input:connect_signal(0)
+				set_neutral_color(simple_chain_hq_wb_effect, input0_neutral_color)
 			end
 			return simple_chain_hq, prepare
 		end
@@ -323,12 +348,14 @@ function get_chain(num, t, width, height)
 	if num == 2 then
 		prepare = function()
 			simple_chain_lq_input:connect_signal(0)
+			set_neutral_color(simple_chain_lq_wb_effect, input0_neutral_color)
 		end
 		return simple_chain_lq, prepare
 	end
 	if num == 3 then
 		prepare = function()
 			simple_chain_lq_input:connect_signal(1)
+			set_neutral_color(simple_chain_lq_wb_effect, input1_neutral_color)
 		end
 		return simple_chain_lq, prepare
 	end
@@ -434,6 +461,8 @@ end
 function prepare_sbs_chain(chain, t, screen_width, screen_height)
 	chain.input0.input:connect_signal(0)
 	chain.input1.input:connect_signal(1)
+	set_neutral_color(chain.input0.white_balance_effect, input0_neutral_color)
+	set_neutral_color(chain.input1.white_balance_effect, input1_neutral_color)
 
 	-- First input is positioned (16,48) from top-left.
 	local width0 = round(848 * screen_width/1280.0)
@@ -486,4 +515,8 @@ function prepare_sbs_chain(chain, t, screen_width, screen_height)
 	right1 = right1 * scale0 + tx0
 	place_rectangle(chain.input0.resample_effect, chain.input0.resize_effect, chain.input0.padding_effect, left0, top0, right0, bottom0, screen_width, screen_height, 1280, 720)
 	place_rectangle(chain.input1.resample_effect, chain.input1.resize_effect, chain.input1.padding_effect, left1, top1, right1, bottom1, screen_width, screen_height, 1280, 720)
+end
+
+function set_neutral_color(effect, color)
+	effect:set_vec3("neutral_color", color[1], color[2], color[3])
 end

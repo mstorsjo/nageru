@@ -48,6 +48,7 @@ public:
 	int get_num_channels() { return num_channels; }
 	std::string get_channel_name(unsigned channel);
 	bool get_supports_set_wb(unsigned channel);
+	void set_wb(unsigned channel, double r, double g, double b);
 
 	std::vector<std::string> get_transition_names(float t);
 
