@@ -12,8 +12,8 @@ local transition_end = -1.0
 local zoom_src = 0.0
 local zoom_dst = 1.0
 local zoom_poi = 0   -- which input to zoom in on
-local fade_src = 0.0
-local fade_dst = 1.0
+local fade_src_signal = 0
+local fade_dst_signal = 0
 
 local input0_neutral_color = {0.5, 0.5, 0.5}
 local input1_neutral_color = {0.5, 0.5, 0.5}
@@ -151,11 +151,8 @@ function finish_transitions(t)
 	end
 
 	-- If live is fade but de-facto single, make it so.
-	if live_signal_num == FADE_SIGNAL_NUM and t >= transition_end and fade_dst == 1.0 then
-		live_signal_num = INPUT0_SIGNAL_NUM
-	end
-	if live_signal_num == FADE_SIGNAL_NUM and t >= transition_end and fade_dst == 0.0 then
-		live_signal_num = INPUT1_SIGNAL_NUM
+	if live_signal_num == FADE_SIGNAL_NUM and t >= transition_end then
+		live_signal_num = fade_dst_signal
 	end
 end
 
@@ -252,19 +249,13 @@ function transition_clicked(num, t)
 		finish_transitions(t)
 
 		-- Fade.
-		if live_signal_num == INPUT0_SIGNAL_NUM and preview_signal_num == INPUT1_SIGNAL_NUM then
+		if (live_signal_num == INPUT0_SIGNAL_NUM and preview_signal_num == INPUT1_SIGNAL_NUM) or
+		   (live_signal_num == INPUT1_SIGNAL_NUM and preview_signal_num == INPUT0_SIGNAL_NUM) then
 			transition_start = t
 			transition_end = t + 1.0
-			fade_src = 1.0
-			fade_dst = 0.0
-			preview_signal_num = 0
-			live_signal_num = FADE_SIGNAL_NUM
-		elseif live_signal_num == INPUT1_SIGNAL_NUM and preview_signal_num == INPUT0_SIGNAL_NUM then
-			transition_start = t
-			transition_end = t + 1.0
-			fade_src = 0.0
-			fade_dst = 1.0
-			preview_signal_num = 1
+			fade_src_signal = live_signal_num
+			fade_dst_signal = preview_signal_num
+			preview_signal_num = live_signal_num
 			live_signal_num = FADE_SIGNAL_NUM
 		else
 			-- Fades involving SBS are ignored (we have no chain for it).
@@ -296,24 +287,18 @@ end
 -- if and only if num==0.
 function get_chain(num, t, width, height)
 	if num == 0 then  -- Live.
-		if live_signal_num == INPUT0_SIGNAL_NUM then  -- Plain input.
+		if live_signal_num == INPUT0_SIGNAL_NUM or live_signal_num == INPUT1_SIGNAL_NUM then  -- Plain input.
 			prepare = function()
-				simple_chain_hq_input:connect_signal(INPUT0_SIGNAL_NUM)
-				set_neutral_color(simple_chain_hq_wb_effect, input0_neutral_color)
-			end
-			return simple_chain_hq, prepare
-		elseif live_signal_num == INPUT1_SIGNAL_NUM then -- Plain input.
-			prepare = function()
-				simple_chain_hq_input:connect_signal(INPUT1_SIGNAL_NUM)
-				set_neutral_color(simple_chain_hq_wb_effect, input1_neutral_color)
+				simple_chain_hq_input:connect_signal(live_signal_num)
+				set_neutral_color_from_signal(simple_chain_hq_wb_effect, live_signal_num)
 			end
 			return simple_chain_hq, prepare
 		elseif live_signal_num == FADE_SIGNAL_NUM then  -- Fade.
 			prepare = function()
-				fade_chain_hq_input0:connect_signal(0)
-				set_neutral_color(fade_chain_hq_wb0_effect, input0_neutral_color)
-				fade_chain_hq_input1:connect_signal(1)
-				set_neutral_color(fade_chain_hq_wb1_effect, input1_neutral_color)
+				fade_chain_hq_input0:connect_signal(fade_src_signal)
+				set_neutral_color_from_signal(fade_chain_hq_wb0_effect, fade_src_signal)
+				fade_chain_hq_input1:connect_signal(fade_dst_signal)
+				set_neutral_color_from_signal(fade_chain_hq_wb1_effect, fade_dst_signal)
 				local tt = (t - transition_start) / (transition_end - transition_start)
 				if tt < 0.0 then
 					tt = 0.0
@@ -321,15 +306,13 @@ function get_chain(num, t, width, height)
 					tt = 1.0
 				end
 
-				tt = fade_src + tt * (fade_dst - fade_src)
-
 				-- Make the fade look maybe a tad more natural, by pumping it
 				-- through a sigmoid function.
 				tt = 10.0 * tt - 5.0
 				tt = 1.0 / (1.0 + math.exp(-tt))
 
-				fade_chain_mix_effect:set_float("strength_first", tt)
-				fade_chain_mix_effect:set_float("strength_second", 1.0 - tt)
+				fade_chain_mix_effect:set_float("strength_first", 1.0 - tt)
+				fade_chain_mix_effect:set_float("strength_second", tt)
 			end
 			return fade_chain_hq, prepare
 		end
@@ -499,7 +482,7 @@ function prepare_sbs_chain(chain, t, screen_width, screen_height)
 
 	-- Interpolate between the fullscreen and side-by-side views.
 	local scale0, tx0, tx0
-	if zoom_poi == 0 then
+	if zoom_poi == INPUT0_SIGNAL_NUM then
 		local new_left0 = lerp(left0, 0, t)
 		local new_right0 = lerp(right0, screen_width, t)
 		local new_top0 = lerp(top0, 0, t)
@@ -534,4 +517,12 @@ end
 
 function set_neutral_color(effect, color)
 	effect:set_vec3("neutral_color", color[1], color[2], color[3])
+end
+
+function set_neutral_color_from_signal(effect, signal)
+	if signal == INPUT0_SIGNAL_NUM then
+		set_neutral_color(effect, input0_neutral_color)
+	else
+		set_neutral_color(effect, input1_neutral_color)
+	end
 end
