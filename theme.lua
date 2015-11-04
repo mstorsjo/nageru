@@ -21,6 +21,15 @@ local input1_neutral_color = {0.5, 0.5, 0.5}
 local live_signal_num = 0
 local preview_signal_num = 1
 
+-- Valid values for live_signal_num and preview_signal_num.
+local INPUT0_SIGNAL_NUM = 0
+local INPUT1_SIGNAL_NUM = 1
+local SBS_SIGNAL_NUM = 2
+
+-- A “fake” signal number that signifies that we are fading from one input
+-- to the next.
+local FADE_SIGNAL_NUM = 3
+
 -- The main live chain.
 function make_sbs_chain(hq)
 	local chain = EffectChain.new(16, 9)
@@ -114,7 +123,7 @@ function channel_name(channel)
 		return "Input 1"
 	elseif channel == 3 then
 		return "Input 2"
-	else
+	elseif channel == 4 then
 		return "Side-by-side"
 	end
 end
@@ -136,17 +145,17 @@ function set_wb(channel, red, green, blue)
 end
 
 function finish_transitions(t)
-	-- If live is 2 (SBS) but de-facto single, make it so.
-	if live_signal_num == 2 and t >= transition_end and zoom_dst == 1.0 then
+	-- If live is SBS but de-facto single, make it so.
+	if live_signal_num == SBS_SIGNAL_NUM and t >= transition_end and zoom_dst == 1.0 then
 		live_signal_num = zoom_poi
 	end
 
-	-- If live is 3 (fade) but de-facto single, make it so.
-	if live_signal_num == 3 and t >= transition_end and fade_dst == 1.0 then
-		live_signal_num = 0
+	-- If live is fade but de-facto single, make it so.
+	if live_signal_num == FADE_SIGNAL_NUM and t >= transition_end and fade_dst == 1.0 then
+		live_signal_num = INPUT0_SIGNAL_NUM
 	end
-	if live_signal_num == 3 and t >= transition_end and fade_dst == 0.0 then
-		live_signal_num = 1
+	if live_signal_num == FADE_SIGNAL_NUM and t >= transition_end and fade_dst == 0.0 then
+		live_signal_num = INPUT1_SIGNAL_NUM
 	end
 end
 
@@ -158,20 +167,22 @@ function get_transitions(t)
 		return {}
 	end
 
-	if live_signal_num == 2 and t >= transition_start and t <= transition_end then
+	if live_signal_num == SBS_SIGNAL_NUM and t >= transition_start and t <= transition_end then
 		-- Zoom in progress.
 		return {"Cut"}
 	end
 
-	if (live_signal_num == 0 and preview_signal_num == 1) or
-	   (live_signal_num == 1 and preview_signal_num == 0) then
+	if (live_signal_num == INPUT0_SIGNAL_NUM and preview_signal_num == INPUT1_SIGNAL_NUM) or
+	   (live_signal_num == INPUT1_SIGNAL_NUM and preview_signal_num == INPUT0_SIGNAL_NUM) then
 		return {"Cut", "", "Fade"}
 	end
 
 	-- Various zooms.
-	if live_signal_num == 2 and (preview_signal_num == 0 or preview_signal_num == 1) then
+	if live_signal_num == SBS_SIGNAL_NUM and
+	   (preview_signal_num == INPUT0_SIGNAL_NUM or preview_signal_num == INPUT1_SIGNAL_NUM) then
 		return {"Cut", "Zoom in"}
-	elseif (live_signal_num == 0 or live_signal_num == 1) and preview_signal_num == 2 then
+	elseif (live_signal_num == INPUT0_SIGNAL_NUM or live_signal_num == INPUT1_SIGNAL_NUM) and
+	       preview_signal_num == SBS_SIGNAL_NUM then
 		return {"Cut", "Zoom out"}
 	end
 
@@ -181,7 +192,7 @@ end
 function transition_clicked(num, t)
 	if num == 0 then
 		-- Cut.
-		if live_signal_num == 3 then
+		if live_signal_num == FADE_SIGNAL_NUM then
 			-- Ongoing fade; finish it immediately.
 			finish_transitions(transition_end)
 		end
@@ -190,7 +201,7 @@ function transition_clicked(num, t)
 		live_signal_num = preview_signal_num
 		preview_signal_num = temp
 
-		if live_signal_num == 2 then
+		if live_signal_num == SBS_SIGNAL_NUM then
 			-- Just cut to SBS, we need to reset any zooms.
 			zoom_src = 1.0
 			zoom_dst = 0.0
@@ -207,8 +218,8 @@ function transition_clicked(num, t)
 			return
 		end
 
-		if (live_signal_num == 0 and preview_signal_num == 1) or
-		   (live_signal_num == 1 and preview_signal_num == 0) then
+		if (live_signal_num == INPUT0_SIGNAL_NUM and preview_signal_num == INPUT1_SIGNAL_NUM) or
+		   (live_signal_num == INPUT1_SIGNAL_NUM and preview_signal_num == INPUT0_SIGNAL_NUM) then
 			-- We can't zoom between these. Just make a cut.
 			io.write("Cutting from " .. live_signal_num .. " to " .. live_signal_num .. "\n")
 			local temp = live_signal_num
@@ -217,15 +228,17 @@ function transition_clicked(num, t)
 			return
 		end
 
-		if live_signal_num == 2 and (preview_signal_num == 0 or preview_signal_num == 1) then
+		if live_signal_num == SBS_SIGNAL_NUM and
+		   (preview_signal_num == INPUT0_SIGNAL_NUM or preview_signal_num == INPUT1_SIGNAL_NUM) then
 			-- Zoom in from SBS to single.
 			transition_start = t
 			transition_end = t + 1.0
 			zoom_src = 0.0
 			zoom_dst = 1.0
 			zoom_poi = preview_signal_num
-			preview_signal_num = 2
-		elseif (live_signal_num == 0 or live_signal_num == 1) and preview_signal_num == 2 then
+			preview_signal_num = SBS_SIGNAL_NUM
+		elseif (live_signal_num == INPUT0_SIGNAL_NUM or live_signal_num == INPUT1_SIGNAL_NUM) and
+		       preview_signal_num == SBS_SIGNAL_NUM then
 			-- Zoom out from single to SBS.
 			transition_start = t
 			transition_end = t + 1.0
@@ -233,26 +246,26 @@ function transition_clicked(num, t)
 			zoom_dst = 0.0
 			preview_signal_num = live_signal_num
 			zoom_poi = live_signal_num
-			live_signal_num = 2
+			live_signal_num = SBS_SIGNAL_NUM
 		end
 	elseif num == 2 then
 		finish_transitions(t)
 
 		-- Fade.
-		if live_signal_num == 0 and preview_signal_num == 1 then
+		if live_signal_num == INPUT0_SIGNAL_NUM and preview_signal_num == INPUT1_SIGNAL_NUM then
 			transition_start = t
 			transition_end = t + 1.0
 			fade_src = 1.0
 			fade_dst = 0.0
 			preview_signal_num = 0
-			live_signal_num = 3
-		elseif live_signal_num == 1 and preview_signal_num == 0 then
+			live_signal_num = FADE_SIGNAL_NUM
+		elseif live_signal_num == INPUT1_SIGNAL_NUM and preview_signal_num == INPUT0_SIGNAL_NUM then
 			transition_start = t
 			transition_end = t + 1.0
 			fade_src = 0.0
 			fade_dst = 1.0
 			preview_signal_num = 1
-			live_signal_num = 3
+			live_signal_num = FADE_SIGNAL_NUM
 		else
 			-- Fades involving SBS are ignored (we have no chain for it).
 		end
@@ -283,17 +296,19 @@ end
 -- if and only if num==0.
 function get_chain(num, t, width, height)
 	if num == 0 then  -- Live.
-		if live_signal_num == 0 or live_signal_num == 1 then  -- Plain inputs.
+		if live_signal_num == INPUT0_SIGNAL_NUM then  -- Plain input.
 			prepare = function()
-				simple_chain_hq_input:connect_signal(live_signal_num)
-				if live_signal_num == 0 then
-					set_neutral_color(simple_chain_hq_wb_effect, input0_neutral_color)
-				else
-					set_neutral_color(simple_chain_hq_wb_effect, input1_neutral_color)
-				end
+				simple_chain_hq_input:connect_signal(INPUT0_SIGNAL_NUM)
+				set_neutral_color(simple_chain_hq_wb_effect, input0_neutral_color)
 			end
 			return simple_chain_hq, prepare
-		elseif live_signal_num == 3 then  -- Fade.
+		elseif live_signal_num == INPUT1_SIGNAL_NUM then -- Plain input.
+			prepare = function()
+				simple_chain_hq_input:connect_signal(INPUT1_SIGNAL_NUM)
+				set_neutral_color(simple_chain_hq_wb_effect, input1_neutral_color)
+			end
+			return simple_chain_hq, prepare
+		elseif live_signal_num == FADE_SIGNAL_NUM then  -- Fade.
 			prepare = function()
 				fade_chain_hq_input0:connect_signal(0)
 				set_neutral_color(fade_chain_hq_wb0_effect, input0_neutral_color)
@@ -319,11 +334,11 @@ function get_chain(num, t, width, height)
 			return fade_chain_hq, prepare
 		end
 
-		-- SBS code (live_signal_num == 2).
+		-- SBS code (live_signal_num == SBS_SIGNAL_NUM).
 		if t > transition_end and zoom_dst == 1.0 then
 			-- Special case: Show only the single image on screen.
 			prepare = function()
-				simple_chain_hq_input:connect_signal(0)
+				simple_chain_hq_input:connect_signal(INPUT0_SIGNAL_NUM)
 				set_neutral_color(simple_chain_hq_wb_effect, input0_neutral_color)
 			end
 			return simple_chain_hq, prepare
@@ -345,21 +360,21 @@ function get_chain(num, t, width, height)
 	if num == 1 then  -- Preview.
 		num = preview_signal_num + 2
 	end
-	if num == 2 then
+	if num == INPUT0_SIGNAL_NUM + 2 then
 		prepare = function()
 			simple_chain_lq_input:connect_signal(0)
 			set_neutral_color(simple_chain_lq_wb_effect, input0_neutral_color)
 		end
 		return simple_chain_lq, prepare
 	end
-	if num == 3 then
+	if num == INPUT1_SIGNAL_NUM + 2 then
 		prepare = function()
 			simple_chain_lq_input:connect_signal(1)
 			set_neutral_color(simple_chain_lq_wb_effect, input1_neutral_color)
 		end
 		return simple_chain_lq, prepare
 	end
-	if num == 4 then
+	if num == SBS_SIGNAL_NUM + 2 then
 		prepare = function()
 			prepare_sbs_chain(main_chain_lq, 0.0, width, height)
 		end
