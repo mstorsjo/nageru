@@ -21,6 +21,8 @@
 #include <new>
 #include <utility>
 
+#include "image_input.h"
+
 namespace movit {
 class ResourcePool;
 }  // namespace movit
@@ -63,7 +65,8 @@ Effect *get_effect(lua_State *L, int idx)
 	    luaL_testudata(L, idx, "IntegralPaddingEffect") ||
 	    luaL_testudata(L, idx, "OverlayEffect") ||
 	    luaL_testudata(L, idx, "ResizeEffect") ||
-	    luaL_testudata(L, idx, "MixEffect")) {
+	    luaL_testudata(L, idx, "MixEffect") ||
+	    luaL_testudata(L, idx, "ImageInput")) {
 		return (Effect *)lua_touserdata(L, idx);
 	}
 	luaL_error(L, "Error: Index #%d was not an Effect type\n", idx);
@@ -74,6 +77,13 @@ bool checkbool(lua_State* L, int idx)
 {
 	luaL_checktype(L, idx, LUA_TBOOLEAN);
 	return lua_toboolean(L, idx);
+}
+
+std::string checkstdstring(lua_State *L, int index)
+{
+	size_t len;
+	const char* cstr = lua_tolstring(L, index, &len);
+	return std::string(cstr, len);
 }
 
 int EffectChain_new(lua_State* L)
@@ -102,7 +112,11 @@ int EffectChain_add_effect(lua_State* L)
 	// TODO: Better error reporting.
 	Effect *effect = get_effect(L, 2);
 	if (lua_gettop(L) == 2) {
-		chain->add_effect(effect);
+		if (effect->num_inputs() == 0) {
+			chain->add_input((Input *)effect);
+		} else {
+			chain->add_effect(effect);
+		}
 	} else {
 		vector<Effect *> inputs;
 		for (int idx = 3; idx <= lua_gettop(L); ++idx) {
@@ -179,6 +193,13 @@ int LiveInputWrapper_connect_signal(lua_State* L)
 	return 0;
 }
 
+int ImageInput_new(lua_State* L)
+{
+	assert(lua_gettop(L) == 1);
+	std::string filename = checkstdstring(L, 1);
+	return wrap_lua_object<ImageInput>(L, "ImageInput", filename);
+}
+
 int WhiteBalanceEffect_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 0);
@@ -225,12 +246,10 @@ int Effect_set_float(lua_State *L)
 {
 	assert(lua_gettop(L) == 3);
 	Effect *effect = (Effect *)get_effect(L, 1);
-	size_t len;
-	const char* cstr = lua_tolstring(L, 2, &len);
-	std::string key(cstr, len);
+	std::string key = checkstdstring(L, 2);
 	float value = luaL_checknumber(L, 3);
 	if (!effect->set_float(key, value)) {
-		luaL_error(L, "Effect refused set_float(\"%s\", %d) (invalid key?)", cstr, int(value));
+		luaL_error(L, "Effect refused set_float(\"%s\", %d) (invalid key?)", key.c_str(), int(value));
 	}
 	return 0;
 }
@@ -239,12 +258,10 @@ int Effect_set_int(lua_State *L)
 {
 	assert(lua_gettop(L) == 3);
 	Effect *effect = (Effect *)get_effect(L, 1);
-	size_t len;
-	const char* cstr = lua_tolstring(L, 2, &len);
-	std::string key(cstr, len);
+	std::string key = checkstdstring(L, 2);
 	float value = luaL_checknumber(L, 3);
 	if (!effect->set_int(key, value)) {
-		luaL_error(L, "Effect refused set_int(\"%s\", %d) (invalid key?)", cstr, int(value));
+		luaL_error(L, "Effect refused set_int(\"%s\", %d) (invalid key?)", key.c_str(), int(value));
 	}
 	return 0;
 }
@@ -253,15 +270,13 @@ int Effect_set_vec3(lua_State *L)
 {
 	assert(lua_gettop(L) == 5);
 	Effect *effect = (Effect *)get_effect(L, 1);
-	size_t len;
-	const char* cstr = lua_tolstring(L, 2, &len);
-	std::string key(cstr, len);
+	std::string key = checkstdstring(L, 2);
 	float v[3];
 	v[0] = luaL_checknumber(L, 3);
 	v[1] = luaL_checknumber(L, 4);
 	v[2] = luaL_checknumber(L, 5);
 	if (!effect->set_vec3(key, v)) {
-		luaL_error(L, "Effect refused set_vec3(\"%s\", %f, %f, %f) (invalid key?)", cstr,
+		luaL_error(L, "Effect refused set_vec3(\"%s\", %f, %f, %f) (invalid key?)", key.c_str(),
 			v[0], v[1], v[2]);
 	}
 	return 0;
@@ -271,16 +286,14 @@ int Effect_set_vec4(lua_State *L)
 {
 	assert(lua_gettop(L) == 6);
 	Effect *effect = (Effect *)get_effect(L, 1);
-	size_t len;
-	const char* cstr = lua_tolstring(L, 2, &len);
-	std::string key(cstr, len);
+	std::string key = checkstdstring(L, 2);
 	float v[4];
 	v[0] = luaL_checknumber(L, 3);
 	v[1] = luaL_checknumber(L, 4);
 	v[2] = luaL_checknumber(L, 5);
 	v[3] = luaL_checknumber(L, 6);
 	if (!effect->set_vec4(key, v)) {
-		luaL_error(L, "Effect refused set_vec4(\"%s\", %f, %f, %f, %f) (invalid key?)", cstr,
+		luaL_error(L, "Effect refused set_vec4(\"%s\", %f, %f, %f, %f) (invalid key?)", key.c_str(),
 			v[0], v[1], v[2], v[3]);
 	}
 	return 0;
@@ -296,6 +309,15 @@ const luaL_Reg EffectChain_funcs[] = {
 
 const luaL_Reg LiveInputWrapper_funcs[] = {
 	{ "connect_signal", LiveInputWrapper_connect_signal },
+	{ NULL, NULL }
+};
+
+const luaL_Reg ImageInput_funcs[] = {
+	{ "new", ImageInput_new },
+	{ "set_float", Effect_set_float },
+	{ "set_int", Effect_set_int },
+	{ "set_vec3", Effect_set_vec3 },
+	{ "set_vec4", Effect_set_vec4 },
 	{ NULL, NULL }
 };
 
@@ -414,6 +436,7 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool, unsigned num_car
 
 	register_class("EffectChain", EffectChain_funcs); 
 	register_class("LiveInputWrapper", LiveInputWrapper_funcs); 
+	register_class("ImageInput", ImageInput_funcs);
 	register_class("WhiteBalanceEffect", WhiteBalanceEffect_funcs);
 	register_class("ResampleEffect", ResampleEffect_funcs);
 	register_class("PaddingEffect", PaddingEffect_funcs);

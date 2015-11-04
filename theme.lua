@@ -25,10 +25,12 @@ local preview_signal_num = 1
 local INPUT0_SIGNAL_NUM = 0
 local INPUT1_SIGNAL_NUM = 1
 local SBS_SIGNAL_NUM = 2
+local STATIC_SIGNAL_NUM = 3
 
--- A “fake” signal number that signifies that we are fading from one input
+-- “fake” signal numbers that signifies that we are fading from one input
 -- to the next.
-local FADE_SIGNAL_NUM = 3
+local FADE_VTV_SIGNAL_NUM = 4  -- Video to/from video.
+local FADE_VTP_SIGNAL_NUM = 5  -- Video to/from static picture.
 
 -- The main live chain.
 function make_sbs_chain(hq)
@@ -86,15 +88,24 @@ local main_chain_hq = make_sbs_chain(true)
 local main_chain_lq = make_sbs_chain(false)
 
 -- A chain to fade between two inputs (live chain only)
-local fade_chain_hq = EffectChain.new(16, 9)
-local fade_chain_hq_input0 = fade_chain_hq:add_live_input(true)
-local fade_chain_hq_wb0_effect = fade_chain_hq:add_effect(WhiteBalanceEffect.new())
-local fade_chain_hq_input1 = fade_chain_hq:add_live_input(true)
-local fade_chain_hq_wb1_effect = fade_chain_hq:add_effect(WhiteBalanceEffect.new())
-fade_chain_hq_input0:connect_signal(0)
-fade_chain_hq_input1:connect_signal(1)
-local fade_chain_mix_effect = fade_chain_hq:add_effect(MixEffect.new(), fade_chain_hq_wb0_effect, fade_chain_hq_wb1_effect)
-fade_chain_hq:finalize(true)
+local fade_vtv_chain_hq = EffectChain.new(16, 9)
+local fade_vtv_chain_hq_input0 = fade_vtv_chain_hq:add_live_input(true)
+local fade_vtv_chain_hq_wb0_effect = fade_vtv_chain_hq:add_effect(WhiteBalanceEffect.new())
+local fade_vtv_chain_hq_input1 = fade_vtv_chain_hq:add_live_input(true)
+local fade_vtv_chain_hq_wb1_effect = fade_vtv_chain_hq:add_effect(WhiteBalanceEffect.new())
+fade_vtv_chain_hq_input0:connect_signal(0)
+fade_vtv_chain_hq_input1:connect_signal(1)
+local fade_vtv_chain_mix_effect = fade_vtv_chain_hq:add_effect(MixEffect.new(), fade_vtv_chain_hq_wb0_effect, fade_vtv_chain_hq_wb1_effect)
+fade_vtv_chain_hq:finalize(true)
+
+-- A chain to fade between an inputs and a picture (live chain only)
+local fade_vtp_chain_hq = EffectChain.new(16, 9)
+local fade_vtp_chain_hq_input0 = fade_vtp_chain_hq:add_live_input(true)
+local fade_vtp_chain_hq_wb0_effect = fade_vtp_chain_hq:add_effect(WhiteBalanceEffect.new())
+local fade_vtp_chain_hq_input1 = fade_vtp_chain_hq:add_effect(ImageInput.new("bg.jpeg"))
+fade_vtp_chain_hq_input0:connect_signal(0)
+local fade_vtp_chain_mix_effect = fade_vtp_chain_hq:add_effect(MixEffect.new(), fade_vtp_chain_hq_wb0_effect, fade_vtp_chain_hq_input1)
+fade_vtp_chain_hq:finalize(true)
 
 -- A chain to show a single input on screen (HQ version).
 local simple_chain_hq = EffectChain.new(16, 9)
@@ -110,10 +121,20 @@ simple_chain_lq_input:connect_signal(0)  -- First input card. Can be changed whe
 local simple_chain_lq_wb_effect = simple_chain_lq:add_effect(WhiteBalanceEffect.new())
 simple_chain_lq:finalize(false)
 
+-- A chain to show a single static picture on screen (HQ version).
+local static_chain_hq = EffectChain.new(16, 9)
+local static_chain_hq_input = static_chain_hq:add_effect(ImageInput.new("bg.jpeg"))
+static_chain_hq:finalize(true)
+
+-- A chain to show a single static picture on screen (LQ version).
+local static_chain_lq = EffectChain.new(16, 9)
+local static_chain_lq_input = static_chain_lq:add_effect(ImageInput.new("bg.jpeg"))
+static_chain_lq:finalize(false)
+
 -- Returns the number of outputs in addition to the live (0) and preview (1).
 -- Called only once, at the start of the program.
 function num_channels()
-	return 3
+	return 4
 end
 
 -- Returns the name for each additional channel (starting from 2).
@@ -125,6 +146,8 @@ function channel_name(channel)
 		return "Input 2"
 	elseif channel == 4 then
 		return "Side-by-side"
+	elseif channel == 5 then
+		return "Static picture"
 	end
 end
 
@@ -151,7 +174,7 @@ function finish_transitions(t)
 	end
 
 	-- If live is fade but de-facto single, make it so.
-	if live_signal_num == FADE_SIGNAL_NUM and t >= transition_end then
+	if (live_signal_num == FADE_VTV_SIGNAL_NUM or live_signal_num == FADE_VTP_SIGNAL_NUM) and t >= transition_end then
 		live_signal_num = fade_dst_signal
 	end
 end
@@ -169,8 +192,12 @@ function get_transitions(t)
 		return {"Cut"}
 	end
 
-	if (live_signal_num == INPUT0_SIGNAL_NUM and preview_signal_num == INPUT1_SIGNAL_NUM) or
-	   (live_signal_num == INPUT1_SIGNAL_NUM and preview_signal_num == INPUT0_SIGNAL_NUM) then
+	if (live_signal_num == INPUT0_SIGNAL_NUM or
+	    live_signal_num == INPUT1_SIGNAL_NUM or
+	    live_signal_num == STATIC_SIGNAL_NUM) and
+	   (preview_signal_num == INPUT0_SIGNAL_NUM or
+	    preview_signal_num == INPUT1_SIGNAL_NUM or
+	    preview_signal_num == STATIC_SIGNAL_NUM) then
 		return {"Cut", "", "Fade"}
 	end
 
@@ -189,7 +216,7 @@ end
 function transition_clicked(num, t)
 	if num == 0 then
 		-- Cut.
-		if live_signal_num == FADE_SIGNAL_NUM then
+		if live_signal_num == FADE_VTV_SIGNAL_NUM or live_signal_num == FADE_VTP_SIGNAL_NUM then
 			-- Ongoing fade; finish it immediately.
 			finish_transitions(transition_end)
 		end
@@ -256,7 +283,17 @@ function transition_clicked(num, t)
 			fade_src_signal = live_signal_num
 			fade_dst_signal = preview_signal_num
 			preview_signal_num = live_signal_num
-			live_signal_num = FADE_SIGNAL_NUM
+			live_signal_num = FADE_VTV_SIGNAL_NUM
+		elseif ((live_signal_num == INPUT0_SIGNAL_NUM or live_signal_num == INPUT1_SIGNAL_NUM) and
+		        preview_signal_num == STATIC_SIGNAL_NUM) or
+		       ((preview_signal_num == INPUT0_SIGNAL_NUM or preview_signal_num == INPUT1_SIGNAL_NUM) and
+		        live_signal_num == STATIC_SIGNAL_NUM) then
+			transition_start = t
+			transition_end = t + 1.0
+			fade_src_signal = live_signal_num
+			fade_dst_signal = preview_signal_num
+			preview_signal_num = live_signal_num
+			live_signal_num = FADE_VTP_SIGNAL_NUM
 		else
 			-- Fades involving SBS are ignored (we have no chain for it).
 		end
@@ -293,28 +330,38 @@ function get_chain(num, t, width, height)
 				set_neutral_color_from_signal(simple_chain_hq_wb_effect, live_signal_num)
 			end
 			return simple_chain_hq, prepare
-		elseif live_signal_num == FADE_SIGNAL_NUM then  -- Fade.
+		elseif live_signal_num == STATIC_SIGNAL_NUM then  -- Static picture.
 			prepare = function()
-				fade_chain_hq_input0:connect_signal(fade_src_signal)
-				set_neutral_color_from_signal(fade_chain_hq_wb0_effect, fade_src_signal)
-				fade_chain_hq_input1:connect_signal(fade_dst_signal)
-				set_neutral_color_from_signal(fade_chain_hq_wb1_effect, fade_dst_signal)
-				local tt = (t - transition_start) / (transition_end - transition_start)
-				if tt < 0.0 then
-					tt = 0.0
-				elseif tt > 1.0 then
-					tt = 1.0
-				end
-
-				-- Make the fade look maybe a tad more natural, by pumping it
-				-- through a sigmoid function.
-				tt = 10.0 * tt - 5.0
-				tt = 1.0 / (1.0 + math.exp(-tt))
-
-				fade_chain_mix_effect:set_float("strength_first", 1.0 - tt)
-				fade_chain_mix_effect:set_float("strength_second", tt)
 			end
-			return fade_chain_hq, prepare
+			return static_chain_hq, prepare
+		elseif live_signal_num == FADE_VTV_SIGNAL_NUM then  -- Fade video-to-video.
+			prepare = function()
+				fade_vtv_chain_hq_input0:connect_signal(fade_src_signal)
+				set_neutral_color_from_signal(fade_vtv_chain_hq_wb0_effect, fade_src_signal)
+				fade_vtv_chain_hq_input1:connect_signal(fade_dst_signal)
+				set_neutral_color_from_signal(fade_vtv_chain_hq_wb1_effect, fade_dst_signal)
+				local tt = calc_fade_progress(t, transition_start, transition_end)
+
+				fade_vtv_chain_mix_effect:set_float("strength_first", 1.0 - tt)
+				fade_vtv_chain_mix_effect:set_float("strength_second", tt)
+			end
+			return fade_vtv_chain_hq, prepare
+		elseif live_signal_num == FADE_VTP_SIGNAL_NUM then  -- Fade video-to-picture (or picture-to-video).
+			prepare = function()
+				local tt
+				if fade_src_signal == STATIC_SIGNAL_NUM then
+					fade_vtp_chain_hq_input0:connect_signal(fade_dst_signal)
+					set_neutral_color_from_signal(fade_vtp_chain_hq_wb0_effect, fade_dst_signal)
+					tt = 1.0 - calc_fade_progress(t, transition_start, transition_end)
+				else
+					fade_vtp_chain_hq_input0:connect_signal(fade_src_signal)
+					set_neutral_color_from_signal(fade_vtp_chain_hq_wb0_effect, fade_src_signal)
+					tt = calc_fade_progress(t, transition_start, transition_end)
+				end
+				fade_vtp_chain_mix_effect:set_float("strength_first", 1.0 - tt)
+				fade_vtp_chain_mix_effect:set_float("strength_second", tt)
+			end
+			return fade_vtp_chain_hq, prepare
 		end
 
 		-- SBS code (live_signal_num == SBS_SIGNAL_NUM).
@@ -362,6 +409,11 @@ function get_chain(num, t, width, height)
 			prepare_sbs_chain(main_chain_lq, 0.0, width, height)
 		end
 		return main_chain_lq.chain, prepare
+	end
+	if num == STATIC_SIGNAL_NUM + 2 then
+		prepare = function()
+		end
+		return static_chain_lq, prepare
 	end
 end
 
@@ -525,4 +577,20 @@ function set_neutral_color_from_signal(effect, signal)
 	else
 		set_neutral_color(effect, input1_neutral_color)
 	end
+end
+
+function calc_fade_progress(t, transition_start, transition_end)
+	local tt = (t - transition_start) / (transition_end - transition_start)
+	if tt < 0.0 then
+		tt = 0.0
+	elseif tt > 1.0 then
+		tt = 1.0
+	end
+
+	-- Make the fade look maybe a tad more natural, by pumping it
+	-- through a sigmoid function.
+	tt = 10.0 * tt - 5.0
+	tt = 1.0 / (1.0 + math.exp(-tt))
+
+	return tt
 end
