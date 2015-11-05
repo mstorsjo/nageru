@@ -357,7 +357,6 @@ void Mixer::thread_func()
 				card_copy[card_index].new_data_ready = card->new_data_ready;
 				card_copy[card_index].new_frame = card->new_frame;
 				card_copy[card_index].new_data_ready_fence = card->new_data_ready_fence;
-				card_copy[card_index].new_frame_audio = move(card->new_frame_audio);
 				card_copy[card_index].dropped_frames = card->dropped_frames;
 				card->new_data_ready = false;
 				card->new_data_ready_changed.notify_all();
