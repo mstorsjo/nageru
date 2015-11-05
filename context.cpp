@@ -22,10 +22,11 @@ QSurface *create_surface(const QSurfaceFormat &format)
 	return surface;
 }
 
-QOpenGLContext *create_context()
+QOpenGLContext *create_context(const QSurface *surface)
 {
 	QOpenGLContext *context = new QOpenGLContext;
 	context->setShareContext(global_share_widget->context()->contextHandle());
+	context->setFormat(surface->format());
 	context->create();
 	return context;
 }

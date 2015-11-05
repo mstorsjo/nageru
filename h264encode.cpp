@@ -1868,7 +1868,7 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
 
 	copy_thread = std::thread([this]{
 		//SDL_GL_MakeCurrent(window, context);
-		QOpenGLContext *context = create_context();
+		QOpenGLContext *context = create_context(this->surface);
 		eglBindAPI(EGL_OPENGL_API);
 		if (!make_current(context, this->surface)) {
 			printf("display=%p surface=%p context=%p curr=%p err=%d\n", eglGetCurrentDisplay(), this->surface, context, eglGetCurrentContext(),

@@ -111,7 +111,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 		card->usb->set_dequeue_thread_callbacks(
 			[card]{
 				eglBindAPI(EGL_OPENGL_API);
-				card->context = create_context();
+				card->context = create_context(card->surface);
 				if (!make_current(card->context, card->surface)) {
 					printf("failed to create bmusb context\n");
 					exit(1);
@@ -329,7 +329,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 void Mixer::thread_func()
 {
 	eglBindAPI(EGL_OPENGL_API);
-	QOpenGLContext *context = create_context();
+	QOpenGLContext *context = create_context(mixer_surface);
 	if (!make_current(context, mixer_surface)) {
 		printf("oops\n");
 		exit(1);
