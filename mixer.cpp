@@ -520,25 +520,31 @@ void Mixer::thread_func()
 
 void Mixer::process_audio_one_frame()
 {
-	// TODO: Allow using audio from the other card(s) as well.
+	vector<float> samples_card;
 	vector<float> samples_out;
 	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
-		samples_out.resize((48000 / 60) * 2);
+		samples_card.resize((48000 / 60) * 2);
 		{
 			unique_lock<mutex> lock(cards[card_index].audio_mutex);
-			if (!cards[card_index].resampler->get_output_samples(pts(), &samples_out[0], 48000 / 60)) {
+			if (!cards[card_index].resampler->get_output_samples(pts(), &samples_card[0], 48000 / 60)) {
 				printf("Card %d reported previous underrun.\n", card_index);
 			}
 		}
+		// TODO: Allow using audio from the other card(s) as well.
 		if (card_index == 0) {
-			vector<float> left, right;
-			peak = std::max(peak, find_peak(samples_out));
-			deinterleave_samples(samples_out, &left, &right);
-			float *ptrs[] = { left.data(), right.data() };
-			r128.process(left.size(), ptrs);
-			h264_encoder->add_audio(pts_int, move(samples_out));
+			samples_out = move(samples_card);
 		}
 	}
+
+	// Find peak and R128 levels.
+	peak = std::max(peak, find_peak(samples_out));
+	vector<float> left, right;
+	deinterleave_samples(samples_out, &left, &right);
+	float *ptrs[] = { left.data(), right.data() };
+	r128.process(left.size(), ptrs);
+
+	// Actually add the samples to the output.
+	h264_encoder->add_audio(pts_int, move(samples_out));
 }
 
 void Mixer::subsample_chroma(GLuint src_tex, GLuint dst_tex)
