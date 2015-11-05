@@ -132,6 +132,7 @@ private:
 		FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format);
 	void place_rectangle(movit::Effect *resample_effect, movit::Effect *padding_effect, float x0, float y0, float x1, float y1);
 	void thread_func();
+	void process_audio_one_frame();
 	void subsample_chroma(GLuint src_tex, GLuint dst_dst);
 	void release_display_frame(DisplayFrame *frame);
 	double pts() { return double(pts_int) / TIMEBASE; }

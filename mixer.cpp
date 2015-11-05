@@ -365,26 +365,8 @@ void Mixer::thread_func()
 		}
 
 		// Resample the audio as needed, including from previously dropped frames.
-		vector<float> samples_out;
-		// TODO: Allow using audio from the other card(s) as well.
 		for (unsigned frame_num = 0; frame_num < card_copy[0].dropped_frames + 1; ++frame_num) {
-			for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
-				samples_out.resize((48000 / 60) * 2);
-				{
-					unique_lock<mutex> lock(cards[card_index].audio_mutex);
-					if (!cards[card_index].resampler->get_output_samples(pts(), &samples_out[0], 48000 / 60)) {
-						printf("Card %d reported previous underrun.\n", card_index);
-					}
-				}
-				if (card_index == 0) {
-					vector<float> left, right;
-					peak = std::max(peak, find_peak(samples_out));
-					deinterleave_samples(samples_out, &left, &right);
-					float *ptrs[] = { left.data(), right.data() };
-					r128.process(left.size(), ptrs);
-					h264_encoder->add_audio(pts_int, move(samples_out));
-				}
-			}
+			process_audio_one_frame();
 			if (frame_num != card_copy[0].dropped_frames) {
 				// For dropped frames, increase the pts.
 				++dropped_frames;
@@ -535,6 +517,29 @@ void Mixer::thread_func()
 	}
 
 	resource_pool->clean_context();
+}
+
+void Mixer::process_audio_one_frame()
+{
+	// TODO: Allow using audio from the other card(s) as well.
+	vector<float> samples_out;
+	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
+		samples_out.resize((48000 / 60) * 2);
+		{
+			unique_lock<mutex> lock(cards[card_index].audio_mutex);
+			if (!cards[card_index].resampler->get_output_samples(pts(), &samples_out[0], 48000 / 60)) {
+				printf("Card %d reported previous underrun.\n", card_index);
+			}
+		}
+		if (card_index == 0) {
+			vector<float> left, right;
+			peak = std::max(peak, find_peak(samples_out));
+			deinterleave_samples(samples_out, &left, &right);
+			float *ptrs[] = { left.data(), right.data() };
+			r128.process(left.size(), ptrs);
+			h264_encoder->add_audio(pts_int, move(samples_out));
+		}
+	}
 }
 
 void Mixer::subsample_chroma(GLuint src_tex, GLuint dst_tex)
