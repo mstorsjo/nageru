@@ -33,6 +33,7 @@
 
 #include "bmusb/bmusb.h"
 #include "context.h"
+#include "defs.h"
 #include "h264encode.h"
 #include "pbo_frame_allocator.h"
 #include "ref_counted_gl_sync.h"
@@ -69,7 +70,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	  num_cards(num_cards),
 	  mixer_surface(create_surface(format)),
 	  h264_encoder_surface(create_surface(format)),
-	  level_compressor(48000.0f)
+	  level_compressor(OUTPUT_FREQUENCY)
 {
 	httpd.start(9095);
 
@@ -121,7 +122,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 			[this]{
 				resource_pool->clean_context();
 			});
-		card->resampler.reset(new Resampler(48000.0, 48000.0, 2));
+		card->resampler.reset(new Resampler(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY, 2));
 		card->usb->configure_card();
 	}
 
@@ -146,7 +147,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 		"} \n";
 	cbcr_program_num = resource_pool->compile_glsl_program(cbcr_vert_shader, cbcr_frag_shader);
 
-	r128.init(2, 48000);
+	r128.init(2, OUTPUT_FREQUENCY);
 	r128.integr_start();
 }
 
@@ -241,21 +242,21 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		unique_lock<mutex> lock(card->audio_mutex);
 
 		int unwrapped_timecode = timecode;
-		if (dropped_frames > 60 * 2) {
+		if (dropped_frames > FPS * 2) {
 			fprintf(stderr, "Card %d lost more than two seconds (or time code jumping around), resetting resampler\n",
 				card_index);
-			card->resampler.reset(new Resampler(48000.0, 48000.0, 2));
+			card->resampler.reset(new Resampler(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY, 2));
 		} else if (dropped_frames > 0) {
 			// Insert silence as needed.
 			fprintf(stderr, "Card %d dropped %d frame(s) (before timecode 0x%04x), inserting silence.\n",
 				card_index, dropped_frames, timecode);
 			vector<float> silence;
-			silence.resize((48000 / 60) * 2);
+			silence.resize((OUTPUT_FREQUENCY / FPS) * 2);
 			for (int i = 0; i < dropped_frames; ++i) {
-				card->resampler->add_input_samples((unwrapped_timecode - dropped_frames + i) / 60.0, silence.data(), (48000 / 60));
+				card->resampler->add_input_samples((unwrapped_timecode - dropped_frames + i) / double(FPS), silence.data(), (OUTPUT_FREQUENCY / FPS));
 			}
 		}
-		card->resampler->add_input_samples(unwrapped_timecode / 60.0, audio.data(), num_samples);
+		card->resampler->add_input_samples(unwrapped_timecode / double(FPS), audio.data(), num_samples);
 	}
 
 	// Done with the audio, so release it.
@@ -370,7 +371,7 @@ void Mixer::thread_func()
 			if (frame_num != card_copy[0].dropped_frames) {
 				// For dropped frames, increase the pts.
 				++dropped_frames;
-				pts_int += TIMEBASE / 60;
+				pts_int += TIMEBASE / FPS;
 			}
 		}
 
@@ -398,7 +399,7 @@ void Mixer::thread_func()
 		// just increase the pts (skipping over this frame) and don't try to compute anything new.
 		if (card_copy[0].new_frame->len == 0) {
 			++dropped_frames;
-			pts_int += TIMEBASE / 60;
+			pts_int += TIMEBASE / FPS;
 			continue;
 		}
 
@@ -463,7 +464,7 @@ void Mixer::thread_func()
 		const int64_t av_delay = TIMEBASE / 10;  // Corresponds to the fixed delay in resampler.h. TODO: Make less hard-coded.
 		h264_encoder->end_frame(fence, pts_int + av_delay, input_frames);
 		++frame;
-		pts_int += TIMEBASE / 60;
+		pts_int += TIMEBASE / FPS;
 
 		// The live frame just shows the RGBA texture we just rendered.
 		// It owns rgba_tex now.
@@ -524,10 +525,10 @@ void Mixer::process_audio_one_frame()
 	vector<float> samples_card;
 	vector<float> samples_out;
 	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
-		samples_card.resize((48000 / 60) * 2);
+		samples_card.resize((OUTPUT_FREQUENCY / FPS) * 2);
 		{
 			unique_lock<mutex> lock(cards[card_index].audio_mutex);
-			if (!cards[card_index].resampler->get_output_samples(pts(), &samples_card[0], 48000 / 60)) {
+			if (!cards[card_index].resampler->get_output_samples(pts(), &samples_card[0], OUTPUT_FREQUENCY / FPS)) {
 				printf("Card %d reported previous underrun.\n", card_index);
 			}
 		}

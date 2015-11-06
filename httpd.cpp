@@ -16,6 +16,7 @@ extern "C" {
 
 #include "httpd.h"
 
+#include "defs.h"
 #include "timebase.h"
 
 struct MHD_Connection;
@@ -120,7 +121,7 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height)
 	}
 	avstream_audio->time_base = AVRational{1, TIMEBASE};
 	avstream_audio->codec->bit_rate = 256000;
-	avstream_audio->codec->sample_rate = 48000;
+	avstream_audio->codec->sample_rate = OUTPUT_FREQUENCY;
 	avstream_audio->codec->sample_fmt = AV_SAMPLE_FMT_FLTP;
 	avstream_audio->codec->channels = 2;
 	avstream_audio->codec->channel_layout = AV_CH_LAYOUT_STEREO;

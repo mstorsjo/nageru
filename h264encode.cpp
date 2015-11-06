@@ -29,6 +29,7 @@
 #include <utility>
 
 #include "context.h"
+#include "defs.h"
 #include "httpd.h"
 #include "timebase.h"
 
@@ -113,7 +114,7 @@ static  int frame_width = 176;
 static  int frame_height = 144;
 static  int frame_width_mbaligned;
 static  int frame_height_mbaligned;
-static  int frame_rate = 60;
+static  int frame_rate = FPS;
 static  unsigned int frame_bitrate = 0;
 static  unsigned int frame_slices = 1;
 static  double frame_size = 0;
@@ -121,7 +122,7 @@ static  int initial_qp = 15;
 //static  int initial_qp = 28;
 static  int minimal_qp = 0;
 static  int intra_period = 30;
-static  int intra_idr_period = 60;
+static  int intra_idr_period = FPS;
 static  int ip_period = 3;
 static  int rc_mode = -1;
 static  int rc_default_modes[] = {
@@ -1835,7 +1836,7 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
 	AVCodec *codec_audio = avcodec_find_encoder(AV_CODEC_ID_MP3);
 	context_audio = avcodec_alloc_context3(codec_audio);
 	context_audio->bit_rate = 256000;
-	context_audio->sample_rate = 48000;
+	context_audio->sample_rate = OUTPUT_FREQUENCY;
 	context_audio->sample_fmt = AV_SAMPLE_FMT_FLTP;
 	context_audio->channels = 2;
 	context_audio->channel_layout = AV_CH_LAYOUT_STEREO;
