@@ -29,6 +29,7 @@
 #include "resampler.h"
 #include "theme.h"
 #include "timebase.h"
+#include "stereocompressor.h"
 
 class H264Encoder;
 class QSurface;
@@ -203,6 +204,8 @@ private:
 
 	// TODO: Implement oversampled peak detection.
 	float peak = 0.0f;
+
+	StereoCompressor compressor;
 };
 
 extern Mixer *global_mixer;

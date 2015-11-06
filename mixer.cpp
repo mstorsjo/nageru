@@ -68,7 +68,8 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	: httpd("test.ts", WIDTH, HEIGHT),
 	  num_cards(num_cards),
 	  mixer_surface(create_surface(format)),
-	  h264_encoder_surface(create_surface(format))
+	  h264_encoder_surface(create_surface(format)),
+	  compressor(48000.0f)
 {
 	httpd.start(9095);
 
@@ -535,6 +536,33 @@ void Mixer::process_audio_one_frame()
 			samples_out = move(samples_card);
 		}
 	}
+
+	// Apply a level compressor to get the general level right.
+	// Basically, if it's over about -40 dBFS, we squeeze it down to that level
+	// (or more precisely, near it, since we don't use infinite ratio),
+	// then apply a makeup gain to get it to -12 dBFS. -12 dBFS is, of course,
+	// entirely arbitrary, but from practical tests with speech, it seems to
+	// put ut around -23 LUFS, so it's a reasonable starting point for later use.
+	//
+	// TODO: Hook this up to a UI, so we can see the effects, and/or turn it off
+	// to control the gain manually instead. For now, there's only the #if-ed out
+	// code below.
+	//
+	// TODO: Add the actual compressors/limiters (for taking care of transients)
+	// later in the chain.
+	float threshold = 0.01f;   // -40 dBFS.
+	float ratio = 20.0f;
+	float attack_time = 0.1f;
+	float release_time = 10.0f;
+	float makeup_gain = pow(10.0f, 28.0f / 20.0f);  // +28 dB takes us to -12 dBFS.
+	compressor.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
+
+#if 0
+	printf("level=%f (%+5.2f dBFS) attenuation=%f (%+5.2f dB) end_result=%+5.2f dB\n",
+		compressor.get_level(), 20.0 * log10(compressor.get_level()),
+		compressor.get_attenuation(), 20.0 * log10(compressor.get_attenuation()),
+		20.0 * log10(compressor.get_level() * compressor.get_attenuation() * makeup_gain));
+#endif
 
 	// Find peak and R128 levels.
 	peak = std::max(peak, find_peak(samples_out));
