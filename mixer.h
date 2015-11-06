@@ -205,7 +205,8 @@ private:
 	// TODO: Implement oversampled peak detection.
 	float peak = 0.0f;
 
-	StereoCompressor compressor;
+	// First compressor; takes us up to about -12 dBFS.
+	StereoCompressor level_compressor;
 };
 
 extern Mixer *global_mixer;

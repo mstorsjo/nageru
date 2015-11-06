@@ -69,7 +69,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	  num_cards(num_cards),
 	  mixer_surface(create_surface(format)),
 	  h264_encoder_surface(create_surface(format)),
-	  compressor(48000.0f)
+	  level_compressor(48000.0f)
 {
 	httpd.start(9095);
 
@@ -555,7 +555,7 @@ void Mixer::process_audio_one_frame()
 	float attack_time = 0.1f;
 	float release_time = 10.0f;
 	float makeup_gain = pow(10.0f, 28.0f / 20.0f);  // +28 dB takes us to -12 dBFS.
-	compressor.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
+	level_compressor.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
 
 #if 0
 	printf("level=%f (%+5.2f dBFS) attenuation=%f (%+5.2f dB) end_result=%+5.2f dB\n",
