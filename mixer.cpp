@@ -149,6 +149,8 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 
 	r128.init(2, OUTPUT_FREQUENCY);
 	r128.integr_start();
+
+	locut.init(FILTER_HPF, 2);
 }
 
 Mixer::~Mixer()
@@ -537,6 +539,11 @@ void Mixer::process_audio_one_frame()
 			samples_out = move(samples_card);
 		}
 	}
+
+	// Cut away everything under 150 Hz; we don't need it for voice,
+	// and it will reduce headroom and confuse the compressor.
+	// (In particular, any hums at 50 or 60 Hz should be dampened.)
+	locut.render(samples_out.data(), samples_out.size() / 2, 150.0 * 2.0 * M_PI / OUTPUT_FREQUENCY, 0.5f);
 
 	// Apply a level compressor to get the general level right.
 	// Basically, if it's over about -40 dBFS, we squeeze it down to that level

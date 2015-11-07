@@ -30,6 +30,7 @@
 #include "theme.h"
 #include "timebase.h"
 #include "stereocompressor.h"
+#include "filter.h"
 
 class H264Encoder;
 class QSurface;
@@ -204,6 +205,8 @@ private:
 
 	// TODO: Implement oversampled peak detection.
 	float peak = 0.0f;
+
+	StereoFilter locut;  // Cutoff 150 Hz, 24 dB/oct.
 
 	// First compressor; takes us up to about -12 dBFS.
 	StereoCompressor level_compressor;
