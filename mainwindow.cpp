@@ -107,37 +107,44 @@ void MainWindow::mixer_created(Mixer *mixer)
 
 void MainWindow::relayout()
 {
-	int width = size().width();
-	int height = size().height();
+	int width = ui->vertical_layout->geometry().width();
+	int height = ui->vertical_layout->geometry().height();
+
+	double remaining_height = height;
 
 	// Allocate the height; the most important part is to keep the main displays
 	// at 16:9 if at all possible.
 	double me_width = ui->me_preview->width();
-	double me_height = me_width * 9.0 / 16.0 + ui->label_preview->height();
+	double me_height = me_width * 9.0 / 16.0 + ui->label_preview->height() + ui->preview_vertical_layout->spacing();
 
 	// TODO: Scale the widths when we need to do this.
 	if (me_height / double(height) > 0.8) {
 		me_height = height * 0.8;
 	}
+	remaining_height -= me_height + ui->vertical_layout->spacing();
+
+	double audiostrip_height = ui->audiostrip->geometry().height();
+	remaining_height -= audiostrip_height + ui->vertical_layout->spacing();
 
 	// The previews will be constrained by the remaining height, and the width.
-	// FIXME: spacing?
-	double preview_label_height = previews[0]->label->height();
-	double preview_height = std::min(height - me_height - preview_label_height, (width / double(previews.size())) * 9.0 / 16.0);
+	double preview_label_height = previews[0]->title_bar->geometry().height() + ui->preview_displays->spacing();  // Wrong spacing?
+	double preview_height = std::min(remaining_height - preview_label_height, (width / double(previews.size())) * 9.0 / 16.0);
+	remaining_height -= preview_height + preview_label_height + ui->vertical_layout->spacing();
 
 	ui->vertical_layout->setStretch(0, lrintf(me_height));
-	ui->vertical_layout->setStretch(1, std::max<int>(1, lrintf(height - me_height - preview_height)));
-	ui->vertical_layout->setStretch(2, lrintf(preview_height + preview_label_height));
+	ui->vertical_layout->setStretch(1, 0);  // Don't stretch the audiostrip.
+	ui->vertical_layout->setStretch(2, std::max<int>(1, remaining_height));  // Spacer.
+	ui->vertical_layout->setStretch(3, lrintf(preview_height + preview_label_height));
 
 	// Set the widths for the previews.
-	double preview_width = preview_height * 16.0 / 9.0;  // FIXME: spacing?
+	double preview_width = preview_height * 16.0 / 9.0;
 
 	for (unsigned i = 0; i < previews.size(); ++i) {
 		ui->preview_displays->setStretch(i, lrintf(preview_width));
 	}
 
-	// The spacer.
-	ui->preview_displays->setStretch(previews.size(), lrintf(width - previews.size() * preview_width));
+	// The preview horizontal spacer.
+	ui->preview_displays->setStretch(previews.size(), lrintf(width - (previews.size() + ui->preview_displays->spacing()) * preview_width));
 }
 
 void MainWindow::set_transition_names(vector<string> transition_names)
