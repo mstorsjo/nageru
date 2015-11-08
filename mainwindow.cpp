@@ -26,6 +26,7 @@
 class QResizeEvent;
 
 using namespace std;
+using namespace std::placeholders;
 
 Q_DECLARE_METATYPE(std::vector<std::string>);
 
@@ -80,45 +81,50 @@ void MainWindow::mixer_created(Mixer *mixer)
 		previews.push_back(ui_display);
 
 		// Hook up the click.
-		connect(ui_display->display, &GLWidget::clicked, std::bind(&MainWindow::channel_clicked, this, i));
+		connect(ui_display->display, &GLWidget::clicked, bind(&MainWindow::channel_clicked, this, i));
 
 		// Hook up the keyboard key.
 		QShortcut *shortcut = new QShortcut(QKeySequence(Qt::Key_1 + i), this);
-		connect(shortcut, &QShortcut::activated, std::bind(&MainWindow::channel_clicked, this, i));
+		connect(shortcut, &QShortcut::activated, bind(&MainWindow::channel_clicked, this, i));
 
 		// Hook up the white balance button (irrelevant if invisible).
 		ui_display->wb_button->setVisible(mixer->get_supports_set_wb(output));
-		connect(ui_display->wb_button, &QPushButton::clicked, std::bind(&MainWindow::wb_button_clicked, this, i));
+		connect(ui_display->wb_button, &QPushButton::clicked, bind(&MainWindow::wb_button_clicked, this, i));
 	}
 
-	connect(ui->locut_cutoff_knob, &QDial::valueChanged, [this](int value) {
-		float octaves = value * 0.1f;
-		float cutoff_hz = 20.0 * pow(2.0, octaves);
-		global_mixer->set_locut_cutoff(cutoff_hz);
+	connect(ui->locut_cutoff_knob, &QDial::valueChanged, this, &MainWindow::cutoff_knob_changed);
+	mixer->set_audio_level_callback(bind(&MainWindow::audio_level_callback, this, _1, _2, _3, _4, _5, _6));
+}
+
+void MainWindow::cutoff_knob_changed(int value)
+{
+	float octaves = value * 0.1f;
+	float cutoff_hz = 20.0 * pow(2.0, octaves);
+	global_mixer->set_locut_cutoff(cutoff_hz);
+
+	char buf[256];
+	snprintf(buf, sizeof(buf), "%ld Hz", lrintf(cutoff_hz));
+	ui->locut_cutoff_display->setText(buf);
+}
+
+void MainWindow::audio_level_callback(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float auto_gain_staging_db)
+{
+	post_to_main_thread([=]() {
+		ui->vu_meter->set_level(level_lufs);
+		ui->lra_meter->set_levels(global_level_lufs, range_low_lufs, range_high_lufs);
 
 		char buf[256];
-		snprintf(buf, sizeof(buf), "%ld Hz", lrintf(cutoff_hz));
-		ui->locut_cutoff_display->setText(buf);
-	});
+		snprintf(buf, sizeof(buf), "%.1f", peak_db);
+		ui->peak_display->setText(buf);
+		if (peak_db > -0.1f) {  // -0.1 dBFS is EBU peak limit.
+			ui->peak_display->setStyleSheet("QLabel { background-color: red; color: white; }");
+		} else {
+			ui->peak_display->setStyleSheet("");
+		}
 
-	mixer->set_audio_level_callback([this](float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float auto_gain_staging_db){
-		post_to_main_thread([=]() {
-			ui->vu_meter->set_level(level_lufs);
-			ui->lra_meter->set_levels(global_level_lufs, range_low_lufs, range_high_lufs);
-
-			char buf[256];
-			snprintf(buf, sizeof(buf), "%.1f", peak_db);
-			ui->peak_display->setText(buf);
-			if (peak_db > -0.1f) {  // -0.1 dBFS is EBU peak limit.
-				ui->peak_display->setStyleSheet("QLabel { background-color: red; color: white; }");
-			} else {
-				ui->peak_display->setStyleSheet("");
-			}
-
-			ui->gainstaging_knob->setValue(lrintf(auto_gain_staging_db * 10.0f));
-			snprintf(buf, sizeof(buf), "%+.1f dB", auto_gain_staging_db);
-			ui->gainstaging_db_display->setText(buf);
-		});
+		ui->gainstaging_knob->setValue(lrintf(auto_gain_staging_db * 10.0f));
+		snprintf(buf, sizeof(buf), "%+.1f dB", auto_gain_staging_db);
+		ui->gainstaging_db_display->setText(buf);
 	});
 }
 

@@ -30,11 +30,15 @@ public slots:
 	void channel_clicked(int channel_number);
 	void wb_button_clicked(int channel_number);
 	void set_transition_names(std::vector<std::string> transition_names);
+	void cutoff_knob_changed(int value);
 	void relayout();
 
 private:
 	bool eventFilter(QObject *watched, QEvent *event) override;
 	void set_white_balance(int channel_number, int x, int y);
+
+	// Called from the mixer.
+	void audio_level_callback(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float auto_gain_staging_db);
 
 	Ui::MainWindow *ui;
 	QPushButton *transition_btn1, *transition_btn2, *transition_btn3;
