@@ -124,7 +124,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 			[this]{
 				resource_pool->clean_context();
 			});
-		card->resampler.reset(new Resampler(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY, 2));
+		card->resampling_queue.reset(new ResamplingQueue(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY, 2));
 		card->usb->configure_card();
 	}
 
@@ -249,7 +249,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		if (dropped_frames > FPS * 2) {
 			fprintf(stderr, "Card %d lost more than two seconds (or time code jumping around), resetting resampler\n",
 				card_index);
-			card->resampler.reset(new Resampler(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY, 2));
+			card->resampling_queue.reset(new ResamplingQueue(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY, 2));
 		} else if (dropped_frames > 0) {
 			// Insert silence as needed.
 			fprintf(stderr, "Card %d dropped %d frame(s) (before timecode 0x%04x), inserting silence.\n",
@@ -257,10 +257,10 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 			vector<float> silence;
 			silence.resize((OUTPUT_FREQUENCY / FPS) * 2);
 			for (int i = 0; i < dropped_frames; ++i) {
-				card->resampler->add_input_samples((unwrapped_timecode - dropped_frames + i) / double(FPS), silence.data(), (OUTPUT_FREQUENCY / FPS));
+				card->resampling_queue->add_input_samples((unwrapped_timecode - dropped_frames + i) / double(FPS), silence.data(), (OUTPUT_FREQUENCY / FPS));
 			}
 		}
-		card->resampler->add_input_samples(unwrapped_timecode / double(FPS), audio.data(), num_samples);
+		card->resampling_queue->add_input_samples(unwrapped_timecode / double(FPS), audio.data(), num_samples);
 	}
 
 	// Done with the audio, so release it.
@@ -466,7 +466,7 @@ void Mixer::thread_func()
 		for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 			input_frames.push_back(bmusb_current_rendering_frame[card_index]);
 		}
-		const int64_t av_delay = TIMEBASE / 10;  // Corresponds to the fixed delay in resampler.h. TODO: Make less hard-coded.
+		const int64_t av_delay = TIMEBASE / 10;  // Corresponds to the fixed delay in resampling_queue.h. TODO: Make less hard-coded.
 		h264_encoder->end_frame(fence, pts_int + av_delay, input_frames);
 		++frame;
 		pts_int += TIMEBASE / FPS;
@@ -533,7 +533,7 @@ void Mixer::process_audio_one_frame()
 		samples_card.resize((OUTPUT_FREQUENCY / FPS) * 2);
 		{
 			unique_lock<mutex> lock(cards[card_index].audio_mutex);
-			if (!cards[card_index].resampler->get_output_samples(pts(), &samples_card[0], OUTPUT_FREQUENCY / FPS)) {
+			if (!cards[card_index].resampling_queue->get_output_samples(pts(), &samples_card[0], OUTPUT_FREQUENCY / FPS)) {
 				printf("Card %d reported previous underrun.\n", card_index);
 			}
 		}

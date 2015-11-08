@@ -16,7 +16,7 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#include "resampler.h"
+#include "resampling_queue.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -24,7 +24,7 @@
 #include <string.h>
 #include <zita-resampler/vresampler.h>
 
-Resampler::Resampler(unsigned freq_in, unsigned freq_out, unsigned num_channels)
+ResamplingQueue::ResamplingQueue(unsigned freq_in, unsigned freq_out, unsigned num_channels)
 	: freq_in(freq_in), freq_out(freq_out), num_channels(num_channels),
 	  ratio(double(freq_out) / double(freq_in))
 {
@@ -36,7 +36,7 @@ Resampler::Resampler(unsigned freq_in, unsigned freq_out, unsigned num_channels)
         vresampler.process ();
 }
 
-void Resampler::add_input_samples(double pts, const float *samples, ssize_t num_samples)
+void ResamplingQueue::add_input_samples(double pts, const float *samples, ssize_t num_samples)
 {
 	if (first_input) {
 		// Synthesize a fake length.
@@ -56,7 +56,7 @@ void Resampler::add_input_samples(double pts, const float *samples, ssize_t num_
 	}
 }
 
-bool Resampler::get_output_samples(double pts, float *samples, ssize_t num_samples)
+bool ResamplingQueue::get_output_samples(double pts, float *samples, ssize_t num_samples)
 {
 	double last_output_len;
 	if (first_output) {

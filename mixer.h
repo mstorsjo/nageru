@@ -27,7 +27,7 @@
 #include "pbo_frame_allocator.h"
 #include "ref_counted_frame.h"
 #include "ref_counted_gl_sync.h"
-#include "resampler.h"
+#include "resampling_queue.h"
 #include "theme.h"
 #include "timebase.h"
 #include "stereocompressor.h"
@@ -181,7 +181,7 @@ private:
 		unsigned dropped_frames = 0;  // Before new_frame.
 
 		std::mutex audio_mutex;
-		std::unique_ptr<Resampler> resampler;  // Under audio_mutex.
+		std::unique_ptr<ResamplingQueue> resampling_queue;  // Under audio_mutex.
 		int last_timecode = -1;  // Unwrapped.
 	};
 	CaptureCard cards[MAX_CARDS];  // protected by <bmusb_mutex>

@@ -1,5 +1,5 @@
-#ifndef _RESAMPLER_H
-#define _RESAMPLER_H 1
+#ifndef _RESAMPLING_QUEUE_H
+#define _RESAMPLING_QUEUE_H 1
 
 // Takes in samples from an input source, possibly with jitter, and outputs a fixed number
 // of samples every iteration. Used to a) change sample rates if needed, and b) deal with
@@ -45,9 +45,9 @@
 #include <deque>
 #include <memory>
 
-class Resampler {
+class ResamplingQueue {
 public:
-	Resampler(unsigned freq_in, unsigned freq_out, unsigned num_channels = 2);
+	ResamplingQueue(unsigned freq_in, unsigned freq_out, unsigned num_channels = 2);
 
 	// Note: pts is always in seconds.
 	void add_input_samples(double pts, const float *samples, ssize_t num_samples);
@@ -88,4 +88,4 @@ private:
 	std::deque<float> buffer;
 };
 
-#endif  // !defined(_RESAMPLER_H)
+#endif  // !defined(_RESAMPLING_QUEUE_H)
