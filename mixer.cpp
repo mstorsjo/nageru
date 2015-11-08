@@ -70,7 +70,9 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	  num_cards(num_cards),
 	  mixer_surface(create_surface(format)),
 	  h264_encoder_surface(create_surface(format)),
-	  level_compressor(OUTPUT_FREQUENCY)
+	  level_compressor(OUTPUT_FREQUENCY),
+	  limiter(OUTPUT_FREQUENCY),
+	  compressor(OUTPUT_FREQUENCY)
 {
 	httpd.start(9095);
 
@@ -552,16 +554,16 @@ void Mixer::process_audio_one_frame()
 	// then apply a makeup gain to get it to -14 dBFS. -14 dBFS is, of course,
 	// entirely arbitrary, but from practical tests with speech, it seems to
 	// put ut around -23 LUFS, so it's a reasonable starting point for later use.
-	//
-	// TODO: Add the actual compressors/limiters (for taking care of transients)
-	// later in the chain.
-	float threshold = 0.01f;   // -40 dBFS.
-	float ratio = 20.0f;
-	float attack_time = 0.5f;
-	float release_time = 20.0f;
-	float makeup_gain = pow(10.0f, 26.0f / 20.0f);  // +26 dB takes us to -14 dBFS.
-	level_compressor.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
-	last_gain_staging_db = 20.0 * log10(level_compressor.get_attenuation() * makeup_gain);
+	float ref_level_dbfs = -14.0f;
+	{
+		float threshold = 0.01f;   // -40 dBFS.
+		float ratio = 20.0f;
+		float attack_time = 0.5f;
+		float release_time = 20.0f;
+		float makeup_gain = pow(10.0f, (ref_level_dbfs - (-40.0f)) / 20.0f);  // +26 dB.
+		level_compressor.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
+		last_gain_staging_db = 20.0 * log10(level_compressor.get_attenuation() * makeup_gain);
+	}
 
 #if 0
 	printf("level=%f (%+5.2f dBFS) attenuation=%f (%+5.2f dB) end_result=%+5.2f dB\n",
@@ -569,6 +571,32 @@ void Mixer::process_audio_one_frame()
 		level_compressor.get_attenuation(), 20.0 * log10(level_compressor.get_attenuation()),
 		20.0 * log10(level_compressor.get_level() * level_compressor.get_attenuation() * makeup_gain));
 #endif
+
+//	float limiter_att, compressor_att;
+
+	// Then a limiter at +0 dB (so, -14 dBFS) to take out the worst peaks only.
+	{
+		float threshold = pow(10.0f, (ref_level_dbfs + 0.0f) / 20.0f);  // +0 dB.
+		float ratio = 1000.0f;  // Infinity.
+		float attack_time = 0.001f;
+		float release_time = 0.005f;
+		float makeup_gain = 1.0f;  // 0 dB.
+		limiter.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
+//		limiter_att = limiter.get_attenuation();
+	}
+
+	// Finally, the real compressor.
+	{
+		float threshold = pow(10.0f, (ref_level_dbfs - 12.0f) / 20.0f);  // -12 dB.
+		float ratio = 20.0f;
+		float attack_time = 0.005f;
+		float release_time = 0.040f;
+		float makeup_gain = 2.0f;  // +3 dB.
+		compressor.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
+//		compressor_att = compressor.get_attenuation();
+	}
+
+//	printf("limiter=%+5.1f  compressor=%+5.1f\n", 20.0*log10(limiter_att), 20.0*log10(compressor_att));
 
 	// Find peak and R128 levels.
 	peak = std::max(peak, find_peak(samples_out));

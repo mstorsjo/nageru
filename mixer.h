@@ -220,6 +220,9 @@ private:
 	// First compressor; takes us up to about -12 dBFS.
 	StereoCompressor level_compressor;
 	float last_gain_staging_db = 0.0f;
+
+	StereoCompressor limiter;
+	StereoCompressor compressor;
 };
 
 extern Mixer *global_mixer;
