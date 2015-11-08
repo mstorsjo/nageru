@@ -93,6 +93,7 @@ void MainWindow::mixer_created(Mixer *mixer)
 	}
 
 	connect(ui->locut_cutoff_knob, &QDial::valueChanged, this, &MainWindow::cutoff_knob_changed);
+	connect(ui->reset_meters_button, &QPushButton::clicked, this, &MainWindow::reset_meters_button_clicked);
 	mixer->set_audio_level_callback(bind(&MainWindow::audio_level_callback, this, _1, _2, _3, _4, _5, _6));
 }
 
@@ -105,6 +106,13 @@ void MainWindow::cutoff_knob_changed(int value)
 	char buf[256];
 	snprintf(buf, sizeof(buf), "%ld Hz", lrintf(cutoff_hz));
 	ui->locut_cutoff_display->setText(buf);
+}
+
+void MainWindow::reset_meters_button_clicked()
+{
+	global_mixer->reset_meters();
+	ui->peak_display->setText("-inf");
+	ui->peak_display->setStyleSheet("");
 }
 
 void MainWindow::audio_level_callback(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float auto_gain_staging_db)

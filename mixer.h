@@ -136,6 +136,8 @@ public:
 		locut_cutoff_hz = cutoff_hz;
 	}
 
+	void reset_meters();
+
 private:
 	void bm_frame(unsigned card_index, uint16_t timecode,
 		FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,
@@ -212,7 +214,7 @@ private:
 	Ebu_r128_proc r128;
 
 	// TODO: Implement oversampled peak detection.
-	float peak = 0.0f;
+	std::atomic<float> peak{0.0f};
 
 	StereoFilter locut;  // Default cutoff 150 Hz, 24 dB/oct.
 	std::atomic<float> locut_cutoff_hz;

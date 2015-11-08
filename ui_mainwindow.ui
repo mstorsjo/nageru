@@ -361,7 +361,7 @@
            </layout>
           </item>
           <item>
-           <widget class="QPushButton" name="pushButton">
+           <widget class="QPushButton" name="reset_meters_button">
             <property name="maximumSize">
              <size>
               <width>30</width>

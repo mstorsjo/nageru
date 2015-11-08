@@ -599,7 +599,7 @@ void Mixer::process_audio_one_frame()
 //	printf("limiter=%+5.1f  compressor=%+5.1f\n", 20.0*log10(limiter_att), 20.0*log10(compressor_att));
 
 	// Find peak and R128 levels.
-	peak = std::max(peak, find_peak(samples_out));
+	peak = max<float>(peak, find_peak(samples_out));
 	vector<float> left, right;
 	deinterleave_samples(samples_out, &left, &right);
 	float *ptrs[] = { left.data(), right.data() };
@@ -692,6 +692,13 @@ void Mixer::transition_clicked(int transition_num)
 void Mixer::channel_clicked(int preview_num)
 {
 	theme->channel_clicked(preview_num);
+}
+
+void Mixer::reset_meters()
+{
+	peak = 0.0f;
+	r128.reset();
+	r128.integr_start();
 }
 
 Mixer::OutputChannel::~OutputChannel()
