@@ -42,9 +42,9 @@ MainWindow::MainWindow()
 
 	// Hook up the transition buttons.
 	// TODO: Make them dynamic.
-	connect(ui->transition_btn1, &QPushButton::clicked, std::bind(&MainWindow::transition_clicked, this, 0));
-	connect(ui->transition_btn2, &QPushButton::clicked, std::bind(&MainWindow::transition_clicked, this, 1));
-	connect(ui->transition_btn3, &QPushButton::clicked, std::bind(&MainWindow::transition_clicked, this, 2));
+	connect(ui->transition_btn1, &QPushButton::clicked, bind(&MainWindow::transition_clicked, this, 0));
+	connect(ui->transition_btn2, &QPushButton::clicked, bind(&MainWindow::transition_clicked, this, 1));
+	connect(ui->transition_btn3, &QPushButton::clicked, bind(&MainWindow::transition_clicked, this, 2));
 
 	// Aiee...
 	transition_btn1 = ui->transition_btn1;
