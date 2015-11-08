@@ -18,6 +18,7 @@
 #include "glwidget.h"
 #include "lrameter.h"
 #include "mixer.h"
+#include "post_to_main_thread.h"
 #include "ui_display.h"
 #include "ui_mainwindow.h"
 #include "vumeter.h"
@@ -91,21 +92,23 @@ void MainWindow::mixer_created(Mixer *mixer)
 	}
 
 	mixer->set_audio_level_callback([this](float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float auto_gain_staging_db){
-		ui->vu_meter->set_level(level_lufs);
-		ui->lra_meter->set_levels(global_level_lufs, range_low_lufs, range_high_lufs);
+		post_to_main_thread([=]() {
+			ui->vu_meter->set_level(level_lufs);
+			ui->lra_meter->set_levels(global_level_lufs, range_low_lufs, range_high_lufs);
 
-		char buf[256];
-		snprintf(buf, sizeof(buf), "%.1f", peak_db);
-		ui->peak_display->setText(buf);
-		if (peak_db > -0.1f) {  // -0.1 dBFS is EBU peak limit.
-			ui->peak_display->setStyleSheet("QLabel { background-color: red; color: white; }");
-		} else {
-			ui->peak_display->setStyleSheet("");
-		}
+			char buf[256];
+			snprintf(buf, sizeof(buf), "%.1f", peak_db);
+			ui->peak_display->setText(buf);
+			if (peak_db > -0.1f) {  // -0.1 dBFS is EBU peak limit.
+				ui->peak_display->setStyleSheet("QLabel { background-color: red; color: white; }");
+			} else {
+				ui->peak_display->setStyleSheet("");
+			}
 
-		ui->gainstaging_knob->setValue(lrintf(auto_gain_staging_db * 10.0f));
-		snprintf(buf, sizeof(buf), "%+.1f dB", auto_gain_staging_db);
-		ui->gainstaging_db_display->setText(buf);
+			ui->gainstaging_knob->setValue(lrintf(auto_gain_staging_db * 10.0f));
+			snprintf(buf, sizeof(buf), "%+.1f dB", auto_gain_staging_db);
+			ui->gainstaging_db_display->setText(buf);
+		});
 	});
 }
 
