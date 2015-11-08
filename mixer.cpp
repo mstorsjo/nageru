@@ -549,7 +549,7 @@ void Mixer::process_audio_one_frame()
 	// Apply a level compressor to get the general level right.
 	// Basically, if it's over about -40 dBFS, we squeeze it down to that level
 	// (or more precisely, near it, since we don't use infinite ratio),
-	// then apply a makeup gain to get it to -12 dBFS. -12 dBFS is, of course,
+	// then apply a makeup gain to get it to -14 dBFS. -14 dBFS is, of course,
 	// entirely arbitrary, but from practical tests with speech, it seems to
 	// put ut around -23 LUFS, so it's a reasonable starting point for later use.
 	//
@@ -557,9 +557,9 @@ void Mixer::process_audio_one_frame()
 	// later in the chain.
 	float threshold = 0.01f;   // -40 dBFS.
 	float ratio = 20.0f;
-	float attack_time = 0.1f;
-	float release_time = 10.0f;
-	float makeup_gain = pow(10.0f, 28.0f / 20.0f);  // +28 dB takes us to -12 dBFS.
+	float attack_time = 0.5f;
+	float release_time = 20.0f;
+	float makeup_gain = pow(10.0f, 26.0f / 20.0f);  // +26 dB takes us to -14 dBFS.
 	level_compressor.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
 	last_gain_staging_db = 20.0 * log10(level_compressor.get_attenuation() * makeup_gain);
 
