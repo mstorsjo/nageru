@@ -384,7 +384,8 @@ void Mixer::thread_func()
 			double loudness_range_high = r128.range_max();
 
 			audio_level_callback(loudness_s, 20.0 * log10(peak),
-			                     loudness_i, loudness_range_low, loudness_range_high);
+			                     loudness_i, loudness_range_low, loudness_range_high,
+			                     last_gain_staging_db);
 		}
 
 		for (unsigned card_index = 1; card_index < num_cards; ++card_index) {
@@ -564,12 +565,13 @@ void Mixer::process_audio_one_frame()
 	float release_time = 10.0f;
 	float makeup_gain = pow(10.0f, 28.0f / 20.0f);  // +28 dB takes us to -12 dBFS.
 	level_compressor.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
+	last_gain_staging_db = 20.0 * log10(level_compressor.get_attenuation() * makeup_gain);
 
 #if 0
 	printf("level=%f (%+5.2f dBFS) attenuation=%f (%+5.2f dB) end_result=%+5.2f dB\n",
-		compressor.get_level(), 20.0 * log10(compressor.get_level()),
-		compressor.get_attenuation(), 20.0 * log10(compressor.get_attenuation()),
-		20.0 * log10(compressor.get_level() * compressor.get_attenuation() * makeup_gain));
+		level_compressor.get_level(), 20.0 * log10(level_compressor.get_level()),
+		level_compressor.get_attenuation(), 20.0 * log10(level_compressor.get_attenuation()),
+		20.0 * log10(level_compressor.get_level() * level_compressor.get_attenuation() * makeup_gain));
 #endif
 
 	// Find peak and R128 levels.

@@ -97,7 +97,9 @@ public:
 		output_channel[output].set_frame_ready_callback(callback);
 	}
 
-	typedef std::function<void(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs)> audio_level_callback_t;
+	typedef std::function<void(float level_lufs, float peak_db,
+	                           float global_level_lufs, float range_low_lufs, float range_high_lufs,
+	                           float auto_gain_staging_db)> audio_level_callback_t;
 	void set_audio_level_callback(audio_level_callback_t callback)
 	{
 		audio_level_callback = callback;
@@ -210,6 +212,7 @@ private:
 
 	// First compressor; takes us up to about -12 dBFS.
 	StereoCompressor level_compressor;
+	float last_gain_staging_db = 0.0f;
 };
 
 extern Mixer *global_mixer;

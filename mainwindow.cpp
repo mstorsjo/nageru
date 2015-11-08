@@ -90,7 +90,7 @@ void MainWindow::mixer_created(Mixer *mixer)
 		connect(ui_display->wb_button, &QPushButton::clicked, std::bind(&MainWindow::wb_button_clicked, this, i));
 	}
 
-	mixer->set_audio_level_callback([this](float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs){
+	mixer->set_audio_level_callback([this](float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float auto_gain_staging_db){
 		ui->vu_meter->set_level(level_lufs);
 		ui->lra_meter->set_levels(global_level_lufs, range_low_lufs, range_high_lufs);
 
@@ -102,6 +102,10 @@ void MainWindow::mixer_created(Mixer *mixer)
 		} else {
 			ui->peak_display->setStyleSheet("");
 		}
+
+		ui->gainstaging_knob->setValue(lrintf(auto_gain_staging_db * 10.0f));
+		snprintf(buf, sizeof(buf), "%+.1f dB", auto_gain_staging_db);
+		ui->gainstaging_db_display->setText(buf);
 	});
 }
 
