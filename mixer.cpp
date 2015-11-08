@@ -575,10 +575,12 @@ void Mixer::process_audio_one_frame()
 //	float limiter_att, compressor_att;
 
 	// Then a limiter at +0 dB (so, -14 dBFS) to take out the worst peaks only.
+	// Note that since ratio is not infinite, we could go slightly higher than this.
+	// Probably more tuning is warranted here.
 	{
 		float threshold = pow(10.0f, (ref_level_dbfs + 0.0f) / 20.0f);  // +0 dB.
-		float ratio = 1000.0f;  // Infinity.
-		float attack_time = 0.001f;
+		float ratio = 30.0f;
+		float attack_time = 0.0f;  // Instant.
 		float release_time = 0.005f;
 		float makeup_gain = 1.0f;  // 0 dB.
 		limiter.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
