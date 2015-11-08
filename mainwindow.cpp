@@ -91,6 +91,16 @@ void MainWindow::mixer_created(Mixer *mixer)
 		connect(ui_display->wb_button, &QPushButton::clicked, std::bind(&MainWindow::wb_button_clicked, this, i));
 	}
 
+	connect(ui->locut_cutoff_knob, &QDial::valueChanged, [this](int value) {
+		float octaves = value * 0.1f;
+		float cutoff_hz = 20.0 * pow(2.0, octaves);
+		global_mixer->set_locut_cutoff(cutoff_hz);
+
+		char buf[256];
+		snprintf(buf, sizeof(buf), "%ld Hz", lrintf(cutoff_hz));
+		ui->locut_cutoff_display->setText(buf);
+	});
+
 	mixer->set_audio_level_callback([this](float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float auto_gain_staging_db){
 		post_to_main_thread([=]() {
 			ui->vu_meter->set_level(level_lufs);

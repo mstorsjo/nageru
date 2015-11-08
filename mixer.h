@@ -10,6 +10,7 @@
 
 #include <movit/effect_chain.h>
 #include <movit/flat_input.h>
+#include <atomic>
 #include <condition_variable>
 #include <cstddef>
 #include <functional>
@@ -130,6 +131,11 @@ public:
 		theme->set_wb(channel, r, g, b);
 	}
 
+	void set_locut_cutoff(float cutoff_hz)
+	{
+		locut_cutoff_hz = cutoff_hz;
+	}
+
 private:
 	void bm_frame(unsigned card_index, uint16_t timecode,
 		FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,
@@ -208,7 +214,8 @@ private:
 	// TODO: Implement oversampled peak detection.
 	float peak = 0.0f;
 
-	StereoFilter locut;  // Cutoff 150 Hz, 24 dB/oct.
+	StereoFilter locut;  // Default cutoff 150 Hz, 24 dB/oct.
+	std::atomic<float> locut_cutoff_hz;
 
 	// First compressor; takes us up to about -12 dBFS.
 	StereoCompressor level_compressor;

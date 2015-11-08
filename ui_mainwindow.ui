@@ -454,7 +454,7 @@
          </widget>
         </item>
         <item row="1" column="0">
-         <widget class="QDial" name="dial_2">
+         <widget class="QDial" name="locut_cutoff_knob">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
             <horstretch>0</horstretch>
@@ -489,7 +489,7 @@
          </widget>
         </item>
         <item row="2" column="0">
-         <widget class="QLabel" name="label_4">
+         <widget class="QLabel" name="locut_cutoff_display">
           <property name="text">
            <string>150 Hz</string>
           </property>
