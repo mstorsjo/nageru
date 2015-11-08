@@ -591,7 +591,7 @@ void Mixer::process_audio_one_frame()
 		float ratio = 20.0f;
 		float attack_time = 0.005f;
 		float release_time = 0.040f;
-		float makeup_gain = 2.0f;  // +3 dB.
+		float makeup_gain = 2.0f;  // +6 dB.
 		compressor.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
 //		compressor_att = compressor.get_attenuation();
 	}
