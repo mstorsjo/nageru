@@ -553,10 +553,6 @@ void Mixer::process_audio_one_frame()
 	// entirely arbitrary, but from practical tests with speech, it seems to
 	// put ut around -23 LUFS, so it's a reasonable starting point for later use.
 	//
-	// TODO: Hook this up to a UI, so we can see the effects, and/or turn it off
-	// to control the gain manually instead. For now, there's only the #if-ed out
-	// code below.
-	//
 	// TODO: Add the actual compressors/limiters (for taking care of transients)
 	// later in the chain.
 	float threshold = 0.01f;   // -40 dBFS.
