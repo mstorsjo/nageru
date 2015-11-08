@@ -10,6 +10,7 @@
 
 #include <movit/effect_chain.h>
 #include <movit/flat_input.h>
+#include <zita-resampler/resampler.h>
 #include <atomic>
 #include <condition_variable>
 #include <cstddef>
@@ -213,7 +214,7 @@ private:
 	audio_level_callback_t audio_level_callback = nullptr;
 	Ebu_r128_proc r128;
 
-	// TODO: Implement oversampled peak detection.
+	Resampler peak_resampler;
 	std::atomic<float> peak{0.0f};
 
 	StereoFilter locut;  // Default cutoff 150 Hz, 24 dB/oct.

@@ -153,6 +153,10 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	r128.integr_start();
 
 	locut.init(FILTER_HPF, 2);
+
+	// hlen=16 is pretty low quality, but we use quite a bit of CPU otherwise,
+	// and there's a limit to how important the peak meter is.
+	peak_resampler.setup(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY * 4, /*num_channels=*/2, /*hlen=*/16);
 }
 
 Mixer::~Mixer()
@@ -182,10 +186,10 @@ int unwrap_timecode(uint16_t current_wrapped, int last)
 	}
 }
 
-float find_peak(const vector<float> &samples)
+float find_peak(const float *samples, size_t num_samples)
 {
 	float m = fabs(samples[0]);
-	for (size_t i = 1; i < samples.size(); ++i) {
+	for (size_t i = 1; i < num_samples; ++i) {
 		m = std::max(m, fabs(samples[i]));
 	}
 	return m;
@@ -600,8 +604,21 @@ void Mixer::process_audio_one_frame()
 
 //	printf("limiter=%+5.1f  compressor=%+5.1f\n", 20.0*log10(limiter_att), 20.0*log10(compressor_att));
 
-	// Find peak and R128 levels.
-	peak = max<float>(peak, find_peak(samples_out));
+	// Upsample 4x to find interpolated peak.
+	peak_resampler.inp_data = samples_out.data();
+	peak_resampler.inp_count = samples_out.size() / 2;
+
+	vector<float> interpolated_samples_out;
+	interpolated_samples_out.resize(samples_out.size());
+	while (peak_resampler.inp_count > 0) {  // About four iterations.
+		peak_resampler.out_data = &interpolated_samples_out[0];
+		peak_resampler.out_count = interpolated_samples_out.size() / 2;
+		peak_resampler.process();
+		size_t out_stereo_samples = interpolated_samples_out.size() / 2 - peak_resampler.out_count;
+		peak = max<float>(peak, find_peak(interpolated_samples_out.data(), out_stereo_samples * 2));
+	}
+
+	// Find R128 levels.
 	vector<float> left, right;
 	deinterleave_samples(samples_out, &left, &right);
 	float *ptrs[] = { left.data(), right.data() };
@@ -698,6 +715,7 @@ void Mixer::channel_clicked(int preview_num)
 
 void Mixer::reset_meters()
 {
+	peak_resampler.reset();
 	peak = 0.0f;
 	r128.reset();
 	r128.integr_start();
