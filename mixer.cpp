@@ -585,7 +585,7 @@ void Mixer::process_audio_one_frame()
 		float threshold = pow(10.0f, limiter_threshold_dbfs / 20.0f);
 		float ratio = 30.0f;
 		float attack_time = 0.0f;  // Instant.
-		float release_time = 0.005f;
+		float release_time = 0.020f;
 		float makeup_gain = 1.0f;  // 0 dB.
 		limiter.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
 //		limiter_att = limiter.get_attenuation();

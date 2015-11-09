@@ -257,7 +257,7 @@ private:
 	static constexpr float ref_level_dbfs = -14.0f;
 
 	StereoCompressor limiter;
-	std::atomic<float> limiter_threshold_dbfs{ref_level_dbfs + 0.0f};   // 0 dB.
+	std::atomic<float> limiter_threshold_dbfs{ref_level_dbfs + 4.0f};   // 4 dB.
 	std::atomic<bool> limiter_enabled{true};
 	StereoCompressor compressor;
 	std::atomic<float> compressor_threshold_dbfs{ref_level_dbfs - 12.0f};  // -12 dB.
