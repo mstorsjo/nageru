@@ -137,6 +137,16 @@ public:
 		locut_cutoff_hz = cutoff_hz;
 	}
 
+	float get_limiter_threshold_dbfs()
+	{
+		return limiter_threshold_dbfs;
+	}
+
+	float get_compressor_threshold_dbfs()
+	{
+		return compressor_threshold_dbfs;
+	}
+
 	void set_limiter_threshold_dbfs(float threshold_dbfs)
 	{
 		limiter_threshold_dbfs = threshold_dbfs;

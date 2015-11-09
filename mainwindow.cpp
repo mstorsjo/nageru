@@ -92,6 +92,12 @@ void MainWindow::mixer_created(Mixer *mixer)
 		connect(ui_display->wb_button, &QPushButton::clicked, bind(&MainWindow::wb_button_clicked, this, i));
 	}
 
+	char buf[256];
+	snprintf(buf, sizeof(buf), "%.1f dB", mixer->get_limiter_threshold_dbfs());
+	ui->limiter_threshold_db_display->setText(buf);
+	snprintf(buf, sizeof(buf), "%.1f dB", mixer->get_compressor_threshold_dbfs());
+	ui->compressor_threshold_db_display->setText(buf);
+
 	connect(ui->locut_cutoff_knob, &QDial::valueChanged, this, &MainWindow::cutoff_knob_changed);
 	connect(ui->limiter_threshold_knob, &QDial::valueChanged, this, &MainWindow::limiter_threshold_knob_changed);
 	connect(ui->compressor_threshold_knob, &QDial::valueChanged, this, &MainWindow::compressor_threshold_knob_changed);
