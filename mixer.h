@@ -137,6 +137,26 @@ public:
 		locut_cutoff_hz = cutoff_hz;
 	}
 
+	void set_limiter_threshold_dbfs(float threshold_dbfs)
+	{
+		limiter_threshold_dbfs = threshold_dbfs;
+	}
+
+	void set_compressor_threshold_dbfs(float threshold_dbfs)
+	{
+		compressor_threshold_dbfs = threshold_dbfs;
+	}
+
+	void set_limiter_enabled(bool enabled)
+	{
+		limiter_enabled = enabled;
+	}
+
+	void set_compressor_enabled(bool enabled)
+	{
+		compressor_enabled = enabled;
+	}
+
 	void reset_meters();
 
 private:
@@ -224,8 +244,14 @@ private:
 	StereoCompressor level_compressor;
 	float last_gain_staging_db = 0.0f;
 
+	static constexpr float ref_level_dbfs = -14.0f;
+
 	StereoCompressor limiter;
+	std::atomic<float> limiter_threshold_dbfs{ref_level_dbfs + 0.0f};   // 0 dB.
+	std::atomic<bool> limiter_enabled{true};
 	StereoCompressor compressor;
+	std::atomic<float> compressor_threshold_dbfs{ref_level_dbfs - 12.0f};  // -12 dB.
+	std::atomic<bool> compressor_enabled{true};
 };
 
 extern Mixer *global_mixer;

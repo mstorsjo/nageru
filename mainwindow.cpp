@@ -93,6 +93,14 @@ void MainWindow::mixer_created(Mixer *mixer)
 	}
 
 	connect(ui->locut_cutoff_knob, &QDial::valueChanged, this, &MainWindow::cutoff_knob_changed);
+	connect(ui->limiter_threshold_knob, &QDial::valueChanged, this, &MainWindow::limiter_threshold_knob_changed);
+	connect(ui->compressor_threshold_knob, &QDial::valueChanged, this, &MainWindow::compressor_threshold_knob_changed);
+	connect(ui->limiter_enabled, &QCheckBox::stateChanged, [this](int state){
+		global_mixer->set_limiter_enabled(state == Qt::Checked);
+	});
+	connect(ui->compressor_enabled, &QCheckBox::stateChanged, [this](int state){
+		global_mixer->set_compressor_enabled(state == Qt::Checked);
+	});
 	connect(ui->reset_meters_button, &QPushButton::clicked, this, &MainWindow::reset_meters_button_clicked);
 	mixer->set_audio_level_callback(bind(&MainWindow::audio_level_callback, this, _1, _2, _3, _4, _5, _6));
 }
@@ -106,6 +114,26 @@ void MainWindow::cutoff_knob_changed(int value)
 	char buf[256];
 	snprintf(buf, sizeof(buf), "%ld Hz", lrintf(cutoff_hz));
 	ui->locut_cutoff_display->setText(buf);
+}
+
+void MainWindow::limiter_threshold_knob_changed(int value)
+{
+	float threshold_dbfs = value * 0.1f;
+	global_mixer->set_limiter_threshold_dbfs(threshold_dbfs);
+
+	char buf[256];
+	snprintf(buf, sizeof(buf), "%.1f dB", threshold_dbfs);
+	ui->limiter_threshold_db_display->setText(buf);
+}
+
+void MainWindow::compressor_threshold_knob_changed(int value)
+{
+	float threshold_dbfs = value * 0.1f;
+	global_mixer->set_compressor_threshold_dbfs(threshold_dbfs);
+
+	char buf[256];
+	snprintf(buf, sizeof(buf), "%.1f dB", threshold_dbfs);
+	ui->compressor_threshold_db_display->setText(buf);
 }
 
 void MainWindow::reset_meters_button_clicked()

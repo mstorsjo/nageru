@@ -31,6 +31,8 @@ public slots:
 	void wb_button_clicked(int channel_number);
 	void set_transition_names(std::vector<std::string> transition_names);
 	void cutoff_knob_changed(int value);
+	void limiter_threshold_knob_changed(int value);
+	void compressor_threshold_knob_changed(int value);
 	void reset_meters_button_clicked();
 	void relayout();
 

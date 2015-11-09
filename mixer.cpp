@@ -581,8 +581,8 @@ void Mixer::process_audio_one_frame()
 	// Then a limiter at +0 dB (so, -14 dBFS) to take out the worst peaks only.
 	// Note that since ratio is not infinite, we could go slightly higher than this.
 	// Probably more tuning is warranted here.
-	{
-		float threshold = pow(10.0f, (ref_level_dbfs + 0.0f) / 20.0f);  // +0 dB.
+	if (limiter_enabled) {
+		float threshold = pow(10.0f, limiter_threshold_dbfs / 20.0f);
 		float ratio = 30.0f;
 		float attack_time = 0.0f;  // Instant.
 		float release_time = 0.005f;
@@ -592,8 +592,8 @@ void Mixer::process_audio_one_frame()
 	}
 
 	// Finally, the real compressor.
-	{
-		float threshold = pow(10.0f, (ref_level_dbfs - 12.0f) / 20.0f);  // -12 dB.
+	if (compressor_enabled) {
+		float threshold = pow(10.0f, compressor_threshold_dbfs / 20.0f);
 		float ratio = 20.0f;
 		float attack_time = 0.005f;
 		float release_time = 0.040f;
