@@ -578,20 +578,7 @@ void Mixer::process_audio_one_frame()
 
 //	float limiter_att, compressor_att;
 
-	// Then a limiter at +0 dB (so, -14 dBFS) to take out the worst peaks only.
-	// Note that since ratio is not infinite, we could go slightly higher than this.
-	// Probably more tuning is warranted here.
-	if (limiter_enabled) {
-		float threshold = pow(10.0f, limiter_threshold_dbfs / 20.0f);
-		float ratio = 30.0f;
-		float attack_time = 0.0f;  // Instant.
-		float release_time = 0.020f;
-		float makeup_gain = 1.0f;  // 0 dB.
-		limiter.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
-//		limiter_att = limiter.get_attenuation();
-	}
-
-	// Finally, the real compressor.
+	// The real compressor.
 	if (compressor_enabled) {
 		float threshold = pow(10.0f, compressor_threshold_dbfs / 20.0f);
 		float ratio = 20.0f;
@@ -600,6 +587,18 @@ void Mixer::process_audio_one_frame()
 		float makeup_gain = 2.0f;  // +6 dB.
 		compressor.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
 //		compressor_att = compressor.get_attenuation();
+	}
+
+	// Finally a limiter at -4 dB (so, -10 dBFS) to take out the worst peaks only.
+	// Note that since ratio is not infinite, we could go slightly higher than this.
+	if (limiter_enabled) {
+		float threshold = pow(10.0f, limiter_threshold_dbfs / 20.0f);
+		float ratio = 30.0f;
+		float attack_time = 0.0f;  // Instant.
+		float release_time = 0.020f;
+		float makeup_gain = 1.0f;  // 0 dB.
+		limiter.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
+//		limiter_att = limiter.get_attenuation();
 	}
 
 //	printf("limiter=%+5.1f  compressor=%+5.1f\n", 20.0*log10(limiter_att), 20.0*log10(compressor_att));
