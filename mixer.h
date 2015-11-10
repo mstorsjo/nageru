@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "bmusb/bmusb.h"
+#include "alsa_output.h"
 #include "ebu_r128_proc.h"
 #include "h264encode.h"
 #include "httpd.h"
@@ -262,6 +263,8 @@ private:
 	StereoCompressor compressor;
 	std::atomic<float> compressor_threshold_dbfs{ref_level_dbfs - 12.0f};  // -12 dB.
 	std::atomic<bool> compressor_enabled{true};
+
+	std::unique_ptr<ALSAOutput> alsa;
 };
 
 extern Mixer *global_mixer;

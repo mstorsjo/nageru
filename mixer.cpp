@@ -157,6 +157,8 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	// hlen=16 is pretty low quality, but we use quite a bit of CPU otherwise,
 	// and there's a limit to how important the peak meter is.
 	peak_resampler.setup(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY * 4, /*num_channels=*/2, /*hlen=*/16);
+
+	alsa.reset(new ALSAOutput(OUTPUT_FREQUENCY, /*num_channels=*/2));
 }
 
 Mixer::~Mixer()
@@ -623,7 +625,12 @@ void Mixer::process_audio_one_frame()
 	float *ptrs[] = { left.data(), right.data() };
 	r128.process(left.size(), ptrs);
 
-	// Actually add the samples to the output.
+	// Send the samples to the sound card.
+	if (alsa) {
+		alsa->write(samples_out);
+	}
+
+	// And finally add them to the output.
 	h264_encoder->add_audio(pts_int, move(samples_out));
 }
 
