@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <string>
 #include <vector>
+#include <sys/time.h>
 
 class GLWidget;
 class QResizeEvent;
@@ -42,6 +43,7 @@ private:
 
 	// Called from the mixer.
 	void audio_level_callback(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float auto_gain_staging_db);
+	timeval last_audio_level_callback{0, 0};
 
 	Ui::MainWindow *ui;
 	QPushButton *transition_btn1, *transition_btn2, *transition_btn3;

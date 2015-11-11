@@ -151,6 +151,18 @@ void MainWindow::reset_meters_button_clicked()
 
 void MainWindow::audio_level_callback(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float auto_gain_staging_db)
 {
+	timeval now;
+	gettimeofday(&now, nullptr);
+
+	// The meters are somewhat inefficient to update. Only update them
+	// every 100 ms or so (we get updates every 5–20 ms).
+	double last_update_age = now.tv_sec - last_audio_level_callback.tv_sec +
+		1e-6 * (now.tv_usec - last_audio_level_callback.tv_usec);
+	if (last_update_age < 0.100) {
+		return;
+	}
+	last_audio_level_callback = now;
+
 	post_to_main_thread([=]() {
 		ui->vu_meter->set_level(level_lufs);
 		ui->lra_meter->set_levels(global_level_lufs, range_low_lufs, range_high_lufs);
