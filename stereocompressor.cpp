@@ -6,11 +6,68 @@
 
 namespace {
 
+// Implement a less accurate but faster pow(x, y). We use the standard identity
+//
+//    x^y = exp(y * ln(x))
+//
+// with the ranges:
+//
+//    x in 1..(1/threshold)
+//    y in -1..0
+//
+// Assume threshold goes from 0 to -40 dB. That means 1/threshold = 100,
+// so input to ln(x) can be 1..100. Worst case for end accuracy is y=-1.
+// To get a good minimax approximation (not the least wrt. continuity
+// at x=1), I had to make a piecewise linear function for the two ranges:
+//
+//   with(numapprox):
+//   f1 := minimax(ln, 1..6, [3, 3], x -> 1/x, 'maxerror');
+//   f2 := minimax(ln, 6..100, [3, 3], x -> 1/x, 'maxerror');
+//   f := x -> piecewise(x < 6, f1(x), f2(x));
+//
+// (Continuity: Error is down to the 1e-6 range for x=1, difference between
+// f1 and f2 range at the crossover point is in the 1e-5 range. The cutoff
+// point at x=6 is chosen to get maxerror pretty close between f1 and f2.)
+//
+// Maximum output of ln(x) here is of course ln(100) ~= 4.605. So we can find
+// an approximation for exp over the range -4.605..0, where we care mostly
+// about the relative error:
+//
+//   g := minimax(exp, -ln(100)..0, [3, 3], x -> 1/exp(x), 'maxerror');
+//
+// We can find the worst-case error in dB from this through a simple plot:
+//
+//   dbdiff := (x, y) -> abs(20 * log10(x / y));
+//   plot(dbdiff(g(-f(x)), 1/x), x=1..100);
+//
+// which readily shows the error never to be above ~0.001 dB or so
+// (actually 0.00119 dB, for the case of x=100). y=-1 remains the worst case,
+// it would seem.
+//
+// If we cared even more about speed, we could probably fuse y into
+// the coefficients for ln_nom and postgain into the coefficients for ln_den.
+// But if so, we should probably rather just SIMD the entire thing instead.
+inline float fastpow(float x, float y)
+{
+	float ln_nom, ln_den;
+	if (x < 6.0f) {
+		ln_nom = -0.059237648 + (-0.0165117771 + (0.06818859075 + 0.007560968243 * x) * x) * x;
+		ln_den = 0.0202509098 + (0.08419174188 + (0.03647189417 + 0.001642577975 * x) * x) * x;
+	} else {
+		ln_nom = -0.005430534 + (0.00633589178 + (0.0006319155549 + 0.4789541675e-5 * x) * x) * x;
+		ln_den = 0.0064785099 + (0.003219629109 + (0.0001531823694 + 0.6884656640e-6 * x) * x) * x;
+	}
+	float v = y * ln_nom / ln_den;
+	float exp_nom = 0.2195097621 + (0.08546059868 + (0.01208501759 + 0.0006173448113 * v) * v) * v;
+	float exp_den = 0.2194980791 + (-0.1343051968 + (0.03556072737 - 0.006174398513 * v) * v) * v;
+	return exp_nom / exp_den;
+}
+
 inline float compressor_knee(float x, float threshold, float inv_threshold, float inv_ratio_minus_one, float postgain)
 {
 	assert(inv_ratio_minus_one <= 0.0f);
 	if (x > threshold && inv_ratio_minus_one < 0.0f) {
-		return postgain * pow(x * inv_threshold, inv_ratio_minus_one);
+		return postgain * fastpow(x * inv_threshold, inv_ratio_minus_one);
 	} else {
 		return postgain;
 	}
