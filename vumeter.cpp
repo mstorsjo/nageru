@@ -10,6 +10,17 @@ VUMeter::VUMeter(QWidget *parent)
 {
 }
 
+void VUMeter::resizeEvent(QResizeEvent *event)
+{
+	on_pixmap = QPixmap(width(), height());
+	QPainter on_painter(&on_pixmap);
+	draw_vu_meter(on_painter, -HUGE_VAL, HUGE_VAL, width(), height(), 0);
+
+	off_pixmap = QPixmap(width(), height());
+	QPainter off_painter(&off_pixmap);
+	draw_vu_meter(off_painter, -HUGE_VAL, -HUGE_VAL, width(), height(), 0);
+}
+
 void VUMeter::paintEvent(QPaintEvent *event)
 {
 	QPainter painter(this);
@@ -21,5 +32,10 @@ void VUMeter::paintEvent(QPaintEvent *event)
 	}
 
 	float level_lu = level_lufs + 23.0f;
-	draw_vu_meter(painter, -HUGE_VAL, level_lu, width(), height(), 0);
+	int on_pos = lufs_to_pos(level_lu, height());
+	QRect off_rect(0, 0, width(), on_pos);
+	QRect on_rect(0, on_pos, width(), height() - on_pos);
+
+	painter.drawPixmap(off_rect, off_pixmap, off_rect);
+	painter.drawPixmap(on_rect, on_pixmap, on_rect);
 }

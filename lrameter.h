@@ -25,12 +25,15 @@ public:
 	}
 
 private:
+	void resizeEvent(QResizeEvent *event) override;
 	void paintEvent(QPaintEvent *event) override;
 
 	std::mutex level_mutex;
 	float level_lufs = -HUGE_VAL;
 	float range_low_lufs = -HUGE_VAL;
 	float range_high_lufs = -HUGE_VAL;
+
+	QPixmap on_pixmap, off_pixmap;
 };
 
 #endif

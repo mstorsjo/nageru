@@ -14,11 +14,24 @@ LRAMeter::LRAMeter(QWidget *parent)
 {
 }
 
+void LRAMeter::resizeEvent(QResizeEvent *event)
+{
+	const int margin = 5;
+
+	on_pixmap = QPixmap(width(), height());
+	QPainter on_painter(&on_pixmap);
+	on_painter.fillRect(0, 0, width(), height(), parentWidget()->palette().window());
+	draw_vu_meter(on_painter, -HUGE_VAL, HUGE_VAL, width(), height(), margin);
+
+	off_pixmap = QPixmap(width(), height());
+	QPainter off_painter(&off_pixmap);
+	off_painter.fillRect(0, 0, width(), height(), parentWidget()->palette().window());
+	draw_vu_meter(off_painter, -HUGE_VAL, -HUGE_VAL, width(), height(), margin);
+}
+
 void LRAMeter::paintEvent(QPaintEvent *event)
 {
 	QPainter painter(this);
-
-	painter.fillRect(0, 0, width(), height(), parentWidget()->palette().window());
 
 	float level_lufs;
 	float range_low_lufs;
@@ -33,8 +46,16 @@ void LRAMeter::paintEvent(QPaintEvent *event)
 	float level_lu = level_lufs + 23.0f;
 	float range_low_lu = range_low_lufs + 23.0f;
 	float range_high_lu = range_high_lufs + 23.0f;
-	const int margin = 5;
-	draw_vu_meter(painter, range_low_lu, range_high_lu, width(), height(), margin);
+	int range_low_pos = lufs_to_pos(range_low_lu, height());
+	int range_high_pos = lufs_to_pos(range_high_lu, height());
+
+	QRect top_off_rect(0, 0, width(), range_high_pos);
+	QRect on_rect(0, range_high_pos, width(), range_low_pos - range_high_pos);
+	QRect bottom_off_rect(0, range_low_pos, width(), height() - range_low_pos);
+
+	painter.drawPixmap(top_off_rect, off_pixmap, top_off_rect);
+	painter.drawPixmap(on_rect, on_pixmap, on_rect);
+	painter.drawPixmap(bottom_off_rect, off_pixmap, bottom_off_rect);
 
 	// Draw the target area (+/-1 LU is allowed EBU range).
 	// It turns green when we're within.
