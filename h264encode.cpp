@@ -1725,6 +1725,7 @@ int H264Encoder::save_codeddata(storage_task task)
         }
         // TODO: Delayed frames.
         avcodec_free_frame(&frame);
+        av_free_packet(&pkt);
     }
 
 #if 0
