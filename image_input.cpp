@@ -63,6 +63,7 @@ ImageInput::ImageInput(const std::string &filename)
 			exit(1);
 		}
 		if (pkt.stream_index != stream_index) {
+			av_free_packet(&pkt);
 			continue;
 		}
 
@@ -70,6 +71,7 @@ ImageInput::ImageInput(const std::string &filename)
 			fprintf(stderr, "%s: Cannot decode frame\n", filename.c_str());
 			exit(1);
 		}
+		av_free_packet(&pkt);
 	} while (!frame_finished);
 
 	// TODO: Scale down if needed!
@@ -89,4 +91,9 @@ ImageInput::ImageInput(const std::string &filename)
 	image_data.reset(new uint8_t[len]);
 	av_image_copy_to_buffer(image_data.get(), len, pic.data, pic.linesize, PIX_FMT_RGBA, frame->width, frame->height, 1);
 	set_pixel_data(image_data.get());
+
+	avpicture_free(&pic);
+	av_frame_free(&frame);
+	avcodec_close(codec_ctx);
+	avformat_close_input(&format_ctx);
 }
