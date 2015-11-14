@@ -1698,14 +1698,19 @@ int H264Encoder::save_codeddata(storage_task task)
 
         AVFrame *frame = avcodec_alloc_frame();
         frame->nb_samples = audio.size() / 2;
-        frame->format = AV_SAMPLE_FMT_FLTP;
+        frame->format = AV_SAMPLE_FMT_S32;
         frame->channel_layout = AV_CH_LAYOUT_STEREO;
 
-        unique_ptr<float[]> planar_samples(new float[audio.size()]);
-        avcodec_fill_audio_frame(frame, 2, AV_SAMPLE_FMT_FLTP, (const uint8_t*)planar_samples.get(), audio.size() * sizeof(float), 0);
-        for (int i = 0; i < frame->nb_samples; ++i) {
-            planar_samples[i] = audio[i * 2 + 0];
-            planar_samples[i + frame->nb_samples] = audio[i * 2 + 1];
+        unique_ptr<int32_t[]> int_samples(new int32_t[audio.size()]);
+        avcodec_fill_audio_frame(frame, 2, AV_SAMPLE_FMT_S32, (const uint8_t*)int_samples.get(), audio.size() * sizeof(int32_t), 0);
+        for (int i = 0; i < frame->nb_samples * 2; ++i) {
+            if (audio[i] >= 1.0f) {
+                int_samples[i] = 2147483647;
+            } else if (audio[i] <= -1.0f) {
+                int_samples[i] = -2147483647;
+            } else {
+                int_samples[i] = lrintf(audio[i] * 2147483647.0f);
+            }
         }
 
         AVPacket pkt;
