@@ -174,6 +174,8 @@ Mixer::~Mixer()
 		}
 		cards[card_index].usb->stop_dequeue_thread();
 	}
+
+	h264_encoder.reset(nullptr);
 }
 
 namespace {
