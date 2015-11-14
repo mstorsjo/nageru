@@ -127,7 +127,12 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height)
 	avstream_audio->codec->channel_layout = AV_CH_LAYOUT_STEREO;
 	avstream_audio->codec->time_base = AVRational{1, TIMEBASE};
 
-	if (avformat_write_header(avctx, NULL) < 0) {
+	AVDictionary *options = NULL;
+	vector<pair<string, string>> opts = MUX_OPTS;
+	for (pair<string, string> opt : opts) {
+		av_dict_set(&options, opt.first.c_str(), opt.second.c_str(), 0);
+	}
+	if (avformat_write_header(avctx, &options) < 0) {
 		fprintf(stderr, "avformat_write_header() failed\n");
 		exit(1);
 	}

@@ -11,5 +11,6 @@
 
 #define LOCAL_DUMP_FILE_NAME "test.ts"
 #define STREAM_MUX_NAME "mpegts"
+#define MUX_OPTS {}
 
 #endif  // !defined(_DEFS_H)
