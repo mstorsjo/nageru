@@ -13,4 +13,7 @@
 #define STREAM_MUX_NAME "mpegts"
 #define MUX_OPTS {}
 
+// In bytes. Beware, if too small, stream clients will start dropping data.
+#define MUX_BUFFER_SIZE 10485760
+
 #endif  // !defined(_DEFS_H)

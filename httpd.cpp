@@ -73,8 +73,10 @@ int HTTPD::answer_to_connection(MHD_Connection *connection,
 	assert(oformat != nullptr);
 	HTTPD::Stream *stream = new HTTPD::Stream(oformat, width, height);
 	streams.push_back(stream);
+
+	// Does not strictly have to be equal to MUX_BUFFER_SIZE.
 	MHD_Response *response = MHD_create_response_from_callback(
-		(size_t)-1, 1048576, &HTTPD::Stream::reader_callback_thunk, stream, &HTTPD::free_stream);
+		(size_t)-1, MUX_BUFFER_SIZE, &HTTPD::Stream::reader_callback_thunk, stream, &HTTPD::free_stream);
 	int ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
 	//MHD_destroy_response(response);
 
@@ -168,8 +170,8 @@ HTTPD::Stream::Stream(AVOutputFormat *oformat, int width, int height)
 {
 	AVFormatContext *avctx = avformat_alloc_context();
 	avctx->oformat = oformat;
-	uint8_t *buf = (uint8_t *)av_malloc(1048576);
-	avctx->pb = avio_alloc_context(buf, 1048576, 1, this, nullptr, &HTTPD::Stream::write_packet_thunk, nullptr);
+	uint8_t *buf = (uint8_t *)av_malloc(MUX_BUFFER_SIZE);
+	avctx->pb = avio_alloc_context(buf, MUX_BUFFER_SIZE, 1, this, nullptr, &HTTPD::Stream::write_packet_thunk, nullptr);
 	avctx->flags = AVFMT_FLAG_CUSTOM_IO;
 
 	mux.reset(new Mux(avctx, width, height));
