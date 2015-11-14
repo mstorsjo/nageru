@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <new>
 #include <utility>
+#include <memory>
 
 #include "image_input.h"
 
@@ -36,6 +37,23 @@ using namespace movit;
 namespace {
 
 vector<LiveInputWrapper *> live_inputs;
+
+class LuaRefWithDeleter {
+public:
+	LuaRefWithDeleter(mutex *m, lua_State *L, int ref) : m(m), L(L), ref(ref) {}
+	~LuaRefWithDeleter() {
+		unique_lock<mutex> lock(*m);
+		luaL_unref(L, LUA_REGISTRYINDEX, ref);
+	}
+	int get() const { return ref; }
+
+private:
+	LuaRefWithDeleter(const LuaRefWithDeleter &) = delete;
+
+	mutex *m;
+	lua_State *L;
+	int ref;
+};
 
 template<class T, class... Args>
 int wrap_lua_object(lua_State* L, const char *class_name, Args&&... args)
@@ -501,14 +519,14 @@ Theme::get_chain(unsigned num, float t, unsigned width, unsigned height)
 		exit(1);
 	}
 	lua_pushvalue(L, -1);
-	int funcref = luaL_ref(L, LUA_REGISTRYINDEX);  // TODO: leak!
+	shared_ptr<LuaRefWithDeleter> funcref(new LuaRefWithDeleter(&m, L, luaL_ref(L, LUA_REGISTRYINDEX)));
 	lua_pop(L, 2);
 	assert(lua_gettop(L) == 0);
 	return make_pair(chain, [this, funcref]{
 		unique_lock<mutex> lock(m);
 
 		// Set up state, including connecting signals.
-		lua_rawgeti(L, LUA_REGISTRYINDEX, funcref);
+		lua_rawgeti(L, LUA_REGISTRYINDEX, funcref->get());
 		if (lua_pcall(L, 0, 0, 0) != 0) {
 			fprintf(stderr, "error running chain setup callback: %s\n", lua_tostring(L, -1));
 			exit(1);
