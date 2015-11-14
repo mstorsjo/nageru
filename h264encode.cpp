@@ -1469,6 +1469,12 @@ static int render_picture(void)
     va_status = vaRenderPicture(va_dpy, context_id, &pic_param_buf, 1);
     CHECK_VASTATUS(va_status, "vaRenderPicture");
 
+    // Supposedly vaRenderPicture() is supposed to destroy the buffer implicitly,
+    // but if we don't delete it here, we get leaks. The GStreamer implementation
+    // does the same.
+    va_status = vaDestroyBuffer(va_dpy, pic_param_buf);
+    CHECK_VASTATUS(va_status, "vaDestroyBuffer");
+
     return 0;
 }
 
@@ -1635,11 +1641,17 @@ static int render_slice(void)
 
     va_status = vaCreateBuffer(va_dpy, context_id, VAEncSliceParameterBufferType,
                                sizeof(slice_param), 1, &slice_param, &slice_param_buf);
-    CHECK_VASTATUS(va_status, "vaCreateBuffer");;
+    CHECK_VASTATUS(va_status, "vaCreateBuffer");
 
     va_status = vaRenderPicture(va_dpy, context_id, &slice_param_buf, 1);
     CHECK_VASTATUS(va_status, "vaRenderPicture");
-    
+
+    // Supposedly vaRenderPicture() is supposed to destroy the buffer implicitly,
+    // but if we don't delete it here, we get leaks. The GStreamer implementation
+    // does the same.
+    va_status = vaDestroyBuffer(va_dpy, slice_param_buf);
+    CHECK_VASTATUS(va_status, "vaDestroyBuffer");
+
     return 0;
 }
 
