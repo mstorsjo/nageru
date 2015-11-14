@@ -113,16 +113,16 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height)
 	avstream_video->codec->chroma_sample_location = AVCHROMA_LOC_LEFT;  // Chroma sample location. See chroma_offset_0[] in Mixer::subsample_chroma().
 	avstream_video->codec->field_order = AV_FIELD_PROGRESSIVE;
 
-	AVCodec *codec_audio = avcodec_find_encoder(AV_CODEC_ID_MP3);
+	AVCodec *codec_audio = avcodec_find_encoder(AUDIO_OUTPUT_CODEC);
 	avstream_audio = avformat_new_stream(avctx, codec_audio);
 	if (avstream_audio == nullptr) {
 		fprintf(stderr, "avformat_new_stream() failed\n");
 		exit(1);
 	}
 	avstream_audio->time_base = AVRational{1, TIMEBASE};
-	avstream_audio->codec->bit_rate = 256000;
+	avstream_audio->codec->bit_rate = AUDIO_OUTPUT_BIT_RATE;
 	avstream_audio->codec->sample_rate = OUTPUT_FREQUENCY;
-	avstream_audio->codec->sample_fmt = AV_SAMPLE_FMT_FLTP;
+	avstream_audio->codec->sample_fmt = AUDIO_OUTPUT_SAMPLE_FMT;
 	avstream_audio->codec->channels = 2;
 	avstream_audio->codec->channel_layout = AV_CH_LAYOUT_STEREO;
 	avstream_audio->codec->time_base = AVRational{1, TIMEBASE};

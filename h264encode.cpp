@@ -1698,7 +1698,7 @@ int H264Encoder::save_codeddata(storage_task task)
 
         AVFrame *frame = avcodec_alloc_frame();
         frame->nb_samples = audio.size() / 2;
-        frame->format = AV_SAMPLE_FMT_FLT;
+        frame->format = AV_SAMPLE_FMT_FLTP;
         frame->channel_layout = AV_CH_LAYOUT_STEREO;
 
         unique_ptr<float[]> planar_samples(new float[audio.size()]);
@@ -1833,11 +1833,11 @@ static int print_input()
 H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
 	: current_storage_frame(0), surface(surface), httpd(httpd)
 {
-	AVCodec *codec_audio = avcodec_find_encoder(AV_CODEC_ID_MP3);
+	AVCodec *codec_audio = avcodec_find_encoder(AUDIO_OUTPUT_CODEC);
 	context_audio = avcodec_alloc_context3(codec_audio);
-	context_audio->bit_rate = 256000;
+	context_audio->bit_rate = AUDIO_OUTPUT_BIT_RATE;
 	context_audio->sample_rate = OUTPUT_FREQUENCY;
-	context_audio->sample_fmt = AV_SAMPLE_FMT_FLTP;
+	context_audio->sample_fmt = AUDIO_OUTPUT_SAMPLE_FMT;
 	context_audio->channels = 2;
 	context_audio->channel_layout = AV_CH_LAYOUT_STEREO;
 	context_audio->time_base = AVRational{1, TIMEBASE};
