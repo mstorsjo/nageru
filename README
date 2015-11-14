@@ -51,7 +51,9 @@ Nageru is in alpha stage. It currently needs:
    11.x).
 
  - libzita-resampler, for resampling sound sources so that they are in sync
-   between sources.
+   between sources, and also for oversampling for the peak meter.
+
+ - Lua, for driving the theme engine.
 
 
 To start it, just hook up your requipment, type “make” and then “./nageru”.
@@ -60,10 +62,10 @@ it will make the USB3 threads do so, which will make them a lot more stable.
 (A reasonable hack for testing is probably just to run it as root using sudo,
 although you might not want to do that in production.) Note also that if you
 are running a desktop compositor, it will steal significant amounts of GPU
-performance.
+performance. The same goes for PulseAudio.
 
 Nageru will open a HTTP server at port 9095, where you can extract a live
-H264+MP3 signal in MPEG-TS mux (e.g. http://127.0.0.1:9095/stream.ts).
+H264+PCM signal in QuickTime mux (e.g. http://127.0.0.1:9095/stream.mov).
 It is probably too high bitrate (~25 Mbit/sec depending on content) to send to
 users, but you can easily send it around in your internal network and then
 transcode it in e.g. VLC. A copy of the stream (separately muxed) will also
