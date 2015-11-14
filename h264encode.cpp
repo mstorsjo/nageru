@@ -155,6 +155,20 @@ typedef struct __bitstream bitstream;
 
 using namespace std;
 
+// Supposedly vaRenderPicture() is supposed to destroy the buffer implicitly,
+// but if we don't delete it here, we get leaks. The GStreamer implementation
+// does the same.
+static void render_picture_and_delete(VADisplay dpy, VAContextID context, VABufferID *buffers, int num_buffers)
+{
+    VAStatus va_status = vaRenderPicture(dpy, context, buffers, num_buffers);
+    CHECK_VASTATUS(va_status, "vaRenderPicture");
+
+    for (int i = 0; i < num_buffers; ++i) {
+        va_status = vaDestroyBuffer(va_dpy, buffers[i]);
+        CHECK_VASTATUS(va_status, "vaDestroyBuffer");
+    }
+}
+
 static unsigned int 
 va_swap32(unsigned int val)
 {
@@ -1371,8 +1385,7 @@ static int render_sequence(void)
     render_id[0] = seq_param_buf;
     render_id[1] = rc_param_buf;
     
-    va_status = vaRenderPicture(va_dpy, context_id, &render_id[0], 2);
-    CHECK_VASTATUS(va_status, "vaRenderPicture");;
+    render_picture_and_delete(va_dpy, context_id, &render_id[0], 2);
 
     if (misc_priv_type != 0) {
         va_status = vaCreateBuffer(va_dpy, context_id,
@@ -1385,7 +1398,7 @@ static int render_sequence(void)
         misc_param_tmp->data[0] = misc_priv_value;
         vaUnmapBuffer(va_dpy, misc_param_tmpbuf);
     
-        va_status = vaRenderPicture(va_dpy, context_id, &misc_param_tmpbuf, 1);
+        render_picture_and_delete(va_dpy, context_id, &misc_param_tmpbuf, 1);
     }
     
     return 0;
@@ -1464,16 +1477,9 @@ static int render_picture(void)
 
     va_status = vaCreateBuffer(va_dpy, context_id, VAEncPictureParameterBufferType,
                                sizeof(pic_param), 1, &pic_param, &pic_param_buf);
-    CHECK_VASTATUS(va_status, "vaCreateBuffer");;
+    CHECK_VASTATUS(va_status, "vaCreateBuffer");
 
-    va_status = vaRenderPicture(va_dpy, context_id, &pic_param_buf, 1);
-    CHECK_VASTATUS(va_status, "vaRenderPicture");
-
-    // Supposedly vaRenderPicture() is supposed to destroy the buffer implicitly,
-    // but if we don't delete it here, we get leaks. The GStreamer implementation
-    // does the same.
-    va_status = vaDestroyBuffer(va_dpy, pic_param_buf);
-    CHECK_VASTATUS(va_status, "vaDestroyBuffer");
+    render_picture_and_delete(va_dpy, context_id, &pic_param_buf, 1);
 
     return 0;
 }
@@ -1508,8 +1514,7 @@ static int render_packedsequence(void)
 
     render_id[0] = packedseq_para_bufid;
     render_id[1] = packedseq_data_bufid;
-    va_status = vaRenderPicture(va_dpy, context_id, render_id, 2);
-    CHECK_VASTATUS(va_status, "vaRenderPicture");
+    render_picture_and_delete(va_dpy, context_id, render_id, 2);
 
     free(packedseq_buffer);
     
@@ -1546,8 +1551,7 @@ static int render_packedpicture(void)
 
     render_id[0] = packedpic_para_bufid;
     render_id[1] = packedpic_data_bufid;
-    va_status = vaRenderPicture(va_dpy, context_id, render_id, 2);
-    CHECK_VASTATUS(va_status, "vaRenderPicture");
+    render_picture_and_delete(va_dpy, context_id, render_id, 2);
 
     free(packedpic_buffer);
     
@@ -1583,8 +1587,7 @@ static void render_packedslice()
 
     render_id[0] = packedslice_para_bufid;
     render_id[1] = packedslice_data_bufid;
-    va_status = vaRenderPicture(va_dpy, context_id, render_id, 2);
-    CHECK_VASTATUS(va_status, "vaRenderPicture");
+    render_picture_and_delete(va_dpy, context_id, render_id, 2);
 
     free(packedslice_buffer);
 }
@@ -1643,14 +1646,7 @@ static int render_slice(void)
                                sizeof(slice_param), 1, &slice_param, &slice_param_buf);
     CHECK_VASTATUS(va_status, "vaCreateBuffer");
 
-    va_status = vaRenderPicture(va_dpy, context_id, &slice_param_buf, 1);
-    CHECK_VASTATUS(va_status, "vaRenderPicture");
-
-    // Supposedly vaRenderPicture() is supposed to destroy the buffer implicitly,
-    // but if we don't delete it here, we get leaks. The GStreamer implementation
-    // does the same.
-    va_status = vaDestroyBuffer(va_dpy, slice_param_buf);
-    CHECK_VASTATUS(va_status, "vaDestroyBuffer");
+    render_picture_and_delete(va_dpy, context_id, &slice_param_buf, 1);
 
     return 0;
 }
