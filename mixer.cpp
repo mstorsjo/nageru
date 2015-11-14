@@ -66,7 +66,7 @@ void convert_fixed24_to_fp32(float *dst, size_t out_channels, const uint8_t *src
 }  // namespace
 
 Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
-	: httpd("test.ts", WIDTH, HEIGHT),
+	: httpd(LOCAL_DUMP_FILE_NAME, WIDTH, HEIGHT),
 	  num_cards(num_cards),
 	  mixer_surface(create_surface(format)),
 	  h264_encoder_surface(create_surface(format)),

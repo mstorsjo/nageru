@@ -9,4 +9,7 @@
 #define AUDIO_OUTPUT_SAMPLE_FMT AV_SAMPLE_FMT_FLTP
 #define AUDIO_OUTPUT_BIT_RATE 256000
 
+#define LOCAL_DUMP_FILE_NAME "test.ts"
+#define STREAM_MUX_NAME "mpegts"
+
 #endif  // !defined(_DEFS_H)

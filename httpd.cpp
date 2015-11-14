@@ -69,7 +69,7 @@ int HTTPD::answer_to_connection(MHD_Connection *connection,
 				size_t *upload_data_size, void **con_cls)
 {
 	printf("url %s\n", url);
-	AVOutputFormat *oformat = av_guess_format("mpegts", nullptr, nullptr);
+	AVOutputFormat *oformat = av_guess_format(STREAM_MUX_NAME, nullptr, nullptr);
 	assert(oformat != nullptr);
 	HTTPD::Stream *stream = new HTTPD::Stream(oformat, width, height);
 	streams.push_back(stream);
