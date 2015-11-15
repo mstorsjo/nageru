@@ -31,17 +31,24 @@ ALSAOutput::ALSAOutput(int sample_rate, int num_channels)
 	die_on_error("snd_pcm_hw_params_set_channels", snd_pcm_hw_params_set_channels(pcm_handle, hw_params, num_channels));
 
 	// Fragment size of 512 samples. (A frame at 60 fps/48 kHz is 800 samples.)
-	// We ask for four such periods.
-	unsigned int num_periods = 4;
+	// We ask for 16 such periods (~170 ms buffer).
+	unsigned int num_periods = 16;
 	int dir = 0;
-	die_on_error("snd_pcm_hw_params_set_periods_near", snd_pcm_hw_params_set_periods_near(pcm_handle, hw_params, &num_periods, &dir));
+	die_on_error("snd_pcm_hw_params_set_periods_near()", snd_pcm_hw_params_set_periods_near(pcm_handle, hw_params, &num_periods, &dir));
 	period_size = 512;
 	dir = 0;
-	die_on_error("snd_pcm_hw_params_set_period_size_near", snd_pcm_hw_params_set_period_size_near(pcm_handle, hw_params, &period_size, &dir));
-	die_on_error("snd_pcm_hw_params", snd_pcm_hw_params(pcm_handle, hw_params));
+	die_on_error("snd_pcm_hw_params_set_period_size_near()", snd_pcm_hw_params_set_period_size_near(pcm_handle, hw_params, &period_size, &dir));
+	die_on_error("snd_pcm_hw_params()", snd_pcm_hw_params(pcm_handle, hw_params));
 	//snd_pcm_hw_params_free(hw_params);
 
+	snd_pcm_sw_params_t *sw_params;
+	snd_pcm_sw_params_alloca(&sw_params);
+	die_on_error("snd_pcm_sw_params_current()", snd_pcm_sw_params_current(pcm_handle, sw_params));
+	die_on_error("snd_pcm_sw_params_set_start_threshold", snd_pcm_sw_params_set_start_threshold(pcm_handle, sw_params, num_periods * period_size / 2));
+	die_on_error("snd_pcm_sw_params()", snd_pcm_sw_params(pcm_handle, sw_params));
+
 	die_on_error("snd_pcm_nonblock", snd_pcm_nonblock(pcm_handle, 1));
+	die_on_error("snd_pcm_prepare()", snd_pcm_prepare(pcm_handle));
 }
 
 void ALSAOutput::write(const vector<float> &samples)
