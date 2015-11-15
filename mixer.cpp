@@ -572,9 +572,10 @@ void Mixer::process_audio_one_frame(int64_t frame_pts_int)
 		}
 	}
 
-	// Cut away everything under 150 Hz; we don't need it for voice,
-	// and it will reduce headroom and confuse the compressor.
-	// (In particular, any hums at 50 or 60 Hz should be dampened.)
+	// Cut away everything under 120 Hz (or whatever the cutoff is);
+	// we don't need it for voice, and it will reduce headroom
+	// and confuse the compressor. (In particular, any hums at 50 or 60 Hz
+	// should be dampened.)
 	locut.render(samples_out.data(), samples_out.size() / 2, locut_cutoff_hz * 2.0 * M_PI / OUTPUT_FREQUENCY, 0.5f);
 
 	// Apply a level compressor to get the general level right.
