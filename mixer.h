@@ -176,7 +176,8 @@ private:
 		FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format);
 	void place_rectangle(movit::Effect *resample_effect, movit::Effect *padding_effect, float x0, float y0, float x1, float y1);
 	void thread_func();
-	void process_audio_one_frame();
+	void audio_thread_func();
+	void process_audio_one_frame(int64_t frame_pts_int);
 	void subsample_chroma(GLuint src_tex, GLuint dst_dst);
 	void release_display_frame(DisplayFrame *frame);
 	double pts() { return double(pts_int) / TIMEBASE; }
@@ -240,7 +241,8 @@ private:
 	OutputChannel output_channel[NUM_OUTPUTS];
 
 	std::thread mixer_thread;
-	bool should_quit = false;
+	std::thread audio_thread;
+	std::atomic<bool> should_quit{false};
 
 	audio_level_callback_t audio_level_callback = nullptr;
 	Ebu_r128_proc r128;
@@ -265,6 +267,10 @@ private:
 	std::atomic<bool> compressor_enabled{true};
 
 	std::unique_ptr<ALSAOutput> alsa;
+
+	std::mutex audio_mutex;
+	std::condition_variable audio_pts_queue_changed;
+	std::queue<int64_t> audio_pts_queue;
 };
 
 extern Mixer *global_mixer;

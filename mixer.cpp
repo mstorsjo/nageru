@@ -379,7 +379,12 @@ void Mixer::thread_func()
 
 		// Resample the audio as needed, including from previously dropped frames.
 		for (unsigned frame_num = 0; frame_num < card_copy[0].dropped_frames + 1; ++frame_num) {
-			process_audio_one_frame();
+			{
+				// Signal to the audio thread to process this frame.
+				unique_lock<mutex> lock(audio_mutex);
+				audio_pts_queue.push(pts_int);
+				audio_pts_queue_changed.notify_one();
+			}
 			if (frame_num != card_copy[0].dropped_frames) {
 				// For dropped frames, increase the pts.
 				++dropped_frames;
@@ -533,7 +538,23 @@ void Mixer::thread_func()
 	resource_pool->clean_context();
 }
 
-void Mixer::process_audio_one_frame()
+void Mixer::audio_thread_func()
+{
+	while (!should_quit) {
+		int64_t frame_pts_int;
+
+		{
+			unique_lock<mutex> lock(audio_mutex);
+			audio_pts_queue_changed.wait(lock, [this]{ return !audio_pts_queue.empty(); });
+			frame_pts_int = audio_pts_queue.front();
+			audio_pts_queue.pop();
+		}
+
+		process_audio_one_frame(frame_pts_int);
+	}
+}
+
+void Mixer::process_audio_one_frame(int64_t frame_pts_int)
 {
 	vector<float> samples_card;
 	vector<float> samples_out;
@@ -541,7 +562,7 @@ void Mixer::process_audio_one_frame()
 		samples_card.resize((OUTPUT_FREQUENCY / FPS) * 2);
 		{
 			unique_lock<mutex> lock(cards[card_index].audio_mutex);
-			if (!cards[card_index].resampling_queue->get_output_samples(pts(), &samples_card[0], OUTPUT_FREQUENCY / FPS)) {
+			if (!cards[card_index].resampling_queue->get_output_samples(double(frame_pts_int) / TIMEBASE, &samples_card[0], OUTPUT_FREQUENCY / FPS)) {
 				printf("Card %d reported previous underrun.\n", card_index);
 			}
 		}
@@ -633,7 +654,7 @@ void Mixer::process_audio_one_frame()
 	}
 
 	// And finally add them to the output.
-	h264_encoder->add_audio(pts_int, move(samples_out));
+	h264_encoder->add_audio(frame_pts_int, move(samples_out));
 }
 
 void Mixer::subsample_chroma(GLuint src_tex, GLuint dst_tex)
@@ -703,12 +724,14 @@ void Mixer::release_display_frame(DisplayFrame *frame)
 void Mixer::start()
 {
 	mixer_thread = thread(&Mixer::thread_func, this);
+	audio_thread = thread(&Mixer::audio_thread_func, this);
 }
 
 void Mixer::quit()
 {
 	should_quit = true;
 	mixer_thread.join();
+	audio_thread.join();
 }
 
 void Mixer::transition_clicked(int transition_num)

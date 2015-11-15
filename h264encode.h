@@ -85,7 +85,7 @@ private:
 	void copy_thread_func();
 	void storage_task_thread();
 	void storage_task_enqueue(storage_task task);
-	int save_codeddata(storage_task task);
+	void save_codeddata(storage_task task);
 
 	std::thread copy_thread, storage_thread;
 

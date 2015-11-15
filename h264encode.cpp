@@ -1653,7 +1653,7 @@ static int render_slice(void)
 
 
 
-int H264Encoder::save_codeddata(storage_task task)
+void H264Encoder::save_codeddata(storage_task task)
 {    
     VACodedBufferSegment *buf_list = NULL;
     VAStatus va_status;
@@ -1690,13 +1690,13 @@ int H264Encoder::save_codeddata(storage_task task)
         httpd->add_packet(pkt, task.pts + global_delay, task.dts + global_delay);
     }
     // Encode and add all audio frames up to and including the pts of this video frame.
-    // (They can never be queued to us after the video frame they belong to, only before.)
     for ( ;; ) {
         int64_t audio_pts;
         std::vector<float> audio;
         {
              unique_lock<mutex> lock(frame_queue_mutex);
-             if (pending_audio_frames.empty()) break;
+             frame_queue_nonempty.wait(lock, [this]{ return copy_thread_should_quit || !pending_audio_frames.empty(); });
+             if (copy_thread_should_quit) return;
              auto it = pending_audio_frames.begin();
              if (it->first > task.pts) break;
              audio_pts = it->first;
@@ -1734,6 +1734,7 @@ int H264Encoder::save_codeddata(storage_task task)
         // TODO: Delayed frames.
         avcodec_free_frame(&frame);
         av_free_packet(&pkt);
+        if (audio_pts == task.pts) break;
     }
 
 #if 0
@@ -1755,8 +1756,6 @@ int H264Encoder::save_codeddata(storage_task task)
     printf("%08lld", encode_order);
     printf("(%06d bytes coded)", coded_size);
 #endif
-
-    return 0;
 }
 
 
@@ -1904,7 +1903,7 @@ H264Encoder::~H264Encoder()
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
 		copy_thread_should_quit = true;
-		frame_queue_nonempty.notify_one();
+		frame_queue_nonempty.notify_all();
 	}
 	storage_thread.join();
 	copy_thread.join();
@@ -1983,9 +1982,8 @@ void H264Encoder::add_audio(int64_t pts, std::vector<float> audio)
 		unique_lock<mutex> lock(frame_queue_mutex);
 		pending_audio_frames[pts] = move(audio);
 	}
-	frame_queue_nonempty.notify_one();
+	frame_queue_nonempty.notify_all();
 }
-
 
 void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const std::vector<RefCountedFrame> &input_frames)
 {
@@ -1994,7 +1992,7 @@ void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const std::vect
 		pending_video_frames[current_storage_frame] = PendingFrame{ fence, input_frames, pts };
 		++current_storage_frame;
 	}
-	frame_queue_nonempty.notify_one();
+	frame_queue_nonempty.notify_all();
 }
 
 void H264Encoder::copy_thread_func()
