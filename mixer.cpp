@@ -212,6 +212,57 @@ void deinterleave_samples(const vector<float> &in, vector<float> *out_l, vector<
 	}
 }
 
+// Returns length of a frame with the given format, in TIMEBASE units.
+int64_t find_frame_length(uint16_t video_format)
+{
+	if (video_format == 0x0800) {
+		// No video signal. These green pseudo-frames seem to come at about 30.13 Hz.
+		// It's a strange thing, but what can you do.
+		return TIMEBASE * 100 / 3013;
+	}
+	if ((video_format & 0xe800) != 0xe800) {
+		printf("Video format 0x%04x does not appear to be a video format. Assuming 60 Hz.\n",
+			video_format);
+		return TIMEBASE / 60;
+	}
+
+	// 0x8 seems to be a flag about availability of deep color on the input,
+	// except when it's not (e.g. it's the only difference between NTSC 23.98
+	// and PAL). Rather confusing. But we clear it here nevertheless, because
+	// usually it doesn't mean anything.
+	//
+	// We don't really handle interlaced formats at all yet.
+	uint16_t normalized_video_format = video_format & ~0xe808;
+	if (normalized_video_format == 0x0143) {         // 720p50.
+		return TIMEBASE / 50;
+	} else if (normalized_video_format == 0x0103) {  // 720p60.
+		return TIMEBASE / 60;
+	} else if (normalized_video_format == 0x0121) {  // 720p59.94.
+		return TIMEBASE * 1001 / 60000;
+	} else if (normalized_video_format == 0x01c3 ||  // 1080p30.
+		   normalized_video_format == 0x0003) {  // 1080i60.
+		return TIMEBASE / 30;
+	} else if (normalized_video_format == 0x01e1 ||  // 1080p29.97.
+		   normalized_video_format == 0x0021 ||  // 1080i59.94.
+		   video_format == 0xe901 ||             // NTSC (480i59.94, I suppose).
+		   video_format == 0xe9c1 ||             // Ditto.
+		   video_format == 0xe801) {             // Ditto.
+		return TIMEBASE * 1001 / 30000;
+	} else if (normalized_video_format == 0x0063 ||  // 1080p25.
+		   normalized_video_format == 0x0043 ||  // 1080i50.
+		   video_format == 0xe909) {             // PAL (576i50, I suppose).
+		return TIMEBASE / 25;
+	} else if (normalized_video_format == 0x008e) {  // 1080p24.
+		return TIMEBASE / 24;
+	} else if (normalized_video_format == 0x00a1) {  // 1080p23.98.
+		return TIMEBASE * 1001 / 24000;
+		return TIMEBASE / 25;
+	} else {
+		printf("Unknown video format 0x%04x. Assuming 60 Hz.\n", video_format);
+		return TIMEBASE / 60;
+	}
+}
+
 }  // namespace
 
 void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
@@ -219,6 +270,8 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		     FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format)
 {
 	CaptureCard *card = &cards[card_index];
+
+	int64_t frame_length = find_frame_length(video_format);
 
 	if (audio_frame.len - audio_offset > 30000) {
 		printf("Card %d: Dropping frame with implausible audio length (len=%d, offset=%d) [timecode=0x%04x video_len=%d video_offset=%d video_format=%x)\n",
@@ -233,13 +286,12 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		return;
 	}
 
-	int unwrapped_timecode = timecode;
+	int64_t local_pts = card->next_local_pts;
 	int dropped_frames = 0;
 	if (card->last_timecode != -1) {
-		unwrapped_timecode = unwrap_timecode(unwrapped_timecode, card->last_timecode);
-		dropped_frames = unwrapped_timecode - card->last_timecode - 1;
+		dropped_frames = unwrap_timecode(timecode, card->last_timecode) - card->last_timecode - 1;
 	}
-	card->last_timecode = unwrapped_timecode;
+	card->last_timecode = timecode;
 
 	// Convert the audio to stereo fp32 and add it.
 	size_t num_samples = (audio_frame.len >= audio_offset) ? (audio_frame.len - audio_offset) / 8 / 3 : 0;
@@ -251,22 +303,27 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	{
 		unique_lock<mutex> lock(card->audio_mutex);
 
-		int unwrapped_timecode = timecode;
-		if (dropped_frames > FPS * 2) {
+		if (dropped_frames > MAX_FPS * 2) {
 			fprintf(stderr, "Card %d lost more than two seconds (or time code jumping around), resetting resampler\n",
 				card_index);
 			card->resampling_queue.reset(new ResamplingQueue(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY, 2));
 		} else if (dropped_frames > 0) {
-			// Insert silence as needed.
+			// Insert silence as needed. (The number of samples could be nonintegral,
+			// but resampling will save us then.)
 			fprintf(stderr, "Card %d dropped %d frame(s) (before timecode 0x%04x), inserting silence.\n",
 				card_index, dropped_frames, timecode);
 			vector<float> silence;
-			silence.resize((OUTPUT_FREQUENCY / FPS) * 2);
+			silence.resize((OUTPUT_FREQUENCY * frame_length / TIMEBASE) * 2);
 			for (int i = 0; i < dropped_frames; ++i) {
-				card->resampling_queue->add_input_samples((unwrapped_timecode - dropped_frames + i) / double(FPS), silence.data(), (OUTPUT_FREQUENCY / FPS));
+				card->resampling_queue->add_input_samples(local_pts / double(TIMEBASE), silence.data(), silence.size() / 2);
+				// Note that if the format changed in the meantime, we have
+				// no way of detecting that; we just have to assume the frame length
+				// is always the same.
+				local_pts += frame_length;
 			}
 		}
-		card->resampling_queue->add_input_samples(unwrapped_timecode / double(FPS), audio.data(), num_samples);
+		card->resampling_queue->add_input_samples(local_pts / double(TIMEBASE), audio.data(), num_samples);
+		card->next_local_pts = local_pts + frame_length;
 	}
 
 	// Done with the audio, so release it.
@@ -296,6 +353,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 			unique_lock<mutex> lock(bmusb_mutex);
 			card->new_data_ready = true;
 			card->new_frame = RefCountedFrame(FrameAllocator::Frame());
+			card->new_frame_length = frame_length;
 			card->new_data_ready_fence = nullptr;
 			card->dropped_frames = dropped_frames;
 			card->new_data_ready_changed.notify_all();
@@ -332,6 +390,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		unique_lock<mutex> lock(bmusb_mutex);
 		card->new_data_ready = true;
 		card->new_frame = RefCountedFrame(video_frame);
+		card->new_frame_length = frame_length;
 		card->new_data_ready_fence = fence;
 		card->dropped_frames = dropped_frames;
 		card->new_data_ready_changed.notify_all();
@@ -355,6 +414,7 @@ void Mixer::thread_func()
 
 	while (!should_quit) {
 		CaptureCard card_copy[MAX_CARDS];
+		int num_samples[MAX_CARDS];
 
 		{
 			unique_lock<mutex> lock(bmusb_mutex);
@@ -368,10 +428,15 @@ void Mixer::thread_func()
 				card_copy[card_index].usb = card->usb;
 				card_copy[card_index].new_data_ready = card->new_data_ready;
 				card_copy[card_index].new_frame = card->new_frame;
+				card_copy[card_index].new_frame_length = card->new_frame_length;
 				card_copy[card_index].new_data_ready_fence = card->new_data_ready_fence;
 				card_copy[card_index].dropped_frames = card->dropped_frames;
 				card->new_data_ready = false;
 				card->new_data_ready_changed.notify_all();
+
+				int num_samples_times_timebase = OUTPUT_FREQUENCY * card->new_frame_length + card->fractional_samples;
+				num_samples[card_index] = num_samples_times_timebase / TIMEBASE;
+				card->fractional_samples = num_samples_times_timebase % TIMEBASE;
 			}
 		}
 
@@ -380,13 +445,15 @@ void Mixer::thread_func()
 			{
 				// Signal to the audio thread to process this frame.
 				unique_lock<mutex> lock(audio_mutex);
-				audio_pts_queue.push(pts_int);
-				audio_pts_queue_changed.notify_one();
+				audio_task_queue.push(AudioTask{pts_int, num_samples[0]});
+				audio_task_queue_changed.notify_one();
 			}
 			if (frame_num != card_copy[0].dropped_frames) {
-				// For dropped frames, increase the pts.
+				// For dropped frames, increase the pts. Note that if the format changed
+				// in the meantime, we have no way of detecting that; we just have to
+				// assume the frame length is always the same.
 				++dropped_frames;
-				pts_int += TIMEBASE / FPS;
+				pts_int += card_copy[0].new_frame_length;
 			}
 		}
 
@@ -415,7 +482,7 @@ void Mixer::thread_func()
 		// just increase the pts (skipping over this frame) and don't try to compute anything new.
 		if (card_copy[0].new_frame->len == 0) {
 			++dropped_frames;
-			pts_int += TIMEBASE / FPS;
+			pts_int += card_copy[0].new_frame_length;
 			continue;
 		}
 
@@ -480,7 +547,7 @@ void Mixer::thread_func()
 		const int64_t av_delay = TIMEBASE / 10;  // Corresponds to the fixed delay in resampling_queue.h. TODO: Make less hard-coded.
 		h264_encoder->end_frame(fence, pts_int + av_delay, input_frames);
 		++frame;
-		pts_int += TIMEBASE / FPS;
+		pts_int += card_copy[0].new_frame_length;
 
 		// The live frame just shows the RGBA texture we just rendered.
 		// It owns rgba_tex now.
@@ -539,28 +606,28 @@ void Mixer::thread_func()
 void Mixer::audio_thread_func()
 {
 	while (!should_quit) {
-		int64_t frame_pts_int;
+		AudioTask task;
 
 		{
 			unique_lock<mutex> lock(audio_mutex);
-			audio_pts_queue_changed.wait(lock, [this]{ return !audio_pts_queue.empty(); });
-			frame_pts_int = audio_pts_queue.front();
-			audio_pts_queue.pop();
+			audio_task_queue_changed.wait(lock, [this]{ return !audio_task_queue.empty(); });
+			task = audio_task_queue.front();
+			audio_task_queue.pop();
 		}
 
-		process_audio_one_frame(frame_pts_int);
+		process_audio_one_frame(task.pts_int, task.num_samples);
 	}
 }
 
-void Mixer::process_audio_one_frame(int64_t frame_pts_int)
+void Mixer::process_audio_one_frame(int64_t frame_pts_int, int num_samples)
 {
 	vector<float> samples_card;
 	vector<float> samples_out;
 	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
-		samples_card.resize((OUTPUT_FREQUENCY / FPS) * 2);
+		samples_card.resize(num_samples * 2);
 		{
 			unique_lock<mutex> lock(cards[card_index].audio_mutex);
-			if (!cards[card_index].resampling_queue->get_output_samples(double(frame_pts_int) / TIMEBASE, &samples_card[0], OUTPUT_FREQUENCY / FPS)) {
+			if (!cards[card_index].resampling_queue->get_output_samples(double(frame_pts_int) / TIMEBASE, &samples_card[0], num_samples)) {
 				printf("Card %d reported previous underrun.\n", card_index);
 			}
 		}

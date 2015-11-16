@@ -114,7 +114,6 @@ static  int frame_width = 176;
 static  int frame_height = 144;
 static  int frame_width_mbaligned;
 static  int frame_height_mbaligned;
-static  int frame_rate = FPS;
 static  unsigned int frame_bitrate = 0;
 static  unsigned int frame_slices = 1;
 static  double frame_size = 0;
@@ -122,7 +121,7 @@ static  int initial_qp = 15;
 //static  int initial_qp = 28;
 static  int minimal_qp = 0;
 static  int intra_period = 30;
-static  int intra_idr_period = FPS;
+static  int intra_idr_period = MAX_FPS;  // About a second; more at lower frame rates. Not ideal.
 static  int ip_period = 3;
 static  int rc_mode = -1;
 static  int rc_default_modes[] = {
@@ -619,7 +618,7 @@ static int build_packed_slice_buffer(unsigned char **header_buffer)
 //
 // Getting pts and dts right with variable frame rate (VFR) and B-frames can be a
 // bit tricky. We assume first of all that the frame rate never goes _above_
-// <frame_rate>, which gives us a frame period N. The decoder can always decode
+// MAX_FPS, which gives us a frame period N. The decoder can always decode
 // in at least this speed, as long at dts <= pts (the frame is not attempted
 // presented before it is decoded). Furthermore, we never have longer chains of
 // B-frames than a fixed constant C. (In a B-frame chain, we say that the base
@@ -712,7 +711,7 @@ void encoding2display_order(
         *displaying_order = encoding_order;
         // IDR frames are a special case; I honestly can't find the logic behind
         // why this is the right thing, but it seems to line up nicely in practice :-)
-        *pts_lag = TIMEBASE / frame_rate;
+        *pts_lag = TIMEBASE / MAX_FPS;
     } else if (((encoding_order_gop - 1) % ip_period) != 0) { /* B frames */
         *frame_type = FRAME_B;
         *displaying_order = encoding_order - 1;
@@ -873,7 +872,7 @@ static int process_cmdline(int argc, char *argv[])
     }
 
     if (frame_bitrate == 0)
-        frame_bitrate = frame_width * frame_height * 12 * frame_rate / 50;
+        frame_bitrate = frame_width * frame_height * 12 * MAX_FPS / 50;
         
     if (coded_fn == NULL) {
         struct stat buf;
@@ -1661,7 +1660,7 @@ void H264Encoder::save_codeddata(storage_task task)
 
     string data;
 
-    const int64_t global_delay = (ip_period - 1) * (TIMEBASE / frame_rate);  // So we never get negative dts.
+    const int64_t global_delay = (ip_period - 1) * (TIMEBASE / MAX_FPS);  // So we never get negative dts.
 
     va_status = vaMapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf, (void **)(&buf_list));
     CHECK_VASTATUS(va_status, "vaMapBuffer");
@@ -1828,7 +1827,6 @@ static int print_input()
     if (rc_mode != -1)
         printf("INPUT: RateControl  : %s\n", rc_to_string(rc_mode));
     printf("INPUT: Resolution   : %dx%dframes\n", frame_width, frame_height);
-    printf("INPUT: FrameRate    : %d\n", frame_rate);
     printf("INPUT: Bitrate      : %d\n", frame_bitrate);
     printf("INPUT: Slieces      : %d\n", frame_slices);
     printf("INPUT: IntraPeriod  : %d\n", intra_period);
@@ -2059,7 +2057,7 @@ void H264Encoder::copy_thread_func()
 		int64_t dts;
 		if (pts_lag == -1) {
 			assert(last_dts != -1);
-			dts = last_dts + (TIMEBASE / frame_rate);
+			dts = last_dts + (TIMEBASE / MAX_FPS);
 		} else {
 			dts = pts - pts_lag;
 		}

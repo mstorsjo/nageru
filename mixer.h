@@ -177,7 +177,7 @@ private:
 	void place_rectangle(movit::Effect *resample_effect, movit::Effect *padding_effect, float x0, float y0, float x1, float y1);
 	void thread_func();
 	void audio_thread_func();
-	void process_audio_one_frame(int64_t frame_pts_int);
+	void process_audio_one_frame(int64_t frame_pts_int, int num_samples);
 	void subsample_chroma(GLuint src_tex, GLuint dst_dst);
 	void release_display_frame(DisplayFrame *frame);
 	double pts() { return double(pts_int) / TIMEBASE; }
@@ -209,13 +209,19 @@ private:
 		bool new_data_ready = false;  // Whether new_frame contains anything.
 		bool should_quit = false;
 		RefCountedFrame new_frame;
+		int64_t new_frame_length;  // In TIMEBASE units.
 		GLsync new_data_ready_fence;  // Whether new_frame is ready for rendering.
 		std::condition_variable new_data_ready_changed;  // Set whenever new_data_ready is changed.
 		unsigned dropped_frames = 0;  // Before new_frame.
 
+		// Accumulated errors in number of 1/TIMEBASE samples. If OUTPUT_FREQUENCY divided by
+		// frame rate is integer, will always stay zero.
+		unsigned fractional_samples = 0;
+
 		std::mutex audio_mutex;
 		std::unique_ptr<ResamplingQueue> resampling_queue;  // Under audio_mutex.
 		int last_timecode = -1;  // Unwrapped.
+		int64_t next_local_pts = 0;  // Beginning of next frame, in TIMEBASE units.
 	};
 	CaptureCard cards[MAX_CARDS];  // protected by <bmusb_mutex>
 
@@ -268,9 +274,13 @@ private:
 
 	std::unique_ptr<ALSAOutput> alsa;
 
+	struct AudioTask {
+		int64_t pts_int;
+		int num_samples;
+	};
 	std::mutex audio_mutex;
-	std::condition_variable audio_pts_queue_changed;
-	std::queue<int64_t> audio_pts_queue;
+	std::condition_variable audio_task_queue_changed;
+	std::queue<AudioTask> audio_task_queue;  // Under audio_mutex.
 };
 
 extern Mixer *global_mixer;

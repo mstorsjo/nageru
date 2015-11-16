@@ -1,9 +1,8 @@
 #ifndef _DEFS_H
 #define _DEFS_H
 
-// OUTPUT_FREQUENCY/FPS must be an integer for now.
 #define OUTPUT_FREQUENCY 48000
-#define FPS 60
+#define MAX_FPS 60
 #define WIDTH 1280
 #define HEIGHT 720
 
