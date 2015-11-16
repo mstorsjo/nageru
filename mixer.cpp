@@ -212,57 +212,6 @@ void deinterleave_samples(const vector<float> &in, vector<float> *out_l, vector<
 	}
 }
 
-// Returns length of a frame with the given format, in TIMEBASE units.
-int64_t find_frame_length(uint16_t video_format)
-{
-	if (video_format == 0x0800) {
-		// No video signal. These green pseudo-frames seem to come at about 30.13 Hz.
-		// It's a strange thing, but what can you do.
-		return TIMEBASE * 100 / 3013;
-	}
-	if ((video_format & 0xe800) != 0xe800) {
-		printf("Video format 0x%04x does not appear to be a video format. Assuming 60 Hz.\n",
-			video_format);
-		return TIMEBASE / 60;
-	}
-
-	// 0x8 seems to be a flag about availability of deep color on the input,
-	// except when it's not (e.g. it's the only difference between NTSC 23.98
-	// and PAL). Rather confusing. But we clear it here nevertheless, because
-	// usually it doesn't mean anything.
-	//
-	// We don't really handle interlaced formats at all yet.
-	uint16_t normalized_video_format = video_format & ~0xe808;
-	if (normalized_video_format == 0x0143) {         // 720p50.
-		return TIMEBASE / 50;
-	} else if (normalized_video_format == 0x0103) {  // 720p60.
-		return TIMEBASE / 60;
-	} else if (normalized_video_format == 0x0121) {  // 720p59.94.
-		return TIMEBASE * 1001 / 60000;
-	} else if (normalized_video_format == 0x01c3 ||  // 1080p30.
-		   normalized_video_format == 0x0003) {  // 1080i60.
-		return TIMEBASE / 30;
-	} else if (normalized_video_format == 0x01e1 ||  // 1080p29.97.
-		   normalized_video_format == 0x0021 ||  // 1080i59.94.
-		   video_format == 0xe901 ||             // NTSC (480i59.94, I suppose).
-		   video_format == 0xe9c1 ||             // Ditto.
-		   video_format == 0xe801) {             // Ditto.
-		return TIMEBASE * 1001 / 30000;
-	} else if (normalized_video_format == 0x0063 ||  // 1080p25.
-		   normalized_video_format == 0x0043 ||  // 1080i50.
-		   video_format == 0xe909) {             // PAL (576i50, I suppose).
-		return TIMEBASE / 25;
-	} else if (normalized_video_format == 0x008e) {  // 1080p24.
-		return TIMEBASE / 24;
-	} else if (normalized_video_format == 0x00a1) {  // 1080p23.98.
-		return TIMEBASE * 1001 / 24000;
-		return TIMEBASE / 25;
-	} else {
-		printf("Unknown video format 0x%04x. Assuming 60 Hz.\n", video_format);
-		return TIMEBASE / 60;
-	}
-}
-
 }  // namespace
 
 void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
@@ -271,7 +220,11 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 {
 	CaptureCard *card = &cards[card_index];
 
-	int64_t frame_length = find_frame_length(video_format);
+	int width, height, frame_rate_nom, frame_rate_den;
+	bool interlaced;
+
+	decode_video_format(video_format, &width, &height, &frame_rate_nom, &frame_rate_den, &interlaced);  // Ignore return value for now.
+	int64_t frame_length = TIMEBASE * frame_rate_den / frame_rate_nom;
 
 	size_t num_samples = (audio_frame.len >= audio_offset) ? (audio_frame.len - audio_offset) / 8 / 3 : 0;
 	if (num_samples > OUTPUT_FREQUENCY / 10) {
