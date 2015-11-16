@@ -410,7 +410,7 @@ void Mixer::thread_func()
 	clock_gettime(CLOCK_MONOTONIC, &start);
 
 	int frame = 0;
-	int dropped_frames = 0;
+	int stats_dropped_frames = 0;
 
 	while (!should_quit) {
 		CaptureCard card_copy[MAX_CARDS];
@@ -452,7 +452,7 @@ void Mixer::thread_func()
 				// For dropped frames, increase the pts. Note that if the format changed
 				// in the meantime, we have no way of detecting that; we just have to
 				// assume the frame length is always the same.
-				++dropped_frames;
+				++stats_dropped_frames;
 				pts_int += card_copy[0].new_frame_length;
 			}
 		}
@@ -481,7 +481,7 @@ void Mixer::thread_func()
 		// If the first card is reporting a corrupted or otherwise dropped frame,
 		// just increase the pts (skipping over this frame) and don't try to compute anything new.
 		if (card_copy[0].new_frame->len == 0) {
-			++dropped_frames;
+			++stats_dropped_frames;
 			pts_int += card_copy[0].new_frame_length;
 			continue;
 		}
@@ -582,7 +582,7 @@ void Mixer::thread_func()
 			1e-9 * (now.tv_nsec - start.tv_nsec);
 		if (frame % 100 == 0) {
 			printf("%d frames (%d dropped) in %.3f seconds = %.1f fps (%.1f ms/frame)\n",
-				frame, dropped_frames, elapsed, frame / elapsed,
+				frame, stats_dropped_frames, elapsed, frame / elapsed,
 				1e3 * elapsed / frame);
 		//	chain->print_phase_timing();
 		}
