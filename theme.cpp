@@ -22,14 +22,12 @@
 #include <utility>
 #include <memory>
 
+#include "defs.h"
 #include "image_input.h"
 
 namespace movit {
 class ResourcePool;
 }  // namespace movit
-
-#define WIDTH 1280  // FIXME
-#define HEIGHT 720  // FIXME
 
 using namespace std;
 using namespace movit;
