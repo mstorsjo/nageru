@@ -245,7 +245,6 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	if (card->last_timecode != -1) {
 		dropped_frames = unwrap_timecode(timecode, card->last_timecode) - card->last_timecode - 1;
 	}
-	card->last_timecode = timecode;
 
 	// Convert the audio to stereo fp32 and add it.
 	vector<float> audio;
@@ -257,8 +256,8 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		unique_lock<mutex> lock(card->audio_mutex);
 
 		if (dropped_frames > MAX_FPS * 2) {
-			fprintf(stderr, "Card %d lost more than two seconds (or time code jumping around), resetting resampler\n",
-				card_index);
+			fprintf(stderr, "Card %d lost more than two seconds (or time code jumping around; from 0x%04x to 0x%04x), resetting resampler\n",
+				card_index, card->last_timecode, timecode);
 			card->resampling_queue.reset(new ResamplingQueue(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY, 2));
 		} else if (dropped_frames > 0) {
 			// Insert silence as needed. (The number of samples could be nonintegral,
@@ -278,6 +277,8 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		card->resampling_queue->add_input_samples(local_pts / double(TIMEBASE), audio.data(), num_samples);
 		card->next_local_pts = local_pts + frame_length;
 	}
+
+	card->last_timecode = timecode;
 
 	// Done with the audio, so release it.
 	if (audio_frame.owner) {
