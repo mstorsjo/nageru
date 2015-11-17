@@ -220,10 +220,11 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 {
 	CaptureCard *card = &cards[card_index];
 
-	int width, height, frame_rate_nom, frame_rate_den;
+	int width, height, frame_rate_nom, frame_rate_den, extra_lines_top, extra_lines_bottom;
 	bool interlaced;
 
-	decode_video_format(video_format, &width, &height, &frame_rate_nom, &frame_rate_den, &interlaced);  // Ignore return value for now.
+	decode_video_format(video_format, &width, &height, &extra_lines_top, &extra_lines_bottom,
+	                    &frame_rate_nom, &frame_rate_den, &interlaced);  // Ignore return value for now.
 	int64_t frame_length = TIMEBASE * frame_rate_den / frame_rate_nom;
 
 	size_t num_samples = (audio_frame.len >= audio_offset) ? (audio_frame.len - audio_offset) / 8 / 3 : 0;
