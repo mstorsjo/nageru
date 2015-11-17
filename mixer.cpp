@@ -255,24 +255,31 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	{
 		unique_lock<mutex> lock(card->audio_mutex);
 
+		// Number of samples per frame if we need to insert silence.
+		// (Could be nonintegral, but resampling will save us then.)
+		int silence_samples = OUTPUT_FREQUENCY * frame_rate_den / frame_rate_nom;
+
 		if (dropped_frames > MAX_FPS * 2) {
 			fprintf(stderr, "Card %d lost more than two seconds (or time code jumping around; from 0x%04x to 0x%04x), resetting resampler\n",
 				card_index, card->last_timecode, timecode);
 			card->resampling_queue.reset(new ResamplingQueue(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY, 2));
 		} else if (dropped_frames > 0) {
-			// Insert silence as needed. (The number of samples could be nonintegral,
-			// but resampling will save us then.)
+			// Insert silence as needed.
 			fprintf(stderr, "Card %d dropped %d frame(s) (before timecode 0x%04x), inserting silence.\n",
 				card_index, dropped_frames, timecode);
 			vector<float> silence;
-			silence.resize((OUTPUT_FREQUENCY * frame_length / TIMEBASE) * 2);
+			silence.resize(silence_samples * 2);
 			for (int i = 0; i < dropped_frames; ++i) {
-				card->resampling_queue->add_input_samples(local_pts / double(TIMEBASE), silence.data(), silence.size() / 2);
+				card->resampling_queue->add_input_samples(local_pts / double(TIMEBASE), silence.data(), silence_samples);
 				// Note that if the format changed in the meantime, we have
 				// no way of detecting that; we just have to assume the frame length
 				// is always the same.
 				local_pts += frame_length;
 			}
+		}
+		if (num_samples == 0) {
+			audio.resize(silence_samples * 2);
+			num_samples = silence_samples;
 		}
 		card->resampling_queue->add_input_samples(local_pts / double(TIMEBASE), audio.data(), num_samples);
 		card->next_local_pts = local_pts + frame_length;
