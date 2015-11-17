@@ -334,13 +334,18 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	//check_error();
 
 	// Upload the textures.
-	glBindTexture(GL_TEXTURE_2D, userdata->tex_y);
-	check_error();
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET((WIDTH * (HEIGHT+EXTRAHEIGHT) * 2 + 44) / 2 + WIDTH * 25 + video_offset/2));
-	check_error();
+	size_t skipped_lines = 25;
+	size_t cbcr_width = WIDTH / 2;
+	size_t cbcr_offset = video_offset / 2;
+	size_t y_offset = cbcr_offset + cbcr_width * (HEIGHT + EXTRAHEIGHT) * sizeof(uint16_t) + video_offset / 2;
+
 	glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr);
 	check_error();
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH/2, HEIGHT, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(WIDTH * 25 + video_offset/2));
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cbcr_width, HEIGHT, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(cbcr_offset + cbcr_width * skipped_lines * sizeof(uint16_t)));
+	check_error();
+	glBindTexture(GL_TEXTURE_2D, userdata->tex_y);
+	check_error();
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(y_offset + WIDTH * skipped_lines));
 	check_error();
 	glBindTexture(GL_TEXTURE_2D, 0);
 	check_error();
