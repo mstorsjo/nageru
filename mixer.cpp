@@ -398,6 +398,7 @@ void Mixer::thread_func()
 				int num_samples_times_timebase = OUTPUT_FREQUENCY * card->new_frame_length + card->fractional_samples;
 				num_samples[card_index] = num_samples_times_timebase / TIMEBASE;
 				card->fractional_samples = num_samples_times_timebase % TIMEBASE;
+				assert(num_samples[card_index] >= 0);
 			}
 		}
 
