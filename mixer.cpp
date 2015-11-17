@@ -338,7 +338,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	size_t skipped_lines = 25;
 	size_t cbcr_width = WIDTH / 2;
 	size_t cbcr_offset = video_offset / 2;
-	size_t y_offset = cbcr_offset + cbcr_width * (HEIGHT + EXTRAHEIGHT) * sizeof(uint16_t) + video_offset / 2;
+	size_t y_offset = video_frame.size / 2 + video_offset / 2;
 
 	glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr);
 	check_error();
