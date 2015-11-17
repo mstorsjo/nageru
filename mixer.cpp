@@ -263,6 +263,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 			fprintf(stderr, "Card %d lost more than two seconds (or time code jumping around; from 0x%04x to 0x%04x), resetting resampler\n",
 				card_index, card->last_timecode, timecode);
 			card->resampling_queue.reset(new ResamplingQueue(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY, 2));
+			dropped_frames = 0;
 		} else if (dropped_frames > 0) {
 			// Insert silence as needed.
 			fprintf(stderr, "Card %d dropped %d frame(s) (before timecode 0x%04x), inserting silence.\n",
