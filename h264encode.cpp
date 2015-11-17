@@ -1709,7 +1709,11 @@ void H264Encoder::save_codeddata(storage_task task)
         frame->channel_layout = AV_CH_LAYOUT_STEREO;
 
         unique_ptr<int32_t[]> int_samples(new int32_t[audio.size()]);
-        avcodec_fill_audio_frame(frame, 2, AV_SAMPLE_FMT_S32, (const uint8_t*)int_samples.get(), audio.size() * sizeof(int32_t), 0);
+        int ret = avcodec_fill_audio_frame(frame, 2, AV_SAMPLE_FMT_S32, (const uint8_t*)int_samples.get(), audio.size() * sizeof(int32_t), 1);
+        if (ret < 0) {
+            fprintf(stderr, "avcodec_fill_audio_frame() failed with %d\n", ret);
+            exit(1);
+        }
         for (int i = 0; i < frame->nb_samples * 2; ++i) {
             if (audio[i] >= 1.0f) {
                 int_samples[i] = 2147483647;
