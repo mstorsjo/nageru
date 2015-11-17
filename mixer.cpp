@@ -336,11 +336,11 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	// Upload the textures.
 	glBindTexture(GL_TEXTURE_2D, userdata->tex_y);
 	check_error();
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET((WIDTH * (HEIGHT+EXTRAHEIGHT) * 2 + 44) / 2 + WIDTH * 25 + 22));
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET((WIDTH * (HEIGHT+EXTRAHEIGHT) * 2 + 44) / 2 + WIDTH * 25 + video_offset/2));
 	check_error();
 	glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr);
 	check_error();
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH/2, HEIGHT, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(WIDTH * 25 + 22));
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH/2, HEIGHT, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(WIDTH * 25 + video_offset/2));
 	check_error();
 	glBindTexture(GL_TEXTURE_2D, 0);
 	check_error();
