@@ -108,14 +108,11 @@ static  int h264_packedheader = 0; /* support pack header? */
 static  int h264_maxref = (1<<16|1);
 static  int h264_entropy_mode = 1; /* cabac */
 
-static  char *coded_fn = NULL;
-
 static  int frame_width = 176;
 static  int frame_height = 144;
 static  int frame_width_mbaligned;
 static  int frame_height_mbaligned;
 static  unsigned int frame_bitrate = 0;
-static  unsigned int frame_slices = 1;
 static  double frame_size = 0;
 static  int initial_qp = 15;
 //static  int initial_qp = 28;
@@ -972,28 +969,23 @@ static int init_va(void)
     } else {
         switch (h264_profile) {
             case VAProfileH264Baseline:
-                printf("Use profile VAProfileH264Baseline\n");
                 ip_period = 1;
                 constraint_set_flag |= (1 << 0); /* Annex A.2.1 */
                 h264_entropy_mode = 0;
                 break;
             case VAProfileH264ConstrainedBaseline:
-                printf("Use profile VAProfileH264ConstrainedBaseline\n");
                 constraint_set_flag |= (1 << 0 | 1 << 1); /* Annex A.2.2 */
                 ip_period = 1;
                 break;
 
             case VAProfileH264Main:
-                printf("Use profile VAProfileH264Main\n");
                 constraint_set_flag |= (1 << 1); /* Annex A.2.2 */
                 break;
 
             case VAProfileH264High:
                 constraint_set_flag |= (1 << 3); /* Annex A.2.4 */
-                printf("Use profile VAProfileH264High\n");
                 break;
             default:
-                printf("unknow profile. Set to Baseline");
                 h264_profile = VAProfileH264Baseline;
                 ip_period = 1;
                 constraint_set_flag |= (1 << 0); /* Annex A.2.1 */
@@ -1023,23 +1015,6 @@ static int init_va(void)
     if (attrib[VAConfigAttribRateControl].value != VA_ATTRIB_NOT_SUPPORTED) {
         int tmp = attrib[VAConfigAttribRateControl].value;
 
-        printf("Support rate control mode (0x%x):", tmp);
-        
-        if (tmp & VA_RC_NONE)
-            printf("NONE ");
-        if (tmp & VA_RC_CBR)
-            printf("CBR ");
-        if (tmp & VA_RC_VBR)
-            printf("VBR ");
-        if (tmp & VA_RC_VCM)
-            printf("VCM ");
-        if (tmp & VA_RC_CQP)
-            printf("CQP ");
-        if (tmp & VA_RC_VBR_CONSTRAINED)
-            printf("VBR_CONSTRAINED ");
-
-        printf("\n");
-
         if (rc_mode == -1 || !(rc_mode & tmp))  {
             if (rc_mode != -1) {
                 printf("Warning: Don't support the specified RateControl mode: %s!!!, switch to ", rc_to_string(rc_mode));
@@ -1051,8 +1026,6 @@ static int init_va(void)
                     break;
                 }
             }
-
-            printf("RateControl mode: %s\n", rc_to_string(rc_mode));
         }
 
         config_attrib[config_attrib_num].type = VAConfigAttribRateControl;
@@ -1064,29 +1037,23 @@ static int init_va(void)
     if (attrib[VAConfigAttribEncPackedHeaders].value != VA_ATTRIB_NOT_SUPPORTED) {
         int tmp = attrib[VAConfigAttribEncPackedHeaders].value;
 
-        printf("Support VAConfigAttribEncPackedHeaders\n");
-        
         h264_packedheader = 1;
         config_attrib[config_attrib_num].type = VAConfigAttribEncPackedHeaders;
         config_attrib[config_attrib_num].value = VA_ENC_PACKED_HEADER_NONE;
         
         if (tmp & VA_ENC_PACKED_HEADER_SEQUENCE) {
-            printf("Support packed sequence headers\n");
             config_attrib[config_attrib_num].value |= VA_ENC_PACKED_HEADER_SEQUENCE;
         }
         
         if (tmp & VA_ENC_PACKED_HEADER_PICTURE) {
-            printf("Support packed picture headers\n");
             config_attrib[config_attrib_num].value |= VA_ENC_PACKED_HEADER_PICTURE;
         }
         
         if (tmp & VA_ENC_PACKED_HEADER_SLICE) {
-            printf("Support packed slice headers\n");
             config_attrib[config_attrib_num].value |= VA_ENC_PACKED_HEADER_SLICE;
         }
         
         if (tmp & VA_ENC_PACKED_HEADER_MISC) {
-            printf("Support packed misc headers\n");
             config_attrib[config_attrib_num].value |= VA_ENC_PACKED_HEADER_MISC;
         }
         
@@ -1095,19 +1062,6 @@ static int init_va(void)
     }
 
     if (attrib[VAConfigAttribEncInterlaced].value != VA_ATTRIB_NOT_SUPPORTED) {
-        int tmp = attrib[VAConfigAttribEncInterlaced].value;
-        
-        printf("Support VAConfigAttribEncInterlaced\n");
-
-        if (tmp & VA_ENC_INTERLACED_FRAME)
-            printf("support VA_ENC_INTERLACED_FRAME\n");
-        if (tmp & VA_ENC_INTERLACED_FIELD)
-            printf("Support VA_ENC_INTERLACED_FIELD\n");
-        if (tmp & VA_ENC_INTERLACED_MBAFF)
-            printf("Support VA_ENC_INTERLACED_MBAFF\n");
-        if (tmp & VA_ENC_INTERLACED_PAFF)
-            printf("Support VA_ENC_INTERLACED_PAFF\n");
-        
         config_attrib[config_attrib_num].type = VAConfigAttribEncInterlaced;
         config_attrib[config_attrib_num].value = VA_ENC_PACKED_HEADER_NONE;
         config_attrib_num++;
@@ -1115,28 +1069,6 @@ static int init_va(void)
     
     if (attrib[VAConfigAttribEncMaxRefFrames].value != VA_ATTRIB_NOT_SUPPORTED) {
         h264_maxref = attrib[VAConfigAttribEncMaxRefFrames].value;
-        
-        printf("Support %d RefPicList0 and %d RefPicList1\n",
-               h264_maxref & 0xffff, (h264_maxref >> 16) & 0xffff );
-    }
-
-    if (attrib[VAConfigAttribEncMaxSlices].value != VA_ATTRIB_NOT_SUPPORTED)
-        printf("Support %d slices\n", attrib[VAConfigAttribEncMaxSlices].value);
-
-    if (attrib[VAConfigAttribEncSliceStructure].value != VA_ATTRIB_NOT_SUPPORTED) {
-        int tmp = attrib[VAConfigAttribEncSliceStructure].value;
-        
-        printf("Support VAConfigAttribEncSliceStructure\n");
-
-        if (tmp & VA_ENC_SLICE_STRUCTURE_ARBITRARY_ROWS)
-            printf("Support VA_ENC_SLICE_STRUCTURE_ARBITRARY_ROWS\n");
-        if (tmp & VA_ENC_SLICE_STRUCTURE_POWER_OF_TWO_ROWS)
-            printf("Support VA_ENC_SLICE_STRUCTURE_POWER_OF_TWO_ROWS\n");
-        if (tmp & VA_ENC_SLICE_STRUCTURE_ARBITRARY_MACROBLOCKS)
-            printf("Support VA_ENC_SLICE_STRUCTURE_ARBITRARY_MACROBLOCKS\n");
-    }
-    if (attrib[VAConfigAttribEncMacroblockInfo].value != VA_ATTRIB_NOT_SUPPORTED) {
-        printf("Support VAConfigAttribEncMacroblockInfo\n");
     }
 
     free(entrypoints);
@@ -1825,26 +1757,6 @@ static int deinit_va()
 }
 
 
-static int print_input()
-{
-    printf("\n\nINPUT:Try to encode H264...\n");
-    if (rc_mode != -1)
-        printf("INPUT: RateControl  : %s\n", rc_to_string(rc_mode));
-    printf("INPUT: Resolution   : %dx%dframes\n", frame_width, frame_height);
-    printf("INPUT: Bitrate      : %d\n", frame_bitrate);
-    printf("INPUT: Slieces      : %d\n", frame_slices);
-    printf("INPUT: IntraPeriod  : %d\n", intra_period);
-    printf("INPUT: IDRPeriod    : %d\n", intra_idr_period);
-    printf("INPUT: IpPeriod     : %d\n", ip_period);
-    printf("INPUT: Initial QP   : %d\n", initial_qp);
-    printf("INPUT: Min QP       : %d\n", minimal_qp);
-    printf("INPUT: Coded Clip   : %s\n", coded_fn);
-    
-    printf("\n\n"); /* return back to startpoint */
-    
-    return 0;
-}
-
 H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
 	: current_storage_frame(0), surface(surface), httpd(httpd)
 {
@@ -1868,7 +1780,7 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
         frame_bitrate = 15000000;  // / 60;
 	current_frame_encoding = 0;
 
-	print_input();
+	//print_input();
 
 	init_va();
 	setup_encode();

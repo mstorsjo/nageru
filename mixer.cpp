@@ -1,5 +1,3 @@
-#define EXTRAHEIGHT 30
-
 #undef Success
 
 #include "mixer.h"
@@ -107,7 +105,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 		CaptureCard *card = &cards[card_index];
 		card->usb = new BMUSBCapture(card_index);
 		card->usb->set_frame_callback(bind(&Mixer::bm_frame, this, card_index, _1, _2, _3, _4, _5, _6, _7));
-		card->frame_allocator.reset(new PBOFrameAllocator(WIDTH * (HEIGHT+EXTRAHEIGHT) * 2 + 44 + 1, WIDTH, HEIGHT));
+		card->frame_allocator.reset(new PBOFrameAllocator(8 << 20, WIDTH, HEIGHT));  // 8 MB.
 		card->usb->set_video_frame_allocator(card->frame_allocator.get());
 		card->surface = create_surface(format);
 		card->usb->set_dequeue_thread_callbacks(
@@ -301,7 +299,9 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		if (card->should_quit) return;
 	}
 
-	if (video_frame.len - video_offset != WIDTH * (HEIGHT+EXTRAHEIGHT) * 2) {
+	if (video_frame.len - video_offset == 0 ||
+	    video_frame.len - video_offset != size_t(width * (height + extra_lines_top + extra_lines_bottom) * 2) ||
+	    width != WIDTH || height != HEIGHT) {  // TODO: Remove this once the rest of the infrastructure is in place.
 		if (video_frame.len != 0) {
 			printf("Card %d: Dropping video frame with wrong length (%ld)\n",
 				card_index, video_frame.len - video_offset);
@@ -335,18 +335,17 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	//check_error();
 
 	// Upload the textures.
-	size_t skipped_lines = 25;
-	size_t cbcr_width = WIDTH / 2;
+	size_t cbcr_width = width / 2;
 	size_t cbcr_offset = video_offset / 2;
 	size_t y_offset = video_frame.size / 2 + video_offset / 2;
 
 	glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr);
 	check_error();
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cbcr_width, HEIGHT, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(cbcr_offset + cbcr_width * skipped_lines * sizeof(uint16_t)));
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cbcr_width, height, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(cbcr_offset + cbcr_width * extra_lines_top * sizeof(uint16_t)));
 	check_error();
 	glBindTexture(GL_TEXTURE_2D, userdata->tex_y);
 	check_error();
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(y_offset + WIDTH * skipped_lines));
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(y_offset + width * extra_lines_top));
 	check_error();
 	glBindTexture(GL_TEXTURE_2D, 0);
 	check_error();
