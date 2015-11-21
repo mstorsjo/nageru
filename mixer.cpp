@@ -324,14 +324,6 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	}
 
 	PBOFrameAllocator::Userdata *userdata = (PBOFrameAllocator::Userdata *)video_frame.userdata;
-	GLuint pbo = userdata->pbo;
-	check_error();
-	glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, pbo);
-	check_error();
-	glFlushMappedBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, video_frame.size);
-	check_error();
-	//glMemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
-	//check_error();
 
 	// Upload the textures.
 	size_t cbcr_width = width / 2;
@@ -344,24 +336,33 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		// we don't need to worry about these flip-flopping between resolutions.
 		glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr);
 		check_error();
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, cbcr_width, height, 0, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(cbcr_offset + cbcr_width * extra_lines_top * sizeof(uint16_t)));
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, cbcr_width, height, 0, GL_RG, GL_UNSIGNED_BYTE, nullptr);
 		check_error();
 		glBindTexture(GL_TEXTURE_2D, userdata->tex_y);
 		check_error();
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(y_offset + width * extra_lines_top));
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
 		check_error();
 		userdata->last_width = width;
 		userdata->last_height = height;
-	} else {
-		glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr);
-		check_error();
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cbcr_width, height, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(cbcr_offset + cbcr_width * extra_lines_top * sizeof(uint16_t)));
-		check_error();
-		glBindTexture(GL_TEXTURE_2D, userdata->tex_y);
-		check_error();
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(y_offset + width * extra_lines_top));
-		check_error();
 	}
+
+	GLuint pbo = userdata->pbo;
+	check_error();
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, pbo);
+	check_error();
+	glFlushMappedBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, video_frame.size);
+	check_error();
+	//glMemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
+	//check_error();
+
+	glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr);
+	check_error();
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cbcr_width, height, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(cbcr_offset + cbcr_width * extra_lines_top * sizeof(uint16_t)));
+	check_error();
+	glBindTexture(GL_TEXTURE_2D, userdata->tex_y);
+	check_error();
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(y_offset + width * extra_lines_top));
+	check_error();
 	glBindTexture(GL_TEXTURE_2D, 0);
 	check_error();
 	GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);              
