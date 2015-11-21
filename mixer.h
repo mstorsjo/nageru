@@ -210,6 +210,7 @@ private:
 		bool should_quit = false;
 		RefCountedFrame new_frame;
 		int64_t new_frame_length;  // In TIMEBASE units.
+		unsigned new_frame_field;  // Which field (0 or 1) of the frame to use.
 		GLsync new_data_ready_fence;  // Whether new_frame is ready for rendering.
 		std::condition_variable new_data_ready_changed;  // Set whenever new_data_ready is changed.
 		unsigned dropped_frames = 0;  // Before new_frame.

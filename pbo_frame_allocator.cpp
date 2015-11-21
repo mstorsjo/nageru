@@ -32,35 +32,44 @@ PBOFrameAllocator::PBOFrameAllocator(size_t frame_size, GLuint width, GLuint hei
 		frame.owner = this;
 		frame.interleaved = true;
 
-		// Create textures.
-		glGenTextures(1, &userdata[i].tex_y);
+		// Create textures. We don't allocate any data for the second field at this point
+		// (just create the texture state with the samplers), since our default assumed
+		// resolution is progressive.
+		glGenTextures(2, userdata[i].tex_y);
 		check_error();
-		glBindTexture(GL_TEXTURE_2D, userdata[i].tex_y);
+		glGenTextures(2, userdata[i].tex_cbcr);
 		check_error();
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		check_error();
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		check_error();
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		check_error();
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
-		check_error();
+		userdata[i].last_width[0] = width;
+		userdata[i].last_height[0] = height;
+		userdata[i].last_width[1] = 0;
+		userdata[i].last_height[1] = 0;
+		for (unsigned field = 0; field < 2; ++field) {
+			glBindTexture(GL_TEXTURE_2D, userdata[i].tex_y[field]);
+			check_error();
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			check_error();
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			check_error();
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			check_error();
+			if (field == 0) {
+				glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+				check_error();
+			}
 
-		glGenTextures(1, &userdata[i].tex_cbcr);
-		check_error();
-		glBindTexture(GL_TEXTURE_2D, userdata[i].tex_cbcr);
-		check_error();
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		check_error();
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		check_error();
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		check_error();
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, width / 2, height, 0, GL_RG, GL_UNSIGNED_BYTE, NULL);
-		check_error();
-
-		userdata[i].last_width = width;
-		userdata[i].last_height = height;
+			glBindTexture(GL_TEXTURE_2D, userdata[i].tex_cbcr[field]);
+			check_error();
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			check_error();
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			check_error();
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			check_error();
+			if (field == 0) {
+				glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, width / 2, height, 0, GL_RG, GL_UNSIGNED_BYTE, NULL);
+				check_error();
+			}
+		}
 
 		freelist.push(frame);
 	}
@@ -84,11 +93,9 @@ PBOFrameAllocator::~PBOFrameAllocator()
 		check_error();
 		glDeleteBuffers(1, &pbo);
 		check_error();
-		GLuint tex_y = ((Userdata *)frame.userdata)->tex_y;
-		glDeleteTextures(1, &tex_y);
+		glDeleteTextures(2, ((Userdata *)frame.userdata)->tex_y);
 		check_error();
-		GLuint tex_cbcr = ((Userdata *)frame.userdata)->tex_cbcr;
-		glDeleteTextures(1, &tex_cbcr);
+		glDeleteTextures(2, ((Userdata *)frame.userdata)->tex_cbcr);
 		check_error();
 	}
 }

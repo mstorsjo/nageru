@@ -218,10 +218,10 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 {
 	CaptureCard *card = &cards[card_index];
 
-	unsigned width, height, frame_rate_nom, frame_rate_den, extra_lines_top, extra_lines_bottom;
+	unsigned width, height, second_field_start, frame_rate_nom, frame_rate_den, extra_lines_top, extra_lines_bottom;
 	bool interlaced;
 
-	decode_video_format(video_format, &width, &height, &extra_lines_top, &extra_lines_bottom,
+	decode_video_format(video_format, &width, &height, &second_field_start, &extra_lines_top, &extra_lines_bottom,
 	                    &frame_rate_nom, &frame_rate_den, &interlaced);  // Ignore return value for now.
 	int64_t frame_length = TIMEBASE * frame_rate_den / frame_rate_nom;
 
@@ -325,58 +325,106 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 
 	PBOFrameAllocator::Userdata *userdata = (PBOFrameAllocator::Userdata *)video_frame.userdata;
 
+	unsigned num_fields = interlaced ? 2 : 1;
+	timespec frame_upload_start;
+	if (interlaced) {
+		// NOTE: This isn't deinterlacing. This is just sending the two fields along
+		// as separate frames without considering anything like the half-field offset.
+		// We'll need to add a proper deinterlacer on the receiving side to get this right.
+		assert(height % 2 == 0);
+		height /= 2;
+		assert(frame_length % 2 == 0);
+		frame_length /= 2;
+		num_fields = 2;
+		clock_gettime(CLOCK_MONOTONIC, &frame_upload_start);
+	}
+	RefCountedFrame new_frame(video_frame);
+
 	// Upload the textures.
 	size_t cbcr_width = width / 2;
 	size_t cbcr_offset = video_offset / 2;
 	size_t y_offset = video_frame.size / 2 + video_offset / 2;
 
-	if (width != userdata->last_width || height != userdata->last_height) {
-		// We changed resolution since last use of this texture, so we need to create
-		// a new object. Note that this each card has its own PBOFrameAllocator,
-		// we don't need to worry about these flip-flopping between resolutions.
-		glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr);
-		check_error();
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, cbcr_width, height, 0, GL_RG, GL_UNSIGNED_BYTE, nullptr);
-		check_error();
-		glBindTexture(GL_TEXTURE_2D, userdata->tex_y);
-		check_error();
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
-		check_error();
-		userdata->last_width = width;
-		userdata->last_height = height;
-	}
+	for (unsigned field = 0; field < num_fields; ++field) {
+		unsigned field_start_line = (field == 1) ? second_field_start : extra_lines_top + field * (height + 22);
 
-	GLuint pbo = userdata->pbo;
-	check_error();
-	glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, pbo);
-	check_error();
-	glFlushMappedBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, video_frame.size);
-	check_error();
-	//glMemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
-	//check_error();
+		if (userdata->tex_y[field] == 0 ||
+		    userdata->tex_cbcr[field] == 0 ||
+		    width != userdata->last_width[field] ||
+		    height != userdata->last_height[field]) {
+			// We changed resolution since last use of this texture, so we need to create
+			// a new object. Note that this each card has its own PBOFrameAllocator,
+			// we don't need to worry about these flip-flopping between resolutions.
+			glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr[field]);
+			check_error();
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, cbcr_width, height, 0, GL_RG, GL_UNSIGNED_BYTE, nullptr);
+			check_error();
+			glBindTexture(GL_TEXTURE_2D, userdata->tex_y[field]);
+			check_error();
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+			check_error();
+			userdata->last_width[field] = width;
+			userdata->last_height[field] = height;
+		}
 
-	glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr);
-	check_error();
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cbcr_width, height, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(cbcr_offset + cbcr_width * extra_lines_top * sizeof(uint16_t)));
-	check_error();
-	glBindTexture(GL_TEXTURE_2D, userdata->tex_y);
-	check_error();
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(y_offset + width * extra_lines_top));
-	check_error();
-	glBindTexture(GL_TEXTURE_2D, 0);
-	check_error();
-	GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);              
-	check_error();
-	assert(fence != nullptr);
+		GLuint pbo = userdata->pbo;
+		check_error();
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, pbo);
+		check_error();
+		glFlushMappedBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, video_frame.size);
+		check_error();
+		//glMemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
+		//check_error();
 
-	{
-		unique_lock<mutex> lock(bmusb_mutex);
-		card->new_data_ready = true;
-		card->new_frame = RefCountedFrame(video_frame);
-		card->new_frame_length = frame_length;
-		card->new_data_ready_fence = fence;
-		card->dropped_frames = dropped_frames;
-		card->new_data_ready_changed.notify_all();
+		glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr[field]);
+		check_error();
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cbcr_width, height, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(cbcr_offset + cbcr_width * field_start_line * sizeof(uint16_t)));
+		check_error();
+		glBindTexture(GL_TEXTURE_2D, userdata->tex_y[field]);
+		check_error();
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(y_offset + width * field_start_line));
+		check_error();
+		glBindTexture(GL_TEXTURE_2D, 0);
+		check_error();
+		GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
+		check_error();
+		assert(fence != nullptr);
+
+		if (field == 1) {
+			// Don't upload the second field as fast as we can; wait until
+			// the field time has approximately passed. (Otherwise, we could
+			// get timing jitter against the other sources, and possibly also
+			// against the video display, although the latter is not as critical.)
+			// This requires our system clock to be reasonably close to the
+			// video clock, but that's not an unreasonable assumption.
+			timespec second_field_start;
+			second_field_start.tv_nsec = frame_upload_start.tv_nsec +
+				frame_length * 1000000000 / TIMEBASE;
+			second_field_start.tv_sec = frame_upload_start.tv_sec +
+				second_field_start.tv_nsec / 1000000000;
+			second_field_start.tv_nsec %= 1000000000;
+
+			while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,
+			                       &second_field_start, nullptr) == -1 &&
+			       errno == EINTR) ;
+		}
+
+		{
+			unique_lock<mutex> lock(bmusb_mutex);
+			card->new_data_ready = true;
+			card->new_frame = new_frame;
+			card->new_frame_length = frame_length;
+			card->new_frame_field = field;
+			card->new_data_ready_fence = fence;
+			card->dropped_frames = dropped_frames;
+			card->new_data_ready_changed.notify_all();
+
+			if (field != num_fields - 1) {
+				// Wait until the previous frame was consumed.
+				card->new_data_ready_changed.wait(lock, [card]{ return !card->new_data_ready || card->should_quit; });
+				if (card->should_quit) return;
+			}
+		}
 	}
 }
 
@@ -412,6 +460,7 @@ void Mixer::thread_func()
 				card_copy[card_index].new_data_ready = card->new_data_ready;
 				card_copy[card_index].new_frame = card->new_frame;
 				card_copy[card_index].new_frame_length = card->new_frame_length;
+				card_copy[card_index].new_frame_field = card->new_frame_field;
 				card_copy[card_index].new_data_ready_fence = card->new_data_ready_fence;
 				card_copy[card_index].dropped_frames = card->dropped_frames;
 				card->new_data_ready = false;
@@ -488,7 +537,12 @@ void Mixer::thread_func()
 				check_error();
 			}
 			const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)card->new_frame->userdata;
-			theme->set_input_textures(card_index, userdata->tex_y, userdata->tex_cbcr, userdata->last_width, userdata->last_height);
+			theme->set_input_textures(
+				card_index,
+				userdata->tex_y[card->new_frame_field],
+				userdata->tex_cbcr[card->new_frame_field],
+				userdata->last_width[card->new_frame_field],
+				userdata->last_height[card->new_frame_field]);
 		}
 
 		// Get the main chain from the theme, and set its state immediately.

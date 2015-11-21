@@ -28,8 +28,10 @@ public:
 
 	struct Userdata {
 		GLuint pbo;
-		GLuint tex_y, tex_cbcr;
-		GLuint last_width, last_height;
+
+		// The second set is only used for the second field of interlaced inputs.
+		GLuint tex_y[2], tex_cbcr[2];
+		GLuint last_width[2], last_height[2];
 	};
 
 private:
