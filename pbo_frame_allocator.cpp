@@ -59,6 +59,9 @@ PBOFrameAllocator::PBOFrameAllocator(size_t frame_size, GLuint width, GLuint hei
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, width / 2, height, 0, GL_RG, GL_UNSIGNED_BYTE, NULL);
 		check_error();
 
+		userdata[i].last_width = width;
+		userdata[i].last_height = height;
+
 		freelist.push(frame);
 	}
 	glBindBuffer(buffer, 0);

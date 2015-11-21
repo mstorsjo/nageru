@@ -29,6 +29,7 @@ public:
 	struct Userdata {
 		GLuint pbo;
 		GLuint tex_y, tex_cbcr;
+		GLuint last_width, last_height;
 	};
 
 private:

@@ -218,7 +218,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 {
 	CaptureCard *card = &cards[card_index];
 
-	int width, height, frame_rate_nom, frame_rate_den, extra_lines_top, extra_lines_bottom;
+	unsigned width, height, frame_rate_nom, frame_rate_den, extra_lines_top, extra_lines_bottom;
 	bool interlaced;
 
 	decode_video_format(video_format, &width, &height, &extra_lines_top, &extra_lines_bottom,
@@ -300,8 +300,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	}
 
 	if (video_frame.len - video_offset == 0 ||
-	    video_frame.len - video_offset != size_t(width * (height + extra_lines_top + extra_lines_bottom) * 2) ||
-	    width != WIDTH || height != HEIGHT) {  // TODO: Remove this once the rest of the infrastructure is in place.
+	    video_frame.len - video_offset != size_t(width * (height + extra_lines_top + extra_lines_bottom) * 2)) {
 		if (video_frame.len != 0) {
 			printf("Card %d: Dropping video frame with wrong length (%ld)\n",
 				card_index, video_frame.len - video_offset);
@@ -324,7 +323,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		return;
 	}
 
-	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)video_frame.userdata;
+	PBOFrameAllocator::Userdata *userdata = (PBOFrameAllocator::Userdata *)video_frame.userdata;
 	GLuint pbo = userdata->pbo;
 	check_error();
 	glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, pbo);
@@ -339,14 +338,30 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	size_t cbcr_offset = video_offset / 2;
 	size_t y_offset = video_frame.size / 2 + video_offset / 2;
 
-	glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr);
-	check_error();
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cbcr_width, height, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(cbcr_offset + cbcr_width * extra_lines_top * sizeof(uint16_t)));
-	check_error();
-	glBindTexture(GL_TEXTURE_2D, userdata->tex_y);
-	check_error();
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(y_offset + width * extra_lines_top));
-	check_error();
+	if (width != userdata->last_width || height != userdata->last_height) {
+		// We changed resolution since last use of this texture, so we need to create
+		// a new object. Note that this each card has its own PBOFrameAllocator,
+		// we don't need to worry about these flip-flopping between resolutions.
+		glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr);
+		check_error();
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, cbcr_width, height, 0, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(cbcr_offset + cbcr_width * extra_lines_top * sizeof(uint16_t)));
+		check_error();
+		glBindTexture(GL_TEXTURE_2D, userdata->tex_y);
+		check_error();
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(y_offset + width * extra_lines_top));
+		check_error();
+		userdata->last_width = width;
+		userdata->last_height = height;
+	} else {
+		glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr);
+		check_error();
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cbcr_width, height, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(cbcr_offset + cbcr_width * extra_lines_top * sizeof(uint16_t)));
+		check_error();
+		glBindTexture(GL_TEXTURE_2D, userdata->tex_y);
+		check_error();
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(y_offset + width * extra_lines_top));
+		check_error();
+	}
 	glBindTexture(GL_TEXTURE_2D, 0);
 	check_error();
 	GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);              
@@ -472,7 +487,7 @@ void Mixer::thread_func()
 				check_error();
 			}
 			const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)card->new_frame->userdata;
-			theme->set_input_textures(card_index, userdata->tex_y, userdata->tex_cbcr);
+			theme->set_input_textures(card_index, userdata->tex_y, userdata->tex_cbcr, userdata->last_width, userdata->last_height);
 		}
 
 		// Get the main chain from the theme, and set its state immediately.

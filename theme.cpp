@@ -613,6 +613,8 @@ void Theme::connect_signal(YCbCrInput *input, int signal_num)
 	}
 	input->set_texture_num(0, input_textures[signal_num].tex_y);
 	input->set_texture_num(1, input_textures[signal_num].tex_cbcr);
+	input->set_width(input_textures[signal_num].width);
+	input->set_height(input_textures[signal_num].height);
 }
 
 void Theme::transition_clicked(int transition_num, float t)

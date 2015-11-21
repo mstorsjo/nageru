@@ -7,6 +7,8 @@
 -- where all the low-level details (such as texture formats) are handled by the
 -- C++ side and you generally just build chains.
 
+-- TODO: Deal with inputs that are different from our native 1280x720 resolution.
+
 local transition_start = -2.0
 local transition_end = -1.0
 local zoom_src = 0.0

@@ -15,6 +15,8 @@
 #include <utility>
 #include <vector>
 
+#include "defs.h"
+
 namespace movit {
 class ResourcePool;
 struct ImageFormat;
@@ -41,9 +43,12 @@ public:
 	std::pair<movit::EffectChain *, std::function<void()>>
 	get_chain(unsigned num, float t, unsigned width, unsigned height);
 
-	void set_input_textures(int signal_num, GLuint tex_y, GLuint tex_cbcr) {
-		input_textures[signal_num].tex_y = tex_y;
-		input_textures[signal_num].tex_cbcr = tex_cbcr;
+	void set_input_textures(int signal_num, GLuint tex_y, GLuint tex_cbcr, GLuint width, GLuint height) {
+		auto &tex = input_textures[signal_num];
+		tex.tex_y = tex_y;
+		tex.tex_cbcr = tex_cbcr;
+		tex.width = width;
+		tex.height = height;
 	}
 	int get_num_channels() { return num_channels; }
 	std::string get_channel_name(unsigned channel);
@@ -64,6 +69,7 @@ private:
 	movit::ResourcePool *resource_pool;
 	struct {
 		GLuint tex_y = 0, tex_cbcr = 0;
+		GLuint width = WIDTH, height = HEIGHT;
 	} input_textures[MAX_CARDS];
 	int num_channels;
 	unsigned num_cards;
