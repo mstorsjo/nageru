@@ -70,7 +70,6 @@ private:
 		static int write_packet_thunk(void *opaque, uint8_t *buf, int buf_size);
 		int write_packet(uint8_t *buf, int buf_size);
 
-		AVIOContext *avio;
 		std::unique_ptr<Mux> mux;
 
 		std::mutex buffer_mutex;
