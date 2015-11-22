@@ -35,8 +35,6 @@ public:
 	};
 
 private:
-	size_t frame_size;
-
 	std::mutex freelist_mutex;
 	std::queue<Frame> freelist;
 	GLenum buffer;

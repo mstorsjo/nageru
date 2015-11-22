@@ -10,7 +10,7 @@
 using namespace std;
 
 PBOFrameAllocator::PBOFrameAllocator(size_t frame_size, GLuint width, GLuint height, size_t num_queued_frames, GLenum buffer, GLenum permissions, GLenum map_bits)
-        : frame_size(frame_size), buffer(buffer)
+        : buffer(buffer)
 {
 	userdata.reset(new Userdata[num_queued_frames]);
 	for (size_t i = 0; i < num_queued_frames; ++i) {
