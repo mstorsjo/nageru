@@ -316,6 +316,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 			card->new_data_ready = true;
 			card->new_frame = RefCountedFrame(FrameAllocator::Frame());
 			card->new_frame_length = frame_length;
+			card->new_frame_interlaced = false;
 			card->new_data_ready_fence = nullptr;
 			card->dropped_frames = dropped_frames;
 			card->new_data_ready_changed.notify_all();
@@ -415,6 +416,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 			card->new_frame = new_frame;
 			card->new_frame_length = frame_length;
 			card->new_frame_field = field;
+			card->new_frame_interlaced = interlaced;
 			card->new_data_ready_fence = fence;
 			card->dropped_frames = dropped_frames;
 			card->new_data_ready_changed.notify_all();
@@ -461,6 +463,7 @@ void Mixer::thread_func()
 				card_copy[card_index].new_frame = card->new_frame;
 				card_copy[card_index].new_frame_length = card->new_frame_length;
 				card_copy[card_index].new_frame_field = card->new_frame_field;
+				card_copy[card_index].new_frame_interlaced = card->new_frame_interlaced;
 				card_copy[card_index].new_data_ready_fence = card->new_data_ready_fence;
 				card_copy[card_index].dropped_frames = card->dropped_frames;
 				card->new_data_ready = false;
