@@ -493,6 +493,7 @@ void Mixer::thread_func()
 		}
 
 		if (audio_level_callback != nullptr) {
+			unique_lock<mutex> lock(r128_mutex);
 			double loudness_s = r128.loudness_S();
 			double loudness_i = r128.integrated();
 			double loudness_range_low = r128.range_min();
@@ -743,7 +744,10 @@ void Mixer::process_audio_one_frame(int64_t frame_pts_int, int num_samples)
 	vector<float> left, right;
 	deinterleave_samples(samples_out, &left, &right);
 	float *ptrs[] = { left.data(), right.data() };
-	r128.process(left.size(), ptrs);
+	{
+		unique_lock<mutex> lock(r128_mutex);
+		r128.process(left.size(), ptrs);
+	}
 
 	// Send the samples to the sound card.
 	if (alsa) {

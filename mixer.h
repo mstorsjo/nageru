@@ -268,7 +268,8 @@ private:
 	std::atomic<bool> should_quit{false};
 
 	audio_level_callback_t audio_level_callback = nullptr;
-	Ebu_r128_proc r128;
+	std::mutex r128_mutex;
+	Ebu_r128_proc r128;  // Under r128_mutex.
 
 	Resampler peak_resampler;
 	std::atomic<float> peak{0.0f};
