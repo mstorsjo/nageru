@@ -10,12 +10,12 @@
 #include <movit/flat_input.h>
 #include <movit/image_format.h>
 #include <movit/resource_pool.h>
+#include <movit/util.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
 #include <time.h>
-#include <util.h>
 #include <algorithm>
 #include <cmath>
 #include <condition_variable>
