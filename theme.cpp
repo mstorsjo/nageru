@@ -24,6 +24,7 @@
 
 #include "defs.h"
 #include "image_input.h"
+#include "mixer.h"
 
 namespace movit {
 class ResourcePool;
@@ -31,6 +32,8 @@ class ResourcePool;
 
 using namespace std;
 using namespace movit;
+
+extern Mixer *global_mixer;
 
 namespace {
 
@@ -441,7 +444,25 @@ LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain, bool overri
 
 void LiveInputWrapper::connect_signal(int signal_num)
 {
-	theme->connect_signal(input, signal_num);
+	if (global_mixer == nullptr) {
+		return;
+	}
+
+	signal_num = theme->map_signal(signal_num);
+
+	Mixer::BufferedFrame frame = global_mixer->get_buffered_frame(signal_num, 0);
+	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
+
+	input->set_texture_num(0, userdata->tex_y[frame.field_number]);
+	input->set_texture_num(1, userdata->tex_cbcr[frame.field_number]);
+	input->set_width(userdata->last_width[frame.field_number]);
+	input->set_height(userdata->last_height[frame.field_number]);
+
+	// Hold on to the refcount so that we don't release the input frame
+	// until we're done rendering from it.
+	if (theme->used_input_frames_collector != nullptr) {
+		theme->used_input_frames_collector->push_back(frame.frame);
+	}
 }
 
 Theme::Theme(const char *filename, ResourcePool *resource_pool, unsigned num_cards)
@@ -495,9 +516,10 @@ void Theme::register_class(const char *class_name, const luaL_Reg *funcs)
 	assert(lua_gettop(L) == 0);
 }
 
-pair<EffectChain *, function<void()>>
-Theme::get_chain(unsigned num, float t, unsigned width, unsigned height)
+Theme::Chain Theme::get_chain(unsigned num, float t, unsigned width, unsigned height)
 {
+	Chain chain;
+
 	unique_lock<mutex> lock(m);
 	assert(lua_gettop(L) == 0);
 	lua_getglobal(L, "get_chain");  /* function to be called */
@@ -506,12 +528,14 @@ Theme::get_chain(unsigned num, float t, unsigned width, unsigned height)
 	lua_pushnumber(L, width);
 	lua_pushnumber(L, height);
 
+	this->used_input_frames_collector = &chain.input_frames;
 	if (lua_pcall(L, 4, 2, 0) != 0) {
 		fprintf(stderr, "error running function `get_chain': %s\n", lua_tostring(L, -1));
 		exit(1);
 	}
+	this->used_input_frames_collector = nullptr;
 
-	EffectChain *chain = (EffectChain *)luaL_checkudata(L, -2, "EffectChain");
+	chain.chain = (EffectChain *)luaL_checkudata(L, -2, "EffectChain");
 	if (!lua_isfunction(L, -1)) {
 		fprintf(stderr, "Argument #-1 should be a function\n");
 		exit(1);
@@ -520,7 +544,8 @@ Theme::get_chain(unsigned num, float t, unsigned width, unsigned height)
 	shared_ptr<LuaRefWithDeleter> funcref(new LuaRefWithDeleter(&m, L, luaL_ref(L, LUA_REGISTRYINDEX)));
 	lua_pop(L, 2);
 	assert(lua_gettop(L) == 0);
-	return make_pair(chain, [this, funcref]{
+
+	chain.setup_chain = [this, funcref]{
 		unique_lock<mutex> lock(m);
 
 		// Set up state, including connecting signals.
@@ -530,7 +555,9 @@ Theme::get_chain(unsigned num, float t, unsigned width, unsigned height)
 			exit(1);
 		}
 		assert(lua_gettop(L) == 0);
-	});
+	};
+
+	return chain;
 }
 
 std::string Theme::get_channel_name(unsigned channel)
@@ -602,7 +629,7 @@ std::vector<std::string> Theme::get_transition_names(float t)
 	return ret;
 }	
 
-void Theme::connect_signal(YCbCrInput *input, int signal_num)
+int Theme::map_signal(int signal_num)
 {
 	if (signal_num >= int(num_cards)) {
 		if (signals_warned_about.insert(signal_num).second) {
@@ -611,10 +638,7 @@ void Theme::connect_signal(YCbCrInput *input, int signal_num)
 		}
 		signal_num %= num_cards;
 	}
-	input->set_texture_num(0, input_textures[signal_num].tex_y);
-	input->set_texture_num(1, input_textures[signal_num].tex_cbcr);
-	input->set_width(input_textures[signal_num].width);
-	input->set_height(input_textures[signal_num].height);
+	return signal_num;
 }
 
 void Theme::transition_clicked(int transition_num, float t)

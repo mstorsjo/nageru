@@ -5,6 +5,10 @@
 #define MAX_FPS 60
 #define WIDTH 1280
 #define HEIGHT 720
+#define MAX_CARDS 16
+
+// For deinterlacing. See also comments on Mixer::frame_history.
+#define FRAME_HISTORY_LENGTH 3
 
 #define AUDIO_OUTPUT_CODEC AV_CODEC_ID_PCM_S32LE
 #define AUDIO_OUTPUT_SAMPLE_FMT AV_SAMPLE_FMT_S32

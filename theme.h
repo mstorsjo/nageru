@@ -16,14 +16,13 @@
 #include <vector>
 
 #include "defs.h"
+#include "ref_counted_frame.h"
 
 namespace movit {
 class ResourcePool;
 struct ImageFormat;
 struct YCbCrFormat;
 }  // namespace movit
-
-#define MAX_CARDS 16
 
 class NonBouncingYCbCrInput : public movit::YCbCrInput {
 public:
@@ -40,17 +39,18 @@ class Theme {
 public:
 	Theme(const char *filename, movit::ResourcePool *resource_pool, unsigned num_cards);
 
-	std::pair<movit::EffectChain *, std::function<void()>>
-	get_chain(unsigned num, float t, unsigned width, unsigned height);
+	struct Chain {
+		movit::EffectChain *chain;
+		std::function<void()> setup_chain;
 
-	void set_input_textures(int signal_num, GLuint tex_y, GLuint tex_cbcr, GLuint width, GLuint height) {
-		auto &tex = input_textures[signal_num];
-		tex.tex_y = tex_y;
-		tex.tex_cbcr = tex_cbcr;
-		tex.width = width;
-		tex.height = height;
-	}
-	int get_num_channels() { return num_channels; }
+		// May have duplicates.
+		std::vector<RefCountedFrame> input_frames;
+	};
+
+	Chain get_chain(unsigned num, float t, unsigned width, unsigned height);
+
+	int get_num_channels() const { return num_channels; }
+	int map_signal(int signal_num);
 	std::string get_channel_name(unsigned channel);
 	bool get_supports_set_wb(unsigned channel);
 	void set_wb(unsigned channel, double r, double g, double b);
@@ -67,13 +67,14 @@ private:
 	std::mutex m;
 	lua_State *L;
 	movit::ResourcePool *resource_pool;
-	struct {
-		GLuint tex_y = 0, tex_cbcr = 0;
-		GLuint width = WIDTH, height = HEIGHT;
-	} input_textures[MAX_CARDS];
 	int num_channels;
 	unsigned num_cards;
 	std::set<int> signals_warned_about;
+
+	// All input frames needed for the current chain. Filled during call to get_chain(),
+	// as inputs get connected.
+	std::vector<RefCountedFrame> *used_input_frames_collector;
+	friend class LiveInputWrapper;
 };
 
 class LiveInputWrapper {

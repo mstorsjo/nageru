@@ -525,7 +525,16 @@ void Mixer::thread_func()
 				continue;
 
 			assert(card->new_frame != nullptr);
-			bmusb_current_rendering_frame[card_index] = card->new_frame;
+			if (card->new_frame_interlaced) {
+				for (unsigned frame_num = FRAME_HISTORY_LENGTH; frame_num --> 1; ) {  // :-)
+					buffered_frames[card_index][frame_num] = buffered_frames[card_index][frame_num - 1];
+				}
+				buffered_frames[card_index][0] = { card->new_frame, card->new_frame_field };
+			} else {
+				for (unsigned frame_num = 0; frame_num < FRAME_HISTORY_LENGTH; ++frame_num) {
+					buffered_frames[card_index][frame_num] = { card->new_frame, card->new_frame_field };
+				}
+			}
 			check_error();
 
 			// The new texture might still be uploaded,
@@ -536,19 +545,12 @@ void Mixer::thread_func()
 				glDeleteSync(card->new_data_ready_fence);
 				check_error();
 			}
-			const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)card->new_frame->userdata;
-			theme->set_input_textures(
-				card_index,
-				userdata->tex_y[card->new_frame_field],
-				userdata->tex_cbcr[card->new_frame_field],
-				userdata->last_width[card->new_frame_field],
-				userdata->last_height[card->new_frame_field]);
 		}
 
 		// Get the main chain from the theme, and set its state immediately.
-		pair<EffectChain *, function<void()>> theme_main_chain = theme->get_chain(0, pts(), WIDTH, HEIGHT);
-		EffectChain *chain = theme_main_chain.first;
-		theme_main_chain.second();
+		Theme::Chain theme_main_chain = theme->get_chain(0, pts(), WIDTH, HEIGHT);
+		EffectChain *chain = theme_main_chain.chain;
+		theme_main_chain.setup_chain();
 
 		GLuint y_tex, cbcr_tex;
 		bool got_frame = h264_encoder->begin_frame(&y_tex, &cbcr_tex);
@@ -575,15 +577,8 @@ void Mixer::thread_func()
 		RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
 		check_error();
 
-		// Make sure the H.264 gets a reference to all the
-		// input frames needed, so that they are not released back
-		// until the rendering is done.
-		vector<RefCountedFrame> input_frames;
-		for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
-			input_frames.push_back(bmusb_current_rendering_frame[card_index]);
-		}
 		const int64_t av_delay = TIMEBASE / 10;  // Corresponds to the fixed delay in resampling_queue.h. TODO: Make less hard-coded.
-		h264_encoder->end_frame(fence, pts_int + av_delay, input_frames);
+		h264_encoder->end_frame(fence, pts_int + av_delay, theme_main_chain.input_frames);
 		++frame;
 		pts_int += card_copy[0].new_frame_length;
 
@@ -602,15 +597,11 @@ void Mixer::thread_func()
 		// Set up preview and any additional channels.
 		for (int i = 1; i < theme->get_num_channels() + 2; ++i) {
 			DisplayFrame display_frame;
-			pair<EffectChain *, function<void()>> chain = theme->get_chain(i, pts(), WIDTH, HEIGHT);  // FIXME: dimensions
-			display_frame.chain = chain.first;
-			display_frame.setup_chain = chain.second;
+			Theme::Chain chain = theme->get_chain(i, pts(), WIDTH, HEIGHT);  // FIXME: dimensions
+			display_frame.chain = chain.chain;
+			display_frame.setup_chain = chain.setup_chain;
 			display_frame.ready_fence = fence;
-
-			// FIXME: possible to do better?
-			for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
-				display_frame.input_frames.push_back(bmusb_current_rendering_frame[card_index]);
-			}
+			display_frame.input_frames = chain.input_frames;
 			display_frame.temp_textures = {};
 			output_channel[i].output_frame(display_frame);
 		}

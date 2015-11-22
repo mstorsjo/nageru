@@ -170,6 +170,16 @@ public:
 
 	void reset_meters();
 
+	struct BufferedFrame {
+		RefCountedFrame frame;
+		unsigned field_number;
+	};
+
+	BufferedFrame get_buffered_frame(int card, int history_pos)
+	{
+		return buffered_frames[card][history_pos];
+	}
+
 private:
 	void bm_frame(unsigned card_index, uint16_t timecode,
 		FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,
@@ -210,7 +220,8 @@ private:
 		bool should_quit = false;
 		RefCountedFrame new_frame;
 		int64_t new_frame_length;  // In TIMEBASE units.
-		unsigned new_frame_field;  // Which field (0 or 1) of the frame to use.
+		bool new_frame_interlaced;
+		unsigned new_frame_field;  // Which field (0 or 1) of the frame to use. Always 0 for progressive.
 		GLsync new_data_ready_fence;  // Whether new_frame is ready for rendering.
 		std::condition_variable new_data_ready_changed;  // Set whenever new_data_ready is changed.
 		unsigned dropped_frames = 0;  // Before new_frame.
@@ -226,7 +237,12 @@ private:
 	};
 	CaptureCard cards[MAX_CARDS];  // protected by <bmusb_mutex>
 
-	RefCountedFrame bmusb_current_rendering_frame[MAX_CARDS];
+	// For each card, the last three frames (or fields), with 0 being the
+	// most recent one. Note that we only need the actual history if we have
+	// interlaced output (for deinterlacing), so if we detect progressive input,
+	// we immediately clear out all history and all entries will point to the same
+	// frame.
+	BufferedFrame buffered_frames[MAX_CARDS][FRAME_HISTORY_LENGTH];
 
 	class OutputChannel {
 	public:
