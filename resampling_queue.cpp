@@ -118,7 +118,7 @@ bool ResamplingQueue::get_output_samples(double pts, float *samples, ssize_t num
 			// or we're dropping a lot of data.
 			fprintf(stderr, "PANIC: Out of input samples to resample, still need %d output samples!\n",
 				int(vresampler.out_count));
-			memset(vresampler.out_data, 0, vresampler.out_count * sizeof(float));
+			memset(vresampler.out_data, 0, vresampler.out_count * 2 * sizeof(float));
 			return false;
 		}
 
