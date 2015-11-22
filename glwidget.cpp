@@ -10,7 +10,6 @@
 
 #include "glwidget.h"
 
-#include <movit/resource_pool.h>
 #include <stdio.h>
 #include <functional>
 #include <mutex>
@@ -33,8 +32,7 @@ class QWidget;
 using namespace std;
 
 GLWidget::GLWidget(QWidget *parent)
-    : QGLWidget(parent, global_share_widget),
-      resource_pool(new movit::ResourcePool)
+    : QGLWidget(parent, global_share_widget)
 {
 }
 

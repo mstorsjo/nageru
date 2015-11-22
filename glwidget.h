@@ -13,10 +13,6 @@
 class QMouseEvent;
 class QWidget;
 
-namespace movit {
-class ResourcePool;
-}
-
 // Note: We use the older QGLWidget instead of QOpenGLWidget as it is
 // much faster (does not go through a separate offscreen rendering step).
 //
@@ -46,7 +42,6 @@ signals:
 
 private:
 	Mixer::Output output;
-	movit::ResourcePool *resource_pool;
 	GLuint vao, program_num;
 	GLuint position_vbo, texcoord_vbo;
 };
