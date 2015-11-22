@@ -267,8 +267,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 			// Insert silence as needed.
 			fprintf(stderr, "Card %d dropped %d frame(s) (before timecode 0x%04x), inserting silence.\n",
 				card_index, dropped_frames, timecode);
-			vector<float> silence;
-			silence.resize(silence_samples * 2);
+			vector<float> silence(silence_samples * 2, 0.0f);
 			for (int i = 0; i < dropped_frames; ++i) {
 				card->resampling_queue->add_input_samples(local_pts / double(TIMEBASE), silence.data(), silence_samples);
 				// Note that if the format changed in the meantime, we have
