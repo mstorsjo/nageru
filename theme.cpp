@@ -37,8 +37,6 @@ extern Mixer *global_mixer;
 
 namespace {
 
-vector<LiveInputWrapper *> live_inputs;
-
 class LuaRefWithDeleter {
 public:
 	LuaRefWithDeleter(mutex *m, lua_State *L, int ref) : m(m), L(L), ref(ref) {}
