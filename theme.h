@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "defs.h"
+#include "input_state.h"
 #include "ref_counted_frame.h"
 
 namespace movit {
@@ -47,7 +48,7 @@ public:
 		std::vector<RefCountedFrame> input_frames;
 	};
 
-	Chain get_chain(unsigned num, float t, unsigned width, unsigned height);
+	Chain get_chain(unsigned num, float t, unsigned width, unsigned height, InputState input_state);
 
 	int get_num_channels() const { return num_channels; }
 	int map_signal(int signal_num);
@@ -65,15 +66,13 @@ private:
 	void register_class(const char *class_name, const luaL_Reg *funcs);
 
 	std::mutex m;
-	lua_State *L;
+	lua_State *L;  // Protected by <m>.
+	const InputState *input_state;  // Protected by <m>. Only set temporarily, during chain setup.
 	movit::ResourcePool *resource_pool;
 	int num_channels;
 	unsigned num_cards;
 	std::set<int> signals_warned_about;
 
-	// All input frames needed for the current chain. Filled during call to get_chain(),
-	// as inputs get connected.
-	std::vector<RefCountedFrame> *used_input_frames_collector;
 	friend class LiveInputWrapper;
 };
 

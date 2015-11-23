@@ -448,19 +448,13 @@ void LiveInputWrapper::connect_signal(int signal_num)
 
 	signal_num = theme->map_signal(signal_num);
 
-	Mixer::BufferedFrame frame = global_mixer->get_buffered_frame(signal_num, 0);
+	BufferedFrame frame = theme->input_state->buffered_frames[signal_num][0];
 	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
 
 	input->set_texture_num(0, userdata->tex_y[frame.field_number]);
 	input->set_texture_num(1, userdata->tex_cbcr[frame.field_number]);
 	input->set_width(userdata->last_width[frame.field_number]);
 	input->set_height(userdata->last_height[frame.field_number]);
-
-	// Hold on to the refcount so that we don't release the input frame
-	// until we're done rendering from it.
-	if (theme->used_input_frames_collector != nullptr) {
-		theme->used_input_frames_collector->push_back(frame.frame);
-	}
 }
 
 Theme::Theme(const char *filename, ResourcePool *resource_pool, unsigned num_cards)
@@ -514,7 +508,7 @@ void Theme::register_class(const char *class_name, const luaL_Reg *funcs)
 	assert(lua_gettop(L) == 0);
 }
 
-Theme::Chain Theme::get_chain(unsigned num, float t, unsigned width, unsigned height)
+Theme::Chain Theme::get_chain(unsigned num, float t, unsigned width, unsigned height, InputState input_state) 
 {
 	Chain chain;
 
@@ -526,12 +520,10 @@ Theme::Chain Theme::get_chain(unsigned num, float t, unsigned width, unsigned he
 	lua_pushnumber(L, width);
 	lua_pushnumber(L, height);
 
-	this->used_input_frames_collector = &chain.input_frames;
 	if (lua_pcall(L, 4, 2, 0) != 0) {
 		fprintf(stderr, "error running function `get_chain': %s\n", lua_tostring(L, -1));
 		exit(1);
 	}
-	this->used_input_frames_collector = nullptr;
 
 	chain.chain = (EffectChain *)luaL_checkudata(L, -2, "EffectChain");
 	if (!lua_isfunction(L, -1)) {
@@ -543,8 +535,10 @@ Theme::Chain Theme::get_chain(unsigned num, float t, unsigned width, unsigned he
 	lua_pop(L, 2);
 	assert(lua_gettop(L) == 0);
 
-	chain.setup_chain = [this, funcref]{
+	chain.setup_chain = [this, funcref, input_state]{
 		unique_lock<mutex> lock(m);
+
+		this->input_state = &input_state;
 
 		// Set up state, including connecting signals.
 		lua_rawgeti(L, LUA_REGISTRYINDEX, funcref->get());
@@ -554,6 +548,14 @@ Theme::Chain Theme::get_chain(unsigned num, float t, unsigned width, unsigned he
 		}
 		assert(lua_gettop(L) == 0);
 	};
+
+	// TODO: Can we do better, e.g. by running setup_chain() and seeing what it references?
+	// Actually, setup_chain does maybe hold all the references we need now anyway?
+	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
+		for (unsigned frame_num = 0; frame_num < FRAME_HISTORY_LENGTH; ++frame_num) {
+			chain.input_frames.push_back(input_state.buffered_frames[card_index][frame_num].frame);
+		}
+	}
 
 	return chain;
 }

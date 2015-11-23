@@ -59,6 +59,22 @@ void convert_fixed24_to_fp32(float *dst, size_t out_channels, const uint8_t *src
 	}
 }
 
+void insert_new_frame(RefCountedFrame frame, unsigned field_num, bool interlaced, unsigned card_index, InputState *input_state)
+{
+	if (interlaced) {
+		for (unsigned frame_num = FRAME_HISTORY_LENGTH; frame_num --> 1; ) {  // :-)
+			input_state->buffered_frames[card_index][frame_num] =
+				input_state->buffered_frames[card_index][frame_num - 1];
+		}
+		input_state->buffered_frames[card_index][0] = { frame, field_num };
+	} else {
+		for (unsigned frame_num = 0; frame_num < FRAME_HISTORY_LENGTH; ++frame_num) {
+			input_state->buffered_frames[card_index][frame_num] = { frame, field_num };
+		}
+	}
+}
+
+
 }  // namespace
 
 Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
@@ -528,16 +544,7 @@ void Mixer::thread_func()
 				continue;
 
 			assert(card->new_frame != nullptr);
-			if (card->new_frame_interlaced) {
-				for (unsigned frame_num = FRAME_HISTORY_LENGTH; frame_num --> 1; ) {  // :-)
-					buffered_frames[card_index][frame_num] = buffered_frames[card_index][frame_num - 1];
-				}
-				buffered_frames[card_index][0] = { card->new_frame, card->new_frame_field };
-			} else {
-				for (unsigned frame_num = 0; frame_num < FRAME_HISTORY_LENGTH; ++frame_num) {
-					buffered_frames[card_index][frame_num] = { card->new_frame, card->new_frame_field };
-				}
-			}
+			insert_new_frame(card->new_frame, card->new_frame_field, card->new_frame_interlaced, card_index, &input_state);
 			check_error();
 
 			// The new texture might still be uploaded,
@@ -551,7 +558,7 @@ void Mixer::thread_func()
 		}
 
 		// Get the main chain from the theme, and set its state immediately.
-		Theme::Chain theme_main_chain = theme->get_chain(0, pts(), WIDTH, HEIGHT);
+		Theme::Chain theme_main_chain = theme->get_chain(0, pts(), WIDTH, HEIGHT, input_state);
 		EffectChain *chain = theme_main_chain.chain;
 		theme_main_chain.setup_chain();
 
@@ -600,7 +607,7 @@ void Mixer::thread_func()
 		// Set up preview and any additional channels.
 		for (int i = 1; i < theme->get_num_channels() + 2; ++i) {
 			DisplayFrame display_frame;
-			Theme::Chain chain = theme->get_chain(i, pts(), WIDTH, HEIGHT);  // FIXME: dimensions
+			Theme::Chain chain = theme->get_chain(i, pts(), WIDTH, HEIGHT, input_state);  // FIXME: dimensions
 			display_frame.chain = chain.chain;
 			display_frame.setup_chain = chain.setup_chain;
 			display_frame.ready_fence = fence;

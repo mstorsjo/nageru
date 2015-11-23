@@ -34,6 +34,7 @@
 #include "timebase.h"
 #include "stereocompressor.h"
 #include "filter.h"
+#include "input_state.h"
 
 class H264Encoder;
 class QSurface;
@@ -170,16 +171,6 @@ public:
 
 	void reset_meters();
 
-	struct BufferedFrame {
-		RefCountedFrame frame;
-		unsigned field_number;
-	};
-
-	BufferedFrame get_buffered_frame(int card, int history_pos)
-	{
-		return buffered_frames[card][history_pos];
-	}
-
 private:
 	void bm_frame(unsigned card_index, uint16_t timecode,
 		FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,
@@ -237,12 +228,7 @@ private:
 	};
 	CaptureCard cards[MAX_CARDS];  // protected by <bmusb_mutex>
 
-	// For each card, the last three frames (or fields), with 0 being the
-	// most recent one. Note that we only need the actual history if we have
-	// interlaced output (for deinterlacing), so if we detect progressive input,
-	// we immediately clear out all history and all entries will point to the same
-	// frame.
-	BufferedFrame buffered_frames[MAX_CARDS][FRAME_HISTORY_LENGTH];
+	InputState input_state;
 
 	class OutputChannel {
 	public:
