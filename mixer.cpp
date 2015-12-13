@@ -159,7 +159,8 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 		"void main() { \n"
 		"    gl_FragColor = texture2D(cbcr_tex, tc0); \n"
 		"} \n";
-	cbcr_program_num = resource_pool->compile_glsl_program(cbcr_vert_shader, cbcr_frag_shader);
+	vector<string> frag_shader_outputs;
+	cbcr_program_num = resource_pool->compile_glsl_program(cbcr_vert_shader, cbcr_frag_shader, frag_shader_outputs);
 
 	r128.init(2, OUTPUT_FREQUENCY);
 	r128.integr_start();
