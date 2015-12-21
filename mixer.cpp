@@ -146,8 +146,6 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 		cards[card_index].usb->start_bm_capture();
 	}
 
-	//chain->enable_phase_timing(true);
-
 	// Set up stuff for NV12 conversion.
 
 	// Cb/Cr shader.
@@ -560,6 +558,7 @@ void Mixer::thread_func()
 		Theme::Chain theme_main_chain = theme->get_chain(0, pts(), WIDTH, HEIGHT, input_state);
 		EffectChain *chain = theme_main_chain.chain;
 		theme_main_chain.setup_chain();
+		//theme_main_chain.chain->enable_phase_timing(true);
 
 		GLuint y_tex, cbcr_tex;
 		bool got_frame = h264_encoder->begin_frame(&y_tex, &cbcr_tex);
