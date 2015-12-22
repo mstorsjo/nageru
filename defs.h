@@ -7,7 +7,7 @@
 #define HEIGHT 720
 #define MAX_CARDS 16
 
-// For deinterlacing. See also comments on Mixer::frame_history.
+// For deinterlacing. See also comments on InputState.
 #define FRAME_HISTORY_LENGTH 5
 
 #define AUDIO_OUTPUT_CODEC AV_CODEC_ID_PCM_S32LE
