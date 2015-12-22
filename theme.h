@@ -89,7 +89,6 @@ public:
 private:
 	Theme *theme;  // Not owned by us.
 	movit::YCbCrInput *input;  // Owned by the chain.
-	int connected_signal_num = 0;
 };
 
 #endif  // !defined(_THEME_H)
