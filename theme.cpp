@@ -210,6 +210,22 @@ int LiveInputWrapper_connect_signal(lua_State* L)
 	return 0;
 }
 
+int LiveInputWrapper_get_width(lua_State* L)
+{
+	assert(lua_gettop(L) == 1);
+	LiveInputWrapper *input = (LiveInputWrapper *)luaL_checkudata(L, 1, "LiveInputWrapper");
+	lua_pushnumber(L, input->get_width());
+	return 1;
+}
+
+int LiveInputWrapper_get_height(lua_State* L)
+{
+	assert(lua_gettop(L) == 1);
+	LiveInputWrapper *input = (LiveInputWrapper *)luaL_checkudata(L, 1, "LiveInputWrapper");
+	lua_pushnumber(L, input->get_height());
+	return 1;
+}
+
 int ImageInput_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 1);
@@ -326,6 +342,9 @@ const luaL_Reg EffectChain_funcs[] = {
 
 const luaL_Reg LiveInputWrapper_funcs[] = {
 	{ "connect_signal", LiveInputWrapper_connect_signal },
+	// These are only valid during calls to get_chain and the setup chain callback.
+	{ "get_width", LiveInputWrapper_get_width },
+	{ "get_height", LiveInputWrapper_get_height },
 	{ NULL, NULL }
 };
 
@@ -458,6 +477,26 @@ void LiveInputWrapper::connect_signal(int signal_num)
 	input->set_height(userdata->last_height[frame.field_number]);
 }
 
+unsigned LiveInputWrapper::get_width() const
+{
+	if (last_connected_signal_num == -1) {
+		return 0;
+	}
+	BufferedFrame frame = theme->input_state->buffered_frames[last_connected_signal_num][0];
+	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
+	return userdata->last_width[frame.field_number];
+}
+
+unsigned LiveInputWrapper::get_height() const
+{
+	if (last_connected_signal_num == -1) {
+		return 0;
+	}
+	BufferedFrame frame = theme->input_state->buffered_frames[last_connected_signal_num][0];
+	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
+	return userdata->last_height[frame.field_number];
+}
+
 Theme::Theme(const char *filename, ResourcePool *resource_pool, unsigned num_cards)
 	: resource_pool(resource_pool), num_cards(num_cards)
 {
@@ -521,6 +560,7 @@ Theme::Chain Theme::get_chain(unsigned num, float t, unsigned width, unsigned he
 	lua_pushnumber(L, width);
 	lua_pushnumber(L, height);
 
+	this->input_state = &input_state;
 	if (lua_pcall(L, 4, 2, 0) != 0) {
 		fprintf(stderr, "error running function `get_chain': %s\n", lua_tostring(L, -1));
 		exit(1);
