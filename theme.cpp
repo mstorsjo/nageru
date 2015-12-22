@@ -443,6 +443,7 @@ LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain, bool overri
 void LiveInputWrapper::connect_signal(int signal_num)
 {
 	if (global_mixer == nullptr) {
+		// No data yet.
 		return;
 	}
 
