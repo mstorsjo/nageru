@@ -74,7 +74,6 @@ void insert_new_frame(RefCountedFrame frame, unsigned field_num, bool interlaced
 	}
 }
 
-
 }  // namespace
 
 Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
