@@ -33,55 +33,47 @@ local STATIC_SIGNAL_NUM = 3
 -- to the next.
 local FADE_SIGNAL_NUM = 4
 
--- The main live chain.
-function make_sbs_chain(input0_deint, input1_deint, hq)
-	local chain = EffectChain.new(16, 9)
-	local input0 = chain:add_live_input(not input0_deint, input0_deint)  -- Override bounce only if not deinterlacing.
-	input0:connect_signal(0)
-	local input0_wb_effect = chain:add_effect(WhiteBalanceEffect.new())
-	local input1 = chain:add_live_input(not input1_deint, input1_deint)
-	input1:connect_signal(1)
-	local input1_wb_effect = chain:add_effect(WhiteBalanceEffect.new())
+function make_sbs_input(chain, signal, deint, hq)
+	local input = chain:add_live_input(not deint, deint)  -- Override bounce only if not deinterlacing.
+	input:connect_signal(signal)
+	local wb_effect = chain:add_effect(WhiteBalanceEffect.new())
 
 	local resample_effect = nil
 	local resize_effect = nil
 	if (hq) then
-		resample_effect = chain:add_effect(ResampleEffect.new(), input0_wb_effect)
+		resample_effect = chain:add_effect(ResampleEffect.new())
 	else
-		resize_effect = chain:add_effect(ResizeEffect.new(), input0_wb_effect)
+		resize_effect = chain:add_effect(ResizeEffect.new())
 	end
 
 	local padding_effect = chain:add_effect(IntegralPaddingEffect.new())
-	padding_effect:set_vec4("border_color", 0.0, 0.0, 0.0, 1.0)
 
-	local resample2_effect = nil
-	local resize2_effect = nil
-	if (hq) then
-		resample2_effect = chain:add_effect(ResampleEffect.new(), input1_wb_effect)
-	else
-		resize2_effect = chain:add_effect(ResizeEffect.new(), input1_wb_effect)
-	end
-	local padding2_effect = chain:add_effect(IntegralPaddingEffect.new())
+	return {
+		input = input,
+		wb_effect = wb_effect,
+		resample_effect = resample_effect,
+		resize_effect = resize_effect,
+		padding_effect = padding_effect
+	}
+end
 
-	chain:add_effect(OverlayEffect.new(), padding_effect, padding2_effect)
+-- The main live chain.
+function make_sbs_chain(input0_deint, input1_deint, hq)
+	local chain = EffectChain.new(16, 9)
+
+	local input0 = make_sbs_input(chain, INPUT0_SIGNAL_NUM, input0_deint, hq)
+	local input1 = make_sbs_input(chain, INPUT1_SIGNAL_NUM, input1_deint, hq)
+
+	input0.padding_effect:set_vec4("border_color", 0.0, 0.0, 0.0, 1.0)
+	input1.padding_effect:set_vec4("border_color", 0.0, 0.0, 0.0, 0.0)
+
+	chain:add_effect(OverlayEffect.new(), input0.padding_effect, input1.padding_effect)
 	chain:finalize(hq)
 
 	return {
 		chain = chain,
-		input0 = {
-			input = input0,
-			wb_effect = input0_wb_effect,
-			resample_effect = resample_effect,
-			resize_effect = resize_effect,
-			padding_effect = padding_effect
-		},
-		input1 = {
-			input = input1,
-			wb_effect = input1_wb_effect,
-			resample_effect = resample2_effect,
-			resize_effect = resize2_effect,
-			padding_effect = padding2_effect
-		}
+		input0 = input0,
+		input1 = input1
 	}
 end
 
