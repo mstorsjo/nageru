@@ -37,6 +37,29 @@ extern Mixer *global_mixer;
 
 namespace {
 
+// Contains basically the same data as InputState, but does not hold on to
+// a reference to the frames. This is important so that we can release them
+// without having to wait for Lua's GC.
+struct InputStateInfo {
+	InputStateInfo(const InputState& input_state);
+
+	unsigned last_width[MAX_CARDS], last_height[MAX_CARDS];
+};
+
+InputStateInfo::InputStateInfo(const InputState &input_state)
+{
+	for (unsigned signal_num = 0; signal_num < MAX_CARDS; ++signal_num) {
+		BufferedFrame frame = input_state.buffered_frames[signal_num][0];
+		if (frame.frame == nullptr) {
+			last_width[signal_num] = last_height[signal_num] = 0;
+			continue;
+		}
+		const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
+		last_width[signal_num] = userdata->last_width[frame.field_number];
+		last_height[signal_num] = userdata->last_height[frame.field_number];
+	}
+}
+
 class LuaRefWithDeleter {
 public:
 	LuaRefWithDeleter(mutex *m, lua_State *L, int ref) : m(m), L(L), ref(ref) {}
@@ -90,12 +113,12 @@ Effect *get_effect(lua_State *L, int idx)
 	return nullptr;
 }
 
-InputState *get_input_state(lua_State *L, int idx)
+InputStateInfo *get_input_state_info(lua_State *L, int idx)
 {
-	if (luaL_testudata(L, idx, "InputState")) {
-		return (InputState *)lua_touserdata(L, idx);
+	if (luaL_testudata(L, idx, "InputStateInfo")) {
+		return (InputStateInfo *)lua_touserdata(L, idx);
 	}
-	luaL_error(L, "Error: Index #%d was not InputState\n", idx);
+	luaL_error(L, "Error: Index #%d was not InputStateInfo\n", idx);
 	return nullptr;
 }
 
@@ -268,35 +291,23 @@ int MixEffect_new(lua_State* L)
 	return wrap_lua_object<MixEffect>(L, "MixEffect");
 }
 
-int InputState_gc(lua_State* L)
-{
-	assert(lua_gettop(L) == 1);
-	InputState *input_state = get_input_state(L, 1);
-	input_state->~InputState();
-	return 0;
-}
-
-int InputState_get_width(lua_State* L)
+int InputStateInfo_get_width(lua_State* L)
 {
 	assert(lua_gettop(L) == 2);
-	InputState *input_state = (InputState *)lua_touserdata(L, 1);
+	InputStateInfo *input_state_info = get_input_state_info(L, 1);
 	Theme *theme = get_theme_updata(L);
 	int signal_num = theme->map_signal(luaL_checknumber(L, 2));
-	BufferedFrame frame = input_state->buffered_frames[signal_num][0];
-	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
-	lua_pushnumber(L, userdata->last_width[frame.field_number]);
+	lua_pushnumber(L, input_state_info->last_width[signal_num]);
 	return 1;
 }
 
-int InputState_get_height(lua_State* L)
+int InputStateInfo_get_height(lua_State* L)
 {
 	assert(lua_gettop(L) == 2);
-	InputState *input_state = (InputState *)lua_touserdata(L, 1);
+	InputStateInfo *input_state_info = get_input_state_info(L, 1);
 	Theme *theme = get_theme_updata(L);
 	int signal_num = theme->map_signal(luaL_checknumber(L, 2));
-	BufferedFrame frame = input_state->buffered_frames[signal_num][0];
-	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
-	lua_pushnumber(L, userdata->last_height[frame.field_number]);
+	lua_pushnumber(L, input_state_info->last_height[signal_num]);
 	return 1;
 }
 
@@ -442,10 +453,9 @@ const luaL_Reg MixEffect_funcs[] = {
 	{ NULL, NULL }
 };
 
-const luaL_Reg InputState_funcs[] = {
-	{ "__gc", InputState_gc },
-	{ "get_width", InputState_get_width },
-	{ "get_height", InputState_get_height },
+const luaL_Reg InputStateInfo_funcs[] = {
+	{ "get_width", InputStateInfo_get_width },
+	{ "get_height", InputStateInfo_get_height },
 	{ NULL, NULL }
 };
 
@@ -522,7 +532,7 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool, unsigned num_car
 	register_class("OverlayEffect", OverlayEffect_funcs);
 	register_class("ResizeEffect", ResizeEffect_funcs);
 	register_class("MixEffect", MixEffect_funcs);
-	register_class("InputState", InputState_funcs);
+	register_class("InputStateInfo", InputStateInfo_funcs);
 
 	// Run script.
 	lua_settop(L, 0);
@@ -569,7 +579,7 @@ Theme::Chain Theme::get_chain(unsigned num, float t, unsigned width, unsigned he
 	lua_pushnumber(L, t);
 	lua_pushnumber(L, width);
 	lua_pushnumber(L, height);
-	wrap_lua_object<InputState>(L, "InputState", input_state);
+	wrap_lua_object<InputStateInfo>(L, "InputStateInfo", input_state);
 
 	if (lua_pcall(L, 5, 2, 0) != 0) {
 		fprintf(stderr, "error running function `get_chain': %s\n", lua_tostring(L, -1));
