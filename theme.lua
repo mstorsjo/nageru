@@ -70,14 +70,14 @@ function make_sbs_chain(hq)
 		chain = chain,
 		input0 = {
 			input = input0,
-			white_balance_effect = input0_wb_effect,
+			wb_effect = input0_wb_effect,
 			resample_effect = resample_effect,
 			resize_effect = resize_effect,
 			padding_effect = padding_effect
 		},
 		input1 = {
 			input = input1,
-			white_balance_effect = input1_wb_effect,
+			wb_effect = input1_wb_effect,
 			resample_effect = resample2_effect,
 			resize_effect = resize2_effect,
 			padding_effect = padding2_effect
@@ -123,11 +123,11 @@ function make_fade_chain(input0_live, input1_live, hq)
 		chain = chain,
 		input0 = {
 			input = input0,
-			white_balance_effect = wb0_effect
+			wb_effect = wb0_effect
 		},
 		input1 = {
 			input = input1,
-			white_balance_effect = wb1_effect
+			wb_effect = wb1_effect
 		},
 		mix_effect = mix_effect
 	}
@@ -379,11 +379,11 @@ function get_chain(num, t, width, height, signals)
 			prepare = function()
 				if input0_type == "live" then
 					chain.input0.input:connect_signal(fade_src_signal)
-					set_neutral_color_from_signal(chain.input0.white_balance_effect, fade_src_signal)
+					set_neutral_color_from_signal(chain.input0.wb_effect, fade_src_signal)
 				end
 				if input1_type == "live" then
 					chain.input1.input:connect_signal(fade_dst_signal)
-					set_neutral_color_from_signal(chain.input1.white_balance_effect, fade_dst_signal)
+					set_neutral_color_from_signal(chain.input1.wb_effect, fade_dst_signal)
 				end
 				local tt = calc_fade_progress(t, transition_start, transition_end)
 
@@ -540,8 +540,8 @@ end
 function prepare_sbs_chain(chain, t, screen_width, screen_height)
 	chain.input0.input:connect_signal(0)
 	chain.input1.input:connect_signal(1)
-	set_neutral_color(chain.input0.white_balance_effect, input0_neutral_color)
-	set_neutral_color(chain.input1.white_balance_effect, input1_neutral_color)
+	set_neutral_color(chain.input0.wb_effect, input0_neutral_color)
+	set_neutral_color(chain.input1.wb_effect, input1_neutral_color)
 
 	-- First input is positioned (16,48) from top-left.
 	local width0 = round(848 * screen_width/1280.0)
