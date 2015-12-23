@@ -280,7 +280,8 @@ int InputState_get_width(lua_State* L)
 {
 	assert(lua_gettop(L) == 2);
 	InputState *input_state = (InputState *)lua_touserdata(L, 1);
-	int signal_num = luaL_checknumber(L, 2);
+	Theme *theme = get_theme_updata(L);
+	int signal_num = theme->map_signal(luaL_checknumber(L, 2));
 	BufferedFrame frame = input_state->buffered_frames[signal_num][0];
 	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
 	lua_pushnumber(L, userdata->last_width[frame.field_number]);
@@ -291,7 +292,8 @@ int InputState_get_height(lua_State* L)
 {
 	assert(lua_gettop(L) == 2);
 	InputState *input_state = (InputState *)lua_touserdata(L, 1);
-	int signal_num = luaL_checknumber(L, 2);
+	Theme *theme = get_theme_updata(L);
+	int signal_num = theme->map_signal(luaL_checknumber(L, 2));
 	BufferedFrame frame = input_state->buffered_frames[signal_num][0];
 	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
 	lua_pushnumber(L, userdata->last_height[frame.field_number]);
