@@ -90,6 +90,15 @@ Effect *get_effect(lua_State *L, int idx)
 	return nullptr;
 }
 
+InputState *get_input_state(lua_State *L, int idx)
+{
+	if (luaL_testudata(L, idx, "InputState")) {
+		return (InputState *)lua_touserdata(L, idx);
+	}
+	luaL_error(L, "Error: Index #%d was not InputState\n", idx);
+	return nullptr;
+}
+
 bool checkbool(lua_State* L, int idx)
 {
 	luaL_checktype(L, idx, LUA_TBOOLEAN);
@@ -210,22 +219,6 @@ int LiveInputWrapper_connect_signal(lua_State* L)
 	return 0;
 }
 
-int LiveInputWrapper_get_width(lua_State* L)
-{
-	assert(lua_gettop(L) == 1);
-	LiveInputWrapper *input = (LiveInputWrapper *)luaL_checkudata(L, 1, "LiveInputWrapper");
-	lua_pushnumber(L, input->get_width());
-	return 1;
-}
-
-int LiveInputWrapper_get_height(lua_State* L)
-{
-	assert(lua_gettop(L) == 1);
-	LiveInputWrapper *input = (LiveInputWrapper *)luaL_checkudata(L, 1, "LiveInputWrapper");
-	lua_pushnumber(L, input->get_height());
-	return 1;
-}
-
 int ImageInput_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 1);
@@ -273,6 +266,36 @@ int MixEffect_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 0);
 	return wrap_lua_object<MixEffect>(L, "MixEffect");
+}
+
+int InputState_gc(lua_State* L)
+{
+	assert(lua_gettop(L) == 1);
+	InputState *input_state = get_input_state(L, 1);
+	input_state->~InputState();
+	return 0;
+}
+
+int InputState_get_width(lua_State* L)
+{
+	assert(lua_gettop(L) == 2);
+	InputState *input_state = (InputState *)lua_touserdata(L, 1);
+	int signal_num = luaL_checknumber(L, 2);
+	BufferedFrame frame = input_state->buffered_frames[signal_num][0];
+	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
+	lua_pushnumber(L, userdata->last_width[frame.field_number]);
+	return 1;
+}
+
+int InputState_get_height(lua_State* L)
+{
+	assert(lua_gettop(L) == 2);
+	InputState *input_state = (InputState *)lua_touserdata(L, 1);
+	int signal_num = luaL_checknumber(L, 2);
+	BufferedFrame frame = input_state->buffered_frames[signal_num][0];
+	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
+	lua_pushnumber(L, userdata->last_height[frame.field_number]);
+	return 1;
 }
 
 int Effect_set_float(lua_State *L)
@@ -342,9 +365,6 @@ const luaL_Reg EffectChain_funcs[] = {
 
 const luaL_Reg LiveInputWrapper_funcs[] = {
 	{ "connect_signal", LiveInputWrapper_connect_signal },
-	// These are only valid during calls to get_chain and the setup chain callback.
-	{ "get_width", LiveInputWrapper_get_width },
-	{ "get_height", LiveInputWrapper_get_height },
 	{ NULL, NULL }
 };
 
@@ -420,6 +440,13 @@ const luaL_Reg MixEffect_funcs[] = {
 	{ NULL, NULL }
 };
 
+const luaL_Reg InputState_funcs[] = {
+	{ "__gc", InputState_gc },
+	{ "get_width", InputState_get_width },
+	{ "get_height", InputState_get_height },
+	{ NULL, NULL }
+};
+
 }  // namespace
 
 LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain, bool override_bounce)
@@ -477,26 +504,6 @@ void LiveInputWrapper::connect_signal(int signal_num)
 	input->set_height(userdata->last_height[frame.field_number]);
 }
 
-unsigned LiveInputWrapper::get_width() const
-{
-	if (last_connected_signal_num == -1) {
-		return 0;
-	}
-	BufferedFrame frame = theme->input_state->buffered_frames[last_connected_signal_num][0];
-	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
-	return userdata->last_width[frame.field_number];
-}
-
-unsigned LiveInputWrapper::get_height() const
-{
-	if (last_connected_signal_num == -1) {
-		return 0;
-	}
-	BufferedFrame frame = theme->input_state->buffered_frames[last_connected_signal_num][0];
-	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
-	return userdata->last_height[frame.field_number];
-}
-
 Theme::Theme(const char *filename, ResourcePool *resource_pool, unsigned num_cards)
 	: resource_pool(resource_pool), num_cards(num_cards)
 {
@@ -513,6 +520,7 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool, unsigned num_car
 	register_class("OverlayEffect", OverlayEffect_funcs);
 	register_class("ResizeEffect", ResizeEffect_funcs);
 	register_class("MixEffect", MixEffect_funcs);
+	register_class("InputState", InputState_funcs);
 
 	// Run script.
 	lua_settop(L, 0);
@@ -559,9 +567,9 @@ Theme::Chain Theme::get_chain(unsigned num, float t, unsigned width, unsigned he
 	lua_pushnumber(L, t);
 	lua_pushnumber(L, width);
 	lua_pushnumber(L, height);
+	wrap_lua_object<InputState>(L, "InputState", input_state);
 
-	this->input_state = &input_state;
-	if (lua_pcall(L, 4, 2, 0) != 0) {
+	if (lua_pcall(L, 5, 2, 0) != 0) {
 		fprintf(stderr, "error running function `get_chain': %s\n", lua_tostring(L, -1));
 		exit(1);
 	}

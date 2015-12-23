@@ -86,15 +86,9 @@ public:
 		return input;
 	}
 
-	// Of last connected signal number (see connect_signal()).
-	// Only valid during get_chain() or the setup callback.
-	unsigned get_width() const;
-	unsigned get_height() const;
-
 private:
 	Theme *theme;  // Not owned by us.
 	movit::YCbCrInput *input;  // Owned by the chain.
-	int last_connected_signal_num = -1;
 };
 
 #endif  // !defined(_THEME_H)

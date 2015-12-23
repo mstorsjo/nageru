@@ -313,6 +313,11 @@ end
 -- the output, although you can ignore them if you don't need them
 -- (they're useful if you want to e.g. know what to resample by).
 --
+-- <signals> is basically an exposed InputState, which you can use to
+-- query for information about the signals at the point of the current
+-- frame. In particular, you can call get_width() and get_height()
+-- for any signal number, and use that to e.g. assist in chain selection.
+--
 -- You should return two objects; the chain itself, and then a
 -- function (taking no parameters) that is run just before rendering.
 -- The function needs to call connect_signal on any inputs, so that
@@ -324,7 +329,7 @@ end
 --
 -- NOTE: The chain returned must be finalized with the Y'CbCr flag
 -- if and only if num==0.
-function get_chain(num, t, width, height)
+function get_chain(num, t, width, height, signals)
 	if num == 0 then  -- Live.
 		if live_signal_num == INPUT0_SIGNAL_NUM or live_signal_num == INPUT1_SIGNAL_NUM then  -- Plain input.
 			prepare = function()
