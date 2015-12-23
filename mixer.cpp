@@ -342,9 +342,8 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	unsigned num_fields = interlaced ? 2 : 1;
 	timespec frame_upload_start;
 	if (interlaced) {
-		// NOTE: This isn't deinterlacing. This is just sending the two fields along
-		// as separate frames without considering anything like the half-field offset.
-		// We'll need to add a proper deinterlacer on the receiving side to get this right.
+		// Send the two fields along as separate frames; the other side will need to add
+		// a deinterlacer to actually get this right.
 		assert(height % 2 == 0);
 		height /= 2;
 		assert(frame_length % 2 == 0);
@@ -352,6 +351,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		num_fields = 2;
 		clock_gettime(CLOCK_MONOTONIC, &frame_upload_start);
 	}
+	userdata->last_interlaced = interlaced;
 	RefCountedFrame new_frame(video_frame);
 
 	// Upload the textures.

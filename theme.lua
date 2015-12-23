@@ -34,12 +34,12 @@ local STATIC_SIGNAL_NUM = 3
 local FADE_SIGNAL_NUM = 4
 
 -- The main live chain.
-function make_sbs_chain(hq)
+function make_sbs_chain(input0_deint, input1_deint, hq)
 	local chain = EffectChain.new(16, 9)
-	local input0 = chain:add_live_input(true)
+	local input0 = chain:add_live_input(not input0_deint, input0_deint)  -- Override bounce only if not deinterlacing.
 	input0:connect_signal(0)
 	local input0_wb_effect = chain:add_effect(WhiteBalanceEffect.new())
-	local input1 = chain:add_live_input(true)
+	local input1 = chain:add_live_input(not input1_deint, input1_deint)
 	input1:connect_signal(1)
 	local input1_wb_effect = chain:add_effect(WhiteBalanceEffect.new())
 
@@ -85,19 +85,29 @@ function make_sbs_chain(hq)
 	}
 end
 
-local main_chain_hq = make_sbs_chain(true)
-local main_chain_lq = make_sbs_chain(false)
+-- Make all possible combinations of side-by-side chains.
+local sbs_chains = {}
+for input0_type, input0_deint in pairs({live = false, livedeint = true}) do
+	sbs_chains[input0_type] = {}
+	for input1_type, input1_deint in pairs({live = false, livedeint = true}) do
+		sbs_chains[input0_type][input1_type] = {}
+		for _, hq in pairs({true, false}) do
+			sbs_chains[input0_type][input1_type][hq] =
+				make_sbs_chain(input0_deint, input1_deint, hq)
+		end
+	end
+end
 
 -- A chain to fade between two inputs, of which either can be a picture
 -- or a live input. In practice only used live, but we still support the
 -- hq parameter.
-function make_fade_chain(input0_live, input1_live, hq)
+function make_fade_chain(input0_live, input0_deint, input1_live, input1_deint, hq)
 	local chain = EffectChain.new(16, 9)
 
 	local input0, wb0_effect, input0_last, input1, wb1_effect, input1_last
 
 	if input0_live then
-		input0 = chain:add_live_input(true)
+		input0 = chain:add_live_input(false, input0_deint)
 		wb0_effect = chain:add_effect(WhiteBalanceEffect.new())
 		input0:connect_signal(0)
 		input0_last = wb0_effect
@@ -107,7 +117,7 @@ function make_fade_chain(input0_live, input1_live, hq)
 	end
 
 	if input1_live then
-		input1 = chain:add_live_input(true)
+		input1 = chain:add_live_input(false, input1_deint)
 		wb1_effect = chain:add_effect(WhiteBalanceEffect.new())
 		input1:connect_signal(1)
 		input1_last = wb1_effect
@@ -135,29 +145,43 @@ end
 
 -- Chains to fade between two inputs, in various configurations.
 local fade_chains = {}
-for input0_type, input0_live in pairs({static = false, live = true}) do
+for input0_type, input0_live in pairs({static = false, live = true, livedeint = true}) do
+	local input0_deint = (input0_live == "livedeint")
 	fade_chains[input0_type] = {}
-	for input1_type, input1_live in pairs({static = false, live = true}) do
+	for input1_type, input1_live in pairs({static = false, live = true, livedeint = true}) do
+		local input1_deint = (input1_live == "livedeint")
 		fade_chains[input0_type][input1_type] = {}
 		for _, hq in pairs({true, false}) do
-			fade_chains[input0_type][input1_type][hq] = make_fade_chain(input0_live, input1_live, hq)
+			fade_chains[input0_type][input1_type][hq] =
+				make_fade_chain(input0_live, input0_deint, input1_live, input1_deint, hq)
 		end
 	end
 end
 
--- A chain to show a single input on screen (HQ version).
-local simple_chain_hq = EffectChain.new(16, 9)
-local simple_chain_hq_input = simple_chain_hq:add_live_input(true)
-simple_chain_hq_input:connect_signal(0)  -- First input card. Can be changed whenever you want.
-local simple_chain_hq_wb_effect = simple_chain_hq:add_effect(WhiteBalanceEffect.new())
-simple_chain_hq:finalize(true)
+-- A chain to show a single input on screen.
+function make_simple_chain(input_deint, hq)
+	local chain = EffectChain.new(16, 9)
 
--- A chain to show a single input on screen (LQ version).
-local simple_chain_lq = EffectChain.new(16, 9)
-local simple_chain_lq_input = simple_chain_lq:add_live_input(true)
-simple_chain_lq_input:connect_signal(0)  -- First input card. Can be changed whenever you want.
-local simple_chain_lq_wb_effect = simple_chain_lq:add_effect(WhiteBalanceEffect.new())
-simple_chain_lq:finalize(false)
+	local input = chain:add_live_input(false, input_deint)
+	input:connect_signal(0)  -- First input card. Can be changed whenever you want.
+	local wb_effect = chain:add_effect(WhiteBalanceEffect.new())
+	chain:finalize(hq)
+
+	return {
+		chain = chain,
+		input = input,
+		wb_effect = wb_effect
+	}
+end
+
+-- Make all possible combinations of single-input chains.
+local simple_chains = {}
+for input_type, input_deint in pairs({live = false, livedeint = true}) do
+	simple_chains[input_type] = {}
+	for _, hq in pairs({true, false}) do
+		simple_chains[input_type][hq] = make_simple_chain(input_deint, hq)
+	end
+end
 
 -- A chain to show a single static picture on screen (HQ version).
 local static_chain_hq = EffectChain.new(16, 9)
@@ -168,6 +192,17 @@ static_chain_hq:finalize(true)
 local static_chain_lq = EffectChain.new(16, 9)
 local static_chain_lq_input = static_chain_lq:add_effect(ImageInput.new("bg.jpeg"))
 static_chain_lq:finalize(false)
+
+-- Used for indexing into the tables of chains.
+function get_input_type(signals, signal_num)
+	if signal_num == STATIC_SIGNAL_NUM then
+		return "static"
+	elseif signals:get_interlaced(signal_num) then
+		return "livedeint"
+	else
+		return "live"
+	end
+end
 
 -- Returns the number of outputs in addition to the live (0) and preview (1).
 -- Called only once, at the start of the program.
@@ -363,18 +398,20 @@ end
 function get_chain(num, t, width, height, signals)
 	if num == 0 then  -- Live.
 		if live_signal_num == INPUT0_SIGNAL_NUM or live_signal_num == INPUT1_SIGNAL_NUM then  -- Plain input.
+			local input_type = get_input_type(signals, live_signal_num)
+			local chain = simple_chains[input_type][true]
 			prepare = function()
-				simple_chain_hq_input:connect_signal(live_signal_num)
-				set_neutral_color_from_signal(simple_chain_hq_wb_effect, live_signal_num)
+				chain.input:connect_signal(live_signal_num)
+				set_neutral_color_from_signal(chain.wb_effect, live_signal_num)
 			end
-			return simple_chain_hq, prepare
+			return chain.chain, prepare
 		elseif live_signal_num == STATIC_SIGNAL_NUM then  -- Static picture.
 			prepare = function()
 			end
 			return static_chain_hq, prepare
 		elseif live_signal_num == FADE_SIGNAL_NUM then  -- Fade.
-			local input0_type = (fade_src_signal == STATIC_SIGNAL_NUM) and "static" or "live"
-			local input1_type = (fade_dst_signal == STATIC_SIGNAL_NUM) and "static" or "live"
+			local input0_type = get_input_type(signals, fade_src_signal)
+			local input1_type = get_input_type(signals, fade_dst_signal)
 			local chain = fade_chains[input0_type][input1_type][true]
 			prepare = function()
 				if input0_type == "live" then
@@ -394,50 +431,63 @@ function get_chain(num, t, width, height, signals)
 		end
 
 		-- SBS code (live_signal_num == SBS_SIGNAL_NUM).
+		local input0_type = get_input_type(signals, INPUT0_SIGNAL_NUM)
+		local input1_type = get_input_type(signals, INPUT1_SIGNAL_NUM)
 		if t > transition_end and zoom_dst == 1.0 then
 			-- Special case: Show only the single image on screen.
+			local chain = simple_chains[input0_type][true]
 			prepare = function()
-				simple_chain_hq_input:connect_signal(INPUT0_SIGNAL_NUM)
-				set_neutral_color(simple_chain_hq_wb_effect, input0_neutral_color)
+				chain.input:connect_signal(INPUT0_SIGNAL_NUM)
+				set_neutral_color(chain.wb_effect, input0_neutral_color)
 			end
-			return simple_chain_hq, prepare
+			return chain.chain, prepare
 		end
+		local chain = sbs_chains[input0_type][input1_type][true]
 		prepare = function()
 			if t < transition_start then
-				prepare_sbs_chain(main_chain_hq, zoom_src, width, height)
+				prepare_sbs_chain(chain, zoom_src, width, height)
 			elseif t > transition_end then
-				prepare_sbs_chain(main_chain_hq, zoom_dst, width, height)
+				prepare_sbs_chain(chain, zoom_dst, width, height)
 			else
 				local tt = (t - transition_start) / (transition_end - transition_start)
 				-- Smooth it a bit.
 				tt = math.sin(tt * 3.14159265358 * 0.5)
-				prepare_sbs_chain(main_chain_hq, zoom_src + (zoom_dst - zoom_src) * tt, width, height)
+				prepare_sbs_chain(chain, zoom_src + (zoom_dst - zoom_src) * tt, width, height)
 			end
 		end
-		return main_chain_hq.chain, prepare
+		return chain.chain, prepare
 	end
 	if num == 1 then  -- Preview.
 		num = preview_signal_num + 2
 	end
+
+	-- Individual preview inputs.
 	if num == INPUT0_SIGNAL_NUM + 2 then
+		local input_type = get_input_type(signals, INPUT0_SIGNAL_NUM)
+		local chain = simple_chains[input_type][false]
 		prepare = function()
-			simple_chain_lq_input:connect_signal(0)
-			set_neutral_color(simple_chain_lq_wb_effect, input0_neutral_color)
+			chain.input:connect_signal(INPUT0_SIGNAL_NUM)
+			set_neutral_color(chain.wb_effect, input0_neutral_color)
 		end
-		return simple_chain_lq, prepare
+		return chain.chain, prepare
 	end
 	if num == INPUT1_SIGNAL_NUM + 2 then
+		local input_type = get_input_type(signals, INPUT1_SIGNAL_NUM)
+		local chain = simple_chains[input_type][false]
 		prepare = function()
-			simple_chain_lq_input:connect_signal(1)
-			set_neutral_color(simple_chain_lq_wb_effect, input1_neutral_color)
+			chain.input:connect_signal(INPUT1_SIGNAL_NUM)
+			set_neutral_color(chain.wb_effect, input1_neutral_color)
 		end
-		return simple_chain_lq, prepare
+		return chain.chain, prepare
 	end
 	if num == SBS_SIGNAL_NUM + 2 then
+		local input0_type = get_input_type(signals, INPUT0_SIGNAL_NUM)
+		local input1_type = get_input_type(signals, INPUT1_SIGNAL_NUM)
+		local chain = sbs_chains[input0_type][input1_type][false]
 		prepare = function()
-			prepare_sbs_chain(main_chain_lq, 0.0, width, height)
+			prepare_sbs_chain(chain, 0.0, width, height)
 		end
-		return main_chain_lq.chain, prepare
+		return chain.chain, prepare
 	end
 	if num == STATIC_SIGNAL_NUM + 2 then
 		prepare = function()

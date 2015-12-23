@@ -5,6 +5,7 @@
 #include <lauxlib.h>
 #include <lua.h>
 #include <movit/effect_chain.h>
+#include <movit/deinterlace_effect.h>
 #include <movit/ycbcr_input.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -78,17 +79,23 @@ private:
 
 class LiveInputWrapper {
 public:
-	LiveInputWrapper(Theme *theme, movit::EffectChain *chain, bool override_bounce);
+	LiveInputWrapper(Theme *theme, movit::EffectChain *chain, bool override_bounce, bool deinterlace);
 
 	void connect_signal(int signal_num);
-	movit::YCbCrInput *get_input() const
+	movit::Effect *get_effect() const
 	{
-		return input;
+		if (deinterlace) {
+			return deinterlace_effect;
+		} else {
+			return inputs[0];
+		}
 	}
 
 private:
 	Theme *theme;  // Not owned by us.
-	movit::YCbCrInput *input;  // Owned by the chain.
+	std::vector<movit::YCbCrInput *> inputs;  // Multiple ones if deinterlacing. Owned by the chain.
+	movit::Effect *deinterlace_effect = nullptr;  // Owned by the chain.
+	bool deinterlace;
 };
 
 #endif  // !defined(_THEME_H)

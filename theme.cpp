@@ -12,6 +12,7 @@
 #include <movit/padding_effect.h>
 #include <movit/resample_effect.h>
 #include <movit/resize_effect.h>
+#include <movit/util.h>
 #include <movit/white_balance_effect.h>
 #include <movit/ycbcr.h>
 #include <movit/ycbcr_input.h>
@@ -44,6 +45,7 @@ struct InputStateInfo {
 	InputStateInfo(const InputState& input_state);
 
 	unsigned last_width[MAX_CARDS], last_height[MAX_CARDS];
+	bool last_interlaced[MAX_CARDS];
 };
 
 InputStateInfo::InputStateInfo(const InputState &input_state)
@@ -52,11 +54,13 @@ InputStateInfo::InputStateInfo(const InputState &input_state)
 		BufferedFrame frame = input_state.buffered_frames[signal_num][0];
 		if (frame.frame == nullptr) {
 			last_width[signal_num] = last_height[signal_num] = 0;
+			last_interlaced[signal_num] = false;
 			continue;
 		}
 		const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
 		last_width[signal_num] = userdata->last_width[frame.field_number];
 		last_height[signal_num] = userdata->last_height[frame.field_number];
+		last_interlaced[signal_num] = userdata->last_interlaced;
 	}
 }
 
@@ -146,11 +150,12 @@ int EffectChain_new(lua_State* L)
 
 int EffectChain_add_live_input(lua_State* L)
 {
-	assert(lua_gettop(L) == 2);
+	assert(lua_gettop(L) == 3);
 	Theme *theme = get_theme_updata(L);
 	EffectChain *chain = (EffectChain *)luaL_checkudata(L, 1, "EffectChain");
 	bool override_bounce = checkbool(L, 2);
-	return wrap_lua_object<LiveInputWrapper>(L, "LiveInputWrapper", theme, chain, override_bounce);
+	bool deinterlace = checkbool(L, 3);
+	return wrap_lua_object<LiveInputWrapper>(L, "LiveInputWrapper", theme, chain, override_bounce, deinterlace);
 }
 
 int EffectChain_add_effect(lua_State* L)
@@ -171,7 +176,7 @@ int EffectChain_add_effect(lua_State* L)
 		for (int idx = 3; idx <= lua_gettop(L); ++idx) {
 			if (luaL_testudata(L, idx, "LiveInputWrapper")) {
 				LiveInputWrapper *input = (LiveInputWrapper *)lua_touserdata(L, idx);
-				inputs.push_back(input->get_input());
+				inputs.push_back(input->get_effect());
 			} else {
 				inputs.push_back(get_effect(L, idx));
 			}
@@ -308,6 +313,16 @@ int InputStateInfo_get_height(lua_State* L)
 	Theme *theme = get_theme_updata(L);
 	int signal_num = theme->map_signal(luaL_checknumber(L, 2));
 	lua_pushnumber(L, input_state_info->last_height[signal_num]);
+	return 1;
+}
+
+int InputStateInfo_get_interlaced(lua_State* L)
+{
+	assert(lua_gettop(L) == 2);
+	InputStateInfo *input_state_info = get_input_state_info(L, 1);
+	Theme *theme = get_theme_updata(L);
+	int signal_num = theme->map_signal(luaL_checknumber(L, 2));
+	lua_pushboolean(L, input_state_info->last_interlaced[signal_num]);
 	return 1;
 }
 
@@ -456,13 +471,15 @@ const luaL_Reg MixEffect_funcs[] = {
 const luaL_Reg InputStateInfo_funcs[] = {
 	{ "get_width", InputStateInfo_get_width },
 	{ "get_height", InputStateInfo_get_height },
+	{ "get_interlaced", InputStateInfo_get_interlaced },
 	{ NULL, NULL }
 };
 
 }  // namespace
 
-LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain, bool override_bounce)
-	: theme(theme)
+LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain, bool override_bounce, bool deinterlace)
+	: theme(theme),
+	  deinterlace(deinterlace)
 {
 	ImageFormat inout_format;
 	inout_format.color_space = COLORSPACE_sRGB;
@@ -490,12 +507,34 @@ LiveInputWrapper::LiveInputWrapper(Theme *theme, EffectChain *chain, bool overri
 	input_ycbcr_format.luma_coefficients = YCBCR_REC_709;
 	input_ycbcr_format.full_range = false;
 
-	if (override_bounce) {
-		input = new NonBouncingYCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
+	unsigned num_inputs;
+	if (deinterlace) {
+		deinterlace_effect = new movit::DeinterlaceEffect();
+
+		// As per the comments in deinterlace_effect.h, we turn this off.
+		// The most likely interlaced input for us is either a camera
+		// (where it's fine to turn it off) or a laptop (where it _should_
+		// be turned off).
+		CHECK(deinterlace_effect->set_int("enable_spatial_interlacing_check", 0));
+
+		num_inputs = deinterlace_effect->num_inputs();
+		assert(num_inputs == FRAME_HISTORY_LENGTH);
 	} else {
-		input = new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR);
+		num_inputs = 1;
 	}
-	chain->add_input(input);
+	for (unsigned i = 0; i < num_inputs; ++i) {
+		if (override_bounce) {
+			inputs.push_back(new NonBouncingYCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR));
+		} else {
+			inputs.push_back(new YCbCrInput(inout_format, input_ycbcr_format, WIDTH, HEIGHT, YCBCR_INPUT_SPLIT_Y_AND_CBCR));
+		}
+		chain->add_input(inputs.back());
+	}
+
+	if (deinterlace) {
+		vector<Effect *> reverse_inputs(inputs.rbegin(), inputs.rend());
+		chain->add_effect(deinterlace_effect, reverse_inputs);
+	}
 }
 
 void LiveInputWrapper::connect_signal(int signal_num)
@@ -507,13 +546,47 @@ void LiveInputWrapper::connect_signal(int signal_num)
 
 	signal_num = theme->map_signal(signal_num);
 
-	BufferedFrame frame = theme->input_state->buffered_frames[signal_num][0];
-	const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
+	BufferedFrame first_frame = theme->input_state->buffered_frames[signal_num][0];
+	if (first_frame.frame == nullptr) {
+		// No data yet.
+		return;
+	}
+	unsigned width, height;
+	{
+		const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)first_frame.frame->userdata;
+		width = userdata->last_width[first_frame.field_number];
+		height = userdata->last_height[first_frame.field_number];
+	}
 
-	input->set_texture_num(0, userdata->tex_y[frame.field_number]);
-	input->set_texture_num(1, userdata->tex_cbcr[frame.field_number]);
-	input->set_width(userdata->last_width[frame.field_number]);
-	input->set_height(userdata->last_height[frame.field_number]);
+	BufferedFrame last_good_frame = first_frame;
+	for (unsigned i = 0; i < inputs.size(); ++i) {
+		BufferedFrame frame = theme->input_state->buffered_frames[signal_num][i];
+		if (frame.frame == nullptr) {
+			// Not enough data; reuse last frame (well, field).
+			// This is suboptimal, but we have nothing better.
+			frame = last_good_frame;
+		}
+		const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
+
+		if (userdata->last_width[frame.field_number] != width ||
+		    userdata->last_height[frame.field_number] != height) {
+			// Resolution changed; reuse last frame/field.
+			frame = last_good_frame;
+			userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
+		}
+
+		inputs[i]->set_texture_num(0, userdata->tex_y[frame.field_number]);
+		inputs[i]->set_texture_num(1, userdata->tex_cbcr[frame.field_number]);
+		inputs[i]->set_width(userdata->last_width[frame.field_number]);
+		inputs[i]->set_height(userdata->last_height[frame.field_number]);
+
+		last_good_frame = frame;
+	}
+
+	if (deinterlace) {
+		BufferedFrame frame = theme->input_state->buffered_frames[signal_num][0];
+		CHECK(deinterlace_effect->set_int("current_field_position", frame.field_number));
+	}
 }
 
 Theme::Theme(const char *filename, ResourcePool *resource_pool, unsigned num_cards)
