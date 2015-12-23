@@ -539,12 +539,12 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool, unsigned num_car
 void Theme::register_class(const char *class_name, const luaL_Reg *funcs)
 {
 	assert(lua_gettop(L) == 0);
-	luaL_newmetatable(L, class_name);
+	luaL_newmetatable(L, class_name);  // mt = {}
 	lua_pushlightuserdata(L, this);
-	luaL_setfuncs(L, funcs, 1);
+	luaL_setfuncs(L, funcs, 1);        // for (name,f in funcs) { mt[name] = f, with upvalue {theme} }
 	lua_pushvalue(L, -1);
-	lua_setfield(L, -2, "__index");
-	lua_setglobal(L, class_name);
+	lua_setfield(L, -2, "__index");    // mt.__index = mt
+	lua_setglobal(L, class_name);      // ClassName = mt
 	assert(lua_gettop(L) == 0);
 }
 
