@@ -33,6 +33,24 @@ local STATIC_SIGNAL_NUM = 3
 -- to the next.
 local FADE_SIGNAL_NUM = 4
 
+-- Utility function to help creating many similar chains that can differ
+-- in a free set of chosen parameters.
+function make_cartesian_product(parms, callback)
+	return make_cartesian_product_internal(parms, callback, 1, {})
+end
+
+function make_cartesian_product_internal(parms, callback, index, args)
+	if index > #parms then
+		return callback(unpack(args))
+	end
+	local ret = {}
+	for _, value in ipairs(parms[index]) do
+		args[index] = value
+		ret[value] = make_cartesian_product_internal(parms, callback, index + 1, args)
+	end
+	return ret
+end
+
 function make_sbs_input(chain, signal, deint, hq)
 	local input = chain:add_live_input(not deint, deint)  -- Override bounce only if not deinterlacing.
 	input:connect_signal(signal)
@@ -78,17 +96,15 @@ function make_sbs_chain(input0_deint, input1_deint, hq)
 end
 
 -- Make all possible combinations of side-by-side chains.
-local sbs_chains = {}
-for input0_type, input0_deint in pairs({live = false, livedeint = true}) do
-	sbs_chains[input0_type] = {}
-	for input1_type, input1_deint in pairs({live = false, livedeint = true}) do
-		sbs_chains[input0_type][input1_type] = {}
-		for _, hq in pairs({true, false}) do
-			sbs_chains[input0_type][input1_type][hq] =
-				make_sbs_chain(input0_deint, input1_deint, hq)
-		end
-	end
-end
+local sbs_chains = make_cartesian_product({
+	{"live", "livedeint"},  -- input0_type
+	{"live", "livedeint"},  -- input1_type
+	{true, false}           -- hq
+}, function(input0_type, input1_type, hq)
+	local input0_deint = (input0_type == "livedeint")
+	local input1_deint = (input1_type == "livedeint")
+	return make_sbs_chain(input0_deint, input1_deint, hq)
+end)
 
 function make_fade_input(chain, signal, live, deint)
 	local input, wb_effect, last
@@ -130,19 +146,17 @@ function make_fade_chain(input0_live, input0_deint, input1_live, input1_deint, h
 end
 
 -- Chains to fade between two inputs, in various configurations.
-local fade_chains = {}
-for input0_type, input0_live in pairs({static = false, live = true, livedeint = true}) do
-	local input0_deint = (input0_live == "livedeint")
-	fade_chains[input0_type] = {}
-	for input1_type, input1_live in pairs({static = false, live = true, livedeint = true}) do
-		local input1_deint = (input1_live == "livedeint")
-		fade_chains[input0_type][input1_type] = {}
-		for _, hq in pairs({true, false}) do
-			fade_chains[input0_type][input1_type][hq] =
-				make_fade_chain(input0_live, input0_deint, input1_live, input1_deint, hq)
-		end
-	end
-end
+local fade_chains = make_cartesian_product({
+	{"static", "live", "livedeint"},  -- input0_type
+	{"static", "live", "livedeint"},  -- input1_type
+	{true, false}                     -- hq
+}, function(input0_type, input1_type, hq)
+	local input0_live = (input0_type ~= "static")
+	local input1_live = (input1_type ~= "static")
+	local input0_deint = (input0_type == "livedeint")
+	local input1_deint = (input1_type == "livedeint")
+	return make_fade_chain(input0_live, input0_deint, input1_live, input1_deint, hq)
+end)
 
 -- A chain to show a single input on screen.
 function make_simple_chain(input_deint, hq)
@@ -161,13 +175,13 @@ function make_simple_chain(input_deint, hq)
 end
 
 -- Make all possible combinations of single-input chains.
-local simple_chains = {}
-for input_type, input_deint in pairs({live = false, livedeint = true}) do
-	simple_chains[input_type] = {}
-	for _, hq in pairs({true, false}) do
-		simple_chains[input_type][hq] = make_simple_chain(input_deint, hq)
-	end
-end
+local simple_chains = make_cartesian_product({
+	{"live", "livedeint"},  -- input_type
+	{true, false}           -- hq
+}, function(input_type, hq)
+	local input_deint = (input_type == "livedeint")
+	return make_simple_chain(input_deint, hq)
+end)
 
 -- A chain to show a single static picture on screen (HQ version).
 local static_chain_hq = EffectChain.new(16, 9)
