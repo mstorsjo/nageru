@@ -7,8 +7,6 @@
 -- where all the low-level details (such as texture formats) are handled by the
 -- C++ side and you generally just build chains.
 
--- TODO: Deal with inputs that are different from our native 1280x720 resolution.
-
 local transition_start = -2.0
 local transition_end = -1.0
 local zoom_src = 0.0
@@ -106,8 +104,8 @@ local sbs_chains = make_cartesian_product({
 	return make_sbs_chain(input0_deint, input1_deint, hq)
 end)
 
-function make_fade_input(chain, signal, live, deint)
-	local input, wb_effect, last
+function make_fade_input(chain, signal, live, deint, scale)
+	local input, wb_effect, resample_effect, last
 	if live then
 		input = chain:add_live_input(false, deint)
 		wb_effect = chain:add_effect(WhiteBalanceEffect.new())
@@ -118,9 +116,17 @@ function make_fade_input(chain, signal, live, deint)
 		last = input
 	end
 
+	-- If we cared about this for the non-main inputs, we would have
+	-- checked hq here and invoked ResizeEffect instead.
+	if scale then
+		resample_effect = chain:add_effect(ResampleEffect.new())
+		last = resample_effect
+	end
+
 	return {
 		input = input,
 		wb_effect = wb_effect,
+		resample_effect = resample_effect,
 		last = last
 	}
 end
@@ -128,11 +134,11 @@ end
 -- A chain to fade between two inputs, of which either can be a picture
 -- or a live input. In practice only used live, but we still support the
 -- hq parameter.
-function make_fade_chain(input0_live, input0_deint, input1_live, input1_deint, hq)
+function make_fade_chain(input0_live, input0_deint, input0_scale, input1_live, input1_deint, input1_scale, hq)
 	local chain = EffectChain.new(16, 9)
 
-	local input0 = make_fade_input(chain, INPUT0_SIGNAL_NUM, input0_live, input0_deint)
-	local input1 = make_fade_input(chain, INPUT1_SIGNAL_NUM, input1_live, input1_deint)
+	local input0 = make_fade_input(chain, INPUT0_SIGNAL_NUM, input0_live, input0_deint, input0_scale)
+	local input1 = make_fade_input(chain, INPUT1_SIGNAL_NUM, input1_live, input1_deint, input1_scale)
 
 	local mix_effect = chain:add_effect(MixEffect.new(), input0.last, input1.last)
 	chain:finalize(hq)
@@ -148,18 +154,20 @@ end
 -- Chains to fade between two inputs, in various configurations.
 local fade_chains = make_cartesian_product({
 	{"static", "live", "livedeint"},  -- input0_type
+	{true, false},                    -- input0_scale
 	{"static", "live", "livedeint"},  -- input1_type
+	{true, false},                    -- input1_scale
 	{true, false}                     -- hq
-}, function(input0_type, input1_type, hq)
+}, function(input0_type, input0_scale, input1_type, input1_scale, hq)
 	local input0_live = (input0_type ~= "static")
 	local input1_live = (input1_type ~= "static")
 	local input0_deint = (input0_type == "livedeint")
 	local input1_deint = (input1_type == "livedeint")
-	return make_fade_chain(input0_live, input0_deint, input1_live, input1_deint, hq)
+	return make_fade_chain(input0_live, input0_deint, input0_scale, input1_live, input1_deint, input1_scale, hq)
 end)
 
 -- A chain to show a single input on screen.
-function make_simple_chain(input_deint, hq)
+function make_simple_chain(input_deint, input_scale, hq)
 	local chain = EffectChain.new(16, 9)
 
 	local input = chain:add_live_input(false, input_deint)
@@ -167,20 +175,32 @@ function make_simple_chain(input_deint, hq)
 	local wb_effect = chain:add_effect(WhiteBalanceEffect.new())
 	chain:finalize(hq)
 
+	local resample_effect, resize_effect
+	if scale then
+		if hq then
+			resample_effect = chain:add_effect(ResampleEffect.new())
+		else
+			resize_effect = chain:add_effect(ResizeEffect.new())
+		end
+	end
+
 	return {
 		chain = chain,
 		input = input,
-		wb_effect = wb_effect
+		wb_effect = wb_effect,
+		resample_effect = resample_effect,
+		resize_effect = resize_effect
 	}
 end
 
 -- Make all possible combinations of single-input chains.
 local simple_chains = make_cartesian_product({
 	{"live", "livedeint"},  -- input_type
+	{true, false},          -- input_scale
 	{true, false}           -- hq
-}, function(input_type, hq)
+}, function(input_type, input_scale, hq)
 	local input_deint = (input_type == "livedeint")
-	return make_simple_chain(input_deint, hq)
+	return make_simple_chain(input_deint, input_scale, hq)
 end)
 
 -- A chain to show a single static picture on screen (HQ version).
@@ -201,6 +221,20 @@ function get_input_type(signals, signal_num)
 		return "livedeint"
 	else
 		return "live"
+	end
+end
+
+function needs_scale(signals, signal_num, width, height)
+	return (signals:get_width(signal_num) ~= width or signals:get_height(signal_num) ~= height)
+end
+
+function set_scale_parameters_if_needed(chain_or_input, width, height)
+	if chain_or_input.resample_effect then
+		chain_or_input.resample_effect:set_int("width", width)
+		chain_or_input.resample_effect:set_int("height", height)
+	elseif chain_or_input.resize_effect then
+		chain_or_input.resize_effect:set_int("width", width)
+		chain_or_input.resize_effect:set_int("height", height)
 	end
 end
 
@@ -399,9 +433,11 @@ function get_chain(num, t, width, height, signals)
 	if num == 0 then  -- Live.
 		if live_signal_num == INPUT0_SIGNAL_NUM or live_signal_num == INPUT1_SIGNAL_NUM then  -- Plain input.
 			local input_type = get_input_type(signals, live_signal_num)
-			local chain = simple_chains[input_type][true]
+			local input_scale = needs_scale(signals, live_signal_num, width, height)
+			local chain = simple_chains[input_type][input_scale][true]
 			prepare = function()
 				chain.input:connect_signal(live_signal_num)
+				set_scale_parameters_if_needed(chain, width, height)
 				set_neutral_color_from_signal(chain.wb_effect, live_signal_num)
 			end
 			return chain.chain, prepare
@@ -411,17 +447,21 @@ function get_chain(num, t, width, height, signals)
 			return static_chain_hq, prepare
 		elseif live_signal_num == FADE_SIGNAL_NUM then  -- Fade.
 			local input0_type = get_input_type(signals, fade_src_signal)
+			local input0_scale = needs_scale(signals, fade_src_signal, width, height)
 			local input1_type = get_input_type(signals, fade_dst_signal)
-			local chain = fade_chains[input0_type][input1_type][true]
+			local input1_scale = needs_scale(signals, fade_dst_signal, width, height)
+			local chain = fade_chains[input0_type][input0_scale][input1_type][input1_scale][true]
 			prepare = function()
 				if input0_type == "live" then
 					chain.input0.input:connect_signal(fade_src_signal)
 					set_neutral_color_from_signal(chain.input0.wb_effect, fade_src_signal)
 				end
+				set_scale_parameters_if_needed(chain.input0, width, height)
 				if input1_type == "live" then
 					chain.input1.input:connect_signal(fade_dst_signal)
 					set_neutral_color_from_signal(chain.input1.wb_effect, fade_dst_signal)
 				end
+				set_scale_parameters_if_needed(chain.input1, width, height)
 				local tt = calc_fade_progress(t, transition_start, transition_end)
 
 				chain.mix_effect:set_float("strength_first", 1.0 - tt)
@@ -435,9 +475,11 @@ function get_chain(num, t, width, height, signals)
 		local input1_type = get_input_type(signals, INPUT1_SIGNAL_NUM)
 		if t > transition_end and zoom_dst == 1.0 then
 			-- Special case: Show only the single image on screen.
-			local chain = simple_chains[input0_type][true]
+			local input0_scale = needs_scale(signals, fade_src_signal, width, height)
+			local chain = simple_chains[input0_type][input0_scale][true]
 			prepare = function()
 				chain.input:connect_signal(INPUT0_SIGNAL_NUM)
+				set_scale_parameters_if_needed(chain, width, height)
 				set_neutral_color(chain.wb_effect, input0_neutral_color)
 			end
 			return chain.chain, prepare
@@ -464,18 +506,22 @@ function get_chain(num, t, width, height, signals)
 	-- Individual preview inputs.
 	if num == INPUT0_SIGNAL_NUM + 2 then
 		local input_type = get_input_type(signals, INPUT0_SIGNAL_NUM)
-		local chain = simple_chains[input_type][false]
+		local input_scale = needs_scale(signals, INPUT0_SIGNAL_NUM, width, height)
+		local chain = simple_chains[input_type][input_scale][false]
 		prepare = function()
 			chain.input:connect_signal(INPUT0_SIGNAL_NUM)
+			set_scale_parameters_if_needed(chain, width, height)
 			set_neutral_color(chain.wb_effect, input0_neutral_color)
 		end
 		return chain.chain, prepare
 	end
 	if num == INPUT1_SIGNAL_NUM + 2 then
 		local input_type = get_input_type(signals, INPUT1_SIGNAL_NUM)
-		local chain = simple_chains[input_type][false]
+		local input_scale = needs_scale(signals, INPUT1_SIGNAL_NUM, width, height)
+		local chain = simple_chains[input_type][input_scale][false]
 		prepare = function()
 			chain.input:connect_signal(INPUT1_SIGNAL_NUM)
+			set_scale_parameters_if_needed(chain, width, height)
 			set_neutral_color(chain.wb_effect, input1_neutral_color)
 		end
 		return chain.chain, prepare
