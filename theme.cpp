@@ -142,10 +142,11 @@ std::string checkstdstring(lua_State *L, int index)
 int EffectChain_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 2);
+	Theme *theme = get_theme_updata(L);
 	int aspect_w = luaL_checknumber(L, 1);
 	int aspect_h = luaL_checknumber(L, 2);
 
-	return wrap_lua_object<EffectChain>(L, "EffectChain", aspect_w, aspect_h);
+	return wrap_lua_object<EffectChain>(L, "EffectChain", aspect_w, aspect_h, theme->get_resource_pool());
 }
 
 int EffectChain_add_live_input(lua_State* L)

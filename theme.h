@@ -63,6 +63,8 @@ public:
 	void transition_clicked(int transition_num, float t);
 	void channel_clicked(int preview_num);
 
+	movit::ResourcePool *get_resource_pool() const { return resource_pool; }
+
 private:
 	void register_class(const char *class_name, const luaL_Reg *funcs);
 
