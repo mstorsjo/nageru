@@ -157,7 +157,7 @@ local fade_chains = make_cartesian_product({
 	{true, false},                    -- input0_scale
 	{"static", "live", "livedeint"},  -- input1_type
 	{true, false},                    -- input1_scale
-	{true, false}                     -- hq
+	{true}                            -- hq
 }, function(input0_type, input0_scale, input1_type, input1_scale, hq)
 	local input0_live = (input0_type ~= "static")
 	local input1_live = (input1_type ~= "static")
