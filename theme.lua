@@ -90,47 +90,41 @@ for input0_type, input0_deint in pairs({live = false, livedeint = true}) do
 	end
 end
 
+function make_fade_input(chain, signal, live, deint)
+	local input, wb_effect, last
+	if live then
+		input = chain:add_live_input(false, deint)
+		wb_effect = chain:add_effect(WhiteBalanceEffect.new())
+		input:connect_signal(signal)
+		last = wb_effect
+	else
+		input = chain:add_effect(ImageInput.new("bg.jpeg"))
+		last = input
+	end
+
+	return {
+		input = input,
+		wb_effect = wb_effect,
+		last = last
+	}
+end
+
 -- A chain to fade between two inputs, of which either can be a picture
 -- or a live input. In practice only used live, but we still support the
 -- hq parameter.
 function make_fade_chain(input0_live, input0_deint, input1_live, input1_deint, hq)
 	local chain = EffectChain.new(16, 9)
 
-	local input0, wb0_effect, input0_last, input1, wb1_effect, input1_last
+	local input0 = make_fade_input(chain, INPUT0_SIGNAL_NUM, input0_live, input0_deint)
+	local input1 = make_fade_input(chain, INPUT1_SIGNAL_NUM, input1_live, input1_deint)
 
-	if input0_live then
-		input0 = chain:add_live_input(false, input0_deint)
-		wb0_effect = chain:add_effect(WhiteBalanceEffect.new())
-		input0:connect_signal(0)
-		input0_last = wb0_effect
-	else
-		input0 = chain:add_effect(ImageInput.new("bg.jpeg"))
-		input0_last = input0
-	end
-
-	if input1_live then
-		input1 = chain:add_live_input(false, input1_deint)
-		wb1_effect = chain:add_effect(WhiteBalanceEffect.new())
-		input1:connect_signal(1)
-		input1_last = wb1_effect
-	else
-		input1 = chain:add_effect(ImageInput.new("bg.jpeg"))
-		input1_last = input1
-	end
-
-	local mix_effect = chain:add_effect(MixEffect.new(), input0_last, input1_last)
+	local mix_effect = chain:add_effect(MixEffect.new(), input0.last, input1.last)
 	chain:finalize(hq)
 
 	return {
 		chain = chain,
-		input0 = {
-			input = input0,
-			wb_effect = wb0_effect
-		},
-		input1 = {
-			input = input1,
-			wb_effect = wb1_effect
-		},
+		input0 = input0,
+		input1 = input1,
 		mix_effect = mix_effect
 	}
 end
