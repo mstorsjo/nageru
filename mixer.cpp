@@ -312,11 +312,12 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		if (card->should_quit) return;
 	}
 
+	size_t expected_length = width * (height + extra_lines_top + extra_lines_bottom) * 2;
 	if (video_frame.len - video_offset == 0 ||
-	    video_frame.len - video_offset != size_t(width * (height + extra_lines_top + extra_lines_bottom) * 2)) {
+	    video_frame.len - video_offset != expected_length) {
 		if (video_frame.len != 0) {
-			printf("Card %d: Dropping video frame with wrong length (%ld)\n",
-				card_index, video_frame.len - video_offset);
+			printf("Card %d: Dropping video frame with wrong length (%ld; expected %ld)\n",
+				card_index, video_frame.len - video_offset, expected_length);
 		}
 		if (video_frame.owner) {
 			video_frame.owner->release_frame(video_frame);
