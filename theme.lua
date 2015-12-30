@@ -464,8 +464,9 @@ end
 -- NOTE: The chain returned must be finalized with the Y'CbCr flag
 -- if and only if num==0.
 function get_chain(num, t, width, height, signals)
+	local input_resolution = {}
 	for signal_num=0,1 do
-		last_resolution[signal_num] = {
+		input_resolution[signal_num] = {
 			width = signals:get_width(signal_num),
 			height = signals:get_height(signal_num),
 			interlaced = signals:get_interlaced(signal_num),
@@ -473,6 +474,7 @@ function get_chain(num, t, width, height, signals)
 			frame_rate_den = signals:get_frame_rate_den(signal_num)
 		}
 	end
+	last_resolution = input_resolution
 
 	if num == 0 then  -- Live.
 		if live_signal_num == INPUT0_SIGNAL_NUM or live_signal_num == INPUT1_SIGNAL_NUM then  -- Plain input.
@@ -531,14 +533,14 @@ function get_chain(num, t, width, height, signals)
 		local chain = sbs_chains[input0_type][input1_type][true]
 		prepare = function()
 			if t < transition_start then
-				prepare_sbs_chain(chain, zoom_src, width, height)
+				prepare_sbs_chain(chain, zoom_src, width, height, input_resolution)
 			elseif t > transition_end then
-				prepare_sbs_chain(chain, zoom_dst, width, height)
+				prepare_sbs_chain(chain, zoom_dst, width, height, input_resolution)
 			else
 				local tt = (t - transition_start) / (transition_end - transition_start)
 				-- Smooth it a bit.
 				tt = math.sin(tt * 3.14159265358 * 0.5)
-				prepare_sbs_chain(chain, zoom_src + (zoom_dst - zoom_src) * tt, width, height)
+				prepare_sbs_chain(chain, zoom_src + (zoom_dst - zoom_src) * tt, width, height, input_resolution)
 			end
 		end
 		return chain.chain, prepare
@@ -575,7 +577,7 @@ function get_chain(num, t, width, height, signals)
 		local input1_type = get_input_type(signals, INPUT1_SIGNAL_NUM)
 		local chain = sbs_chains[input0_type][input1_type][false]
 		prepare = function()
-			prepare_sbs_chain(chain, 0.0, width, height)
+			prepare_sbs_chain(chain, 0.0, width, height, input_resolution)
 		end
 		return chain.chain, prepare
 	end
@@ -677,7 +679,7 @@ function lerp(a, b, t)
 	return a + (b - a) * t
 end
 
-function prepare_sbs_chain(chain, t, screen_width, screen_height)
+function prepare_sbs_chain(chain, t, screen_width, screen_height, input_resolution)
 	chain.input0.input:connect_signal(0)
 	chain.input1.input:connect_signal(1)
 	set_neutral_color(chain.input0.wb_effect, input0_neutral_color)
@@ -732,8 +734,8 @@ function prepare_sbs_chain(chain, t, screen_width, screen_height)
 	bottom1 = bottom1 * scale0 + ty0
 	left1 = left1 * scale0 + tx0
 	right1 = right1 * scale0 + tx0
-	place_rectangle(chain.input0.resample_effect, chain.input0.resize_effect, chain.input0.padding_effect, left0, top0, right0, bottom0, screen_width, screen_height, 1280, 720)
-	place_rectangle(chain.input1.resample_effect, chain.input1.resize_effect, chain.input1.padding_effect, left1, top1, right1, bottom1, screen_width, screen_height, 1280, 720)
+	place_rectangle(chain.input0.resample_effect, chain.input0.resize_effect, chain.input0.padding_effect, left0, top0, right0, bottom0, screen_width, screen_height, input_resolution[0].width, input_resolution[0].height)
+	place_rectangle(chain.input1.resample_effect, chain.input1.resize_effect, chain.input1.padding_effect, left1, top1, right1, bottom1, screen_width, screen_height, input_resolution[1].width, input_resolution[1].height)
 end
 
 function set_neutral_color(effect, color)
