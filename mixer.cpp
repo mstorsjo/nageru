@@ -353,6 +353,8 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		clock_gettime(CLOCK_MONOTONIC, &frame_upload_start);
 	}
 	userdata->last_interlaced = interlaced;
+	userdata->last_frame_rate_nom = frame_rate_nom;
+	userdata->last_frame_rate_den = frame_rate_den;
 	RefCountedFrame new_frame(video_frame);
 
 	// Upload the textures.

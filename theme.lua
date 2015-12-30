@@ -247,16 +247,30 @@ function num_channels()
 	return 4
 end
 
--- Helper function to write e.g. “720p”.
+-- Helper function to write e.g. “60” or “59.94”.
+function get_frame_rate(signal_num)
+	local nom = last_resolution[signal_num].frame_rate_nom
+	local den = last_resolution[signal_num].frame_rate_den
+	if last_resolution[signal_num].interlaced then
+		nom = nom * 2
+	end
+	if nom % den == 0 then
+		return nom / den
+	else
+		return string.format("%.2f", num / den)
+	end
+end
+
+-- Helper function to write e.g. “720p60”.
 function get_channel_resolution(signal_num)
 	if last_resolution[signal_num] then
 		if last_resolution[signal_num].height == 0 or
 		   last_resolution[signal_num].height == 525 then
 			return "no signal"
 		elseif last_resolution[signal_num].interlaced then
-			return (last_resolution[signal_num].height * 2) .. "i"
+			return (last_resolution[signal_num].height * 2) .. "i" .. get_frame_rate(signal_num)
 		else
-			return last_resolution[signal_num].height .. "p"
+			return last_resolution[signal_num].height .. "p" .. get_frame_rate(signal_num)
 		end
 	else
 		return "no signal"
@@ -454,7 +468,9 @@ function get_chain(num, t, width, height, signals)
 		last_resolution[signal_num] = {
 			width = signals:get_width(signal_num),
 			height = signals:get_height(signal_num),
-			interlaced = signals:get_interlaced(signal_num)
+			interlaced = signals:get_interlaced(signal_num),
+			frame_rate_nom = signals:get_frame_rate_nom(signal_num),
+			frame_rate_den = signals:get_frame_rate_den(signal_num)
 		}
 	end
 
