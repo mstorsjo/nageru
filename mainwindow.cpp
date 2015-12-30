@@ -53,6 +53,7 @@ MainWindow::MainWindow()
 	transition_btn3 = ui->transition_btn3;
 	qRegisterMetaType<std::vector<std::string>>("std::vector<std::string>");
 	connect(ui->me_preview, &GLWidget::transition_names_updated, this, &MainWindow::set_transition_names);
+	qRegisterMetaType<Mixer::Output>("Mixer::Output");
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event)
@@ -82,6 +83,9 @@ void MainWindow::mixer_created(Mixer *mixer)
 
 		// Hook up the click.
 		connect(ui_display->display, &GLWidget::clicked, bind(&MainWindow::channel_clicked, this, i));
+
+		// Let the theme update the text whenever the resolution changed.
+		connect(ui_display->display, &GLWidget::resolution_updated, this, &MainWindow::update_channel_name);
 
 		// Hook up the keyboard key.
 		QShortcut *shortcut = new QShortcut(QKeySequence(Qt::Key_1 + i), this);
@@ -244,6 +248,14 @@ void MainWindow::set_transition_names(vector<string> transition_names)
 		transition_btn3->setText(QString(""));
 	} else {
 		transition_btn3->setText(QString::fromStdString(transition_names[2]));
+	}
+}
+
+void MainWindow::update_channel_name(Mixer::Output output)
+{
+	if (output >= Mixer::OUTPUT_INPUT0) {
+		unsigned channel = output - Mixer::OUTPUT_INPUT0;
+		previews[channel]->label->setText(global_mixer->get_channel_name(output).c_str());
 	}
 }
 

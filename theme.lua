@@ -31,6 +31,9 @@ local STATIC_SIGNAL_NUM = 3
 -- to the next.
 local FADE_SIGNAL_NUM = 4
 
+-- Last width/height/resolution for each channel, if we have it.
+local last_resolution = {}
+
 -- Utility function to help creating many similar chains that can differ
 -- in a free set of chosen parameters.
 function make_cartesian_product(parms, callback)
@@ -244,13 +247,30 @@ function num_channels()
 	return 4
 end
 
+-- Helper function to write e.g. “720p”.
+function get_channel_resolution(signal_num)
+	if last_resolution[signal_num] then
+		if last_resolution[signal_num].height == 0 or
+		   last_resolution[signal_num].height == 525 then
+			return "no signal"
+		elseif last_resolution[signal_num].interlaced then
+			return (last_resolution[signal_num].height * 2) .. "i"
+		else
+			return last_resolution[signal_num].height .. "p"
+		end
+	else
+		return "no signal"
+	end
+end
+
 -- Returns the name for each additional channel (starting from 2).
--- Called only once for each channel, at the start of the program.
+-- Called at the start of the program, and then each frame for live
+-- channels in case they change resolution.
 function channel_name(channel)
 	if channel == 2 then
-		return "Input 1"
+		return "Input 1 (" .. get_channel_resolution(0) .. ")"
 	elseif channel == 3 then
-		return "Input 2"
+		return "Input 2 (" .. get_channel_resolution(1) .. ")"
 	elseif channel == 4 then
 		return "Side-by-side"
 	elseif channel == 5 then
@@ -430,6 +450,14 @@ end
 -- NOTE: The chain returned must be finalized with the Y'CbCr flag
 -- if and only if num==0.
 function get_chain(num, t, width, height, signals)
+	for signal_num=0,1 do
+		last_resolution[signal_num] = {
+			width = signals:get_width(signal_num),
+			height = signals:get_height(signal_num),
+			interlaced = signals:get_interlaced(signal_num)
+		}
+	end
+
 	if num == 0 then  -- Live.
 		if live_signal_num == INPUT0_SIGNAL_NUM or live_signal_num == INPUT1_SIGNAL_NUM then  -- Plain input.
 			local input_type = get_input_type(signals, live_signal_num)

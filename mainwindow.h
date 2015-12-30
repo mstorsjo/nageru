@@ -6,6 +6,8 @@
 #include <vector>
 #include <sys/time.h>
 
+#include "mixer.h"
+
 class GLWidget;
 class QResizeEvent;
 
@@ -14,7 +16,6 @@ class Display;
 class MainWindow;
 }  // namespace Ui
 
-class Mixer;
 class QPushButton;
 
 class MainWindow : public QMainWindow
@@ -31,6 +32,7 @@ public slots:
 	void channel_clicked(int channel_number);
 	void wb_button_clicked(int channel_number);
 	void set_transition_names(std::vector<std::string> transition_names);
+	void update_channel_name(Mixer::Output output);
 	void cutoff_knob_changed(int value);
 	void limiter_threshold_knob_changed(int value);
 	void compressor_threshold_knob_changed(int value);

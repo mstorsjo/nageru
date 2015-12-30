@@ -39,6 +39,7 @@ protected:
 signals:
 	void clicked();
 	void transition_names_updated(std::vector<std::string> transition_names);
+	void resolution_updated(Mixer::Output output);
 
 private:
 	Mixer::Output output;

@@ -51,6 +51,7 @@ void GLWidget::initializeGL()
 	global_mixer->set_frame_ready_callback(output, [this]{
 		QMetaObject::invokeMethod(this, "update", Qt::AutoConnection);
 		emit transition_names_updated(global_mixer->get_transition_names());
+		emit resolution_updated(output);
 	});
 
 	glDisable(GL_BLEND);
