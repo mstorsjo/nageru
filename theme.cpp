@@ -701,7 +701,7 @@ std::string Theme::get_channel_name(unsigned channel)
 	lua_getglobal(L, "channel_name");
 	lua_pushnumber(L, channel);
 	if (lua_pcall(L, 1, 1, 0) != 0) {
-		fprintf(stderr, "error running function `channel_nam': %s\n", lua_tostring(L, -1));
+		fprintf(stderr, "error running function `channel_name': %s\n", lua_tostring(L, -1));
 		exit(1);
 	}
 
