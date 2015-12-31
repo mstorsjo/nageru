@@ -12,10 +12,19 @@ extern "C" {
 
 using namespace std;
 
-ImageInput::ImageInput(const std::string &filename)
+ImageInput::ImageInput(const string &filename)
 	: movit::FlatInput({movit::COLORSPACE_sRGB, movit::GAMMA_sRGB}, movit::FORMAT_RGBA_POSTMULTIPLIED_ALPHA,
 	                   GL_UNSIGNED_BYTE, 1280, 720)  // FIXME
 {
+	set_pixel_data(load_image(filename));
+}
+
+const uint8_t *ImageInput::load_image(const string &filename)
+{
+	if (all_images.count(filename)) {
+		return all_images[filename].get();
+	}
+
 	AVFormatContext *format_ctx = nullptr;
 	if (avformat_open_input(&format_ctx, filename.c_str(), nullptr, nullptr) != 0) {
 		fprintf(stderr, "%s: Error opening file\n", filename.c_str());
@@ -88,12 +97,16 @@ ImageInput::ImageInput(const std::string &filename)
 	sws_freeContext(sws_ctx);
 
 	size_t len = frame->width * frame->height * 4;
-	image_data.reset(new uint8_t[len]);
+	unique_ptr<uint8_t[]> image_data(new uint8_t[len]);
 	av_image_copy_to_buffer(image_data.get(), len, pic.data, pic.linesize, PIX_FMT_RGBA, frame->width, frame->height, 1);
-	set_pixel_data(image_data.get());
 
 	avpicture_free(&pic);
 	av_frame_free(&frame);
 	avcodec_close(codec_ctx);
 	avformat_close_input(&format_ctx);
+
+	all_images[filename] = move(image_data);
+	return all_images[filename].get();
 }
+
+map<string, unique_ptr<uint8_t[]>> ImageInput::all_images;
