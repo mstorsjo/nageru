@@ -32,6 +32,8 @@ local STATIC_SIGNAL_NUM = 3
 local FADE_SIGNAL_NUM = 4
 
 -- Last width/height/resolution for each channel, if we have it.
+-- Note that unlike the values we get from Nageru, the resolution is per
+-- frame and not per field, since we deinterlace.
 local last_resolution = {}
 
 -- Utility function to help creating many similar chains that can differ
@@ -251,9 +253,6 @@ end
 function get_frame_rate(signal_num)
 	local nom = last_resolution[signal_num].frame_rate_nom
 	local den = last_resolution[signal_num].frame_rate_den
-	if last_resolution[signal_num].interlaced then
-		nom = nom * 2
-	end
 	if nom % den == 0 then
 		return nom / den
 	else
@@ -268,7 +267,7 @@ function get_channel_resolution(signal_num)
 		   last_resolution[signal_num].height == 525 then
 			return "no signal"
 		elseif last_resolution[signal_num].interlaced then
-			return (last_resolution[signal_num].height * 2) .. "i" .. get_frame_rate(signal_num)
+			return last_resolution[signal_num].height .. "i" .. get_frame_rate(signal_num)
 		else
 			return last_resolution[signal_num].height .. "p" .. get_frame_rate(signal_num)
 		end
@@ -466,13 +465,26 @@ end
 function get_chain(num, t, width, height, signals)
 	local input_resolution = {}
 	for signal_num=0,1 do
-		input_resolution[signal_num] = {
+		local res = {
 			width = signals:get_width(signal_num),
 			height = signals:get_height(signal_num),
 			interlaced = signals:get_interlaced(signal_num),
 			frame_rate_nom = signals:get_frame_rate_nom(signal_num),
 			frame_rate_den = signals:get_frame_rate_den(signal_num)
 		}
+
+		if res.interlaced then
+			-- Convert height from frame height to field height.
+			-- (Needed for e.g. place_rectangle.)
+			res.height = res.height * 2
+
+			-- Show field rate instead of frame rate; really for cosmetics only
+			-- (and actually contrary to EBU recommendations, although in line
+			-- with typical user expectations).
+			res.frame_rate_nom = res.frame_rate_nom * 2
+		end
+
+		input_resolution[signal_num] = res
 	end
 	last_resolution = input_resolution
 
