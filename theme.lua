@@ -230,6 +230,11 @@ function get_input_type(signals, signal_num)
 end
 
 function needs_scale(signals, signal_num, width, height)
+	if signal_num == STATIC_SIGNAL_NUM then
+		-- We assume this is already correctly scaled at load time.
+		return false
+	end
+	assert(signal_num == INPUT0_SIGNAL_NUM or signal_num == INPUT1_SIGNAL_NUM)
 	return (signals:get_width(signal_num) ~= width or signals:get_height(signal_num) ~= height)
 end
 
