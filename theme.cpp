@@ -98,6 +98,28 @@ int wrap_lua_object(lua_State* L, const char *class_name, Args&&... args)
 	return 1;
 }
 
+// Like wrap_lua_object, but the object is not owned by Lua; ie. it's not freed
+// by Lua GC. This is typically the case for Effects, which are owned by EffectChain
+// and expected to be destructed by it. The object will be of type T** instead of T*
+// when exposed to Lua.
+//
+// Note that we currently leak if you allocate an Effect in this way and never call
+// add_effect. We should see if there's a way to e.g. set __gc on it at construction time
+// and then release that once add_effect() takes ownership.
+template<class T, class... Args>
+int wrap_lua_object_nonowned(lua_State* L, const char *class_name, Args&&... args)
+{
+	// Construct the pointer ot the C++ object and put it on the stack.
+	T **obj = (T **)lua_newuserdata(L, sizeof(T *));
+	*obj = new T(std::forward<Args>(args)...);
+
+	// Look up the metatable named <class_name>, and set it on the new object.
+	luaL_getmetatable(L, class_name);
+	lua_setmetatable(L, -2);
+
+	return 1;
+}
+
 Theme *get_theme_updata(lua_State* L)
 {	
 	luaL_checktype(L, lua_upvalueindex(1), LUA_TLIGHTUSERDATA);
@@ -114,7 +136,7 @@ Effect *get_effect(lua_State *L, int idx)
 	    luaL_testudata(L, idx, "ResizeEffect") ||
 	    luaL_testudata(L, idx, "MixEffect") ||
 	    luaL_testudata(L, idx, "ImageInput")) {
-		return (Effect *)lua_touserdata(L, idx);
+		return *(Effect **)lua_touserdata(L, idx);
 	}
 	luaL_error(L, "Error: Index #%d was not an Effect type\n", idx);
 	return nullptr;
@@ -150,6 +172,14 @@ int EffectChain_new(lua_State* L)
 	int aspect_h = luaL_checknumber(L, 2);
 
 	return wrap_lua_object<EffectChain>(L, "EffectChain", aspect_w, aspect_h, theme->get_resource_pool());
+}
+
+int EffectChain_gc(lua_State* L)
+{
+	assert(lua_gettop(L) == 1);
+	EffectChain *chain = (EffectChain *)luaL_checkudata(L, 1, "EffectChain");
+	chain->~EffectChain();
+	return 0;
 }
 
 int EffectChain_add_live_input(lua_State* L)
@@ -255,49 +285,49 @@ int ImageInput_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 1);
 	std::string filename = checkstdstring(L, 1);
-	return wrap_lua_object<ImageInput>(L, "ImageInput", filename);
+	return wrap_lua_object_nonowned<ImageInput>(L, "ImageInput", filename);
 }
 
 int WhiteBalanceEffect_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 0);
-	return wrap_lua_object<WhiteBalanceEffect>(L, "WhiteBalanceEffect");
+	return wrap_lua_object_nonowned<WhiteBalanceEffect>(L, "WhiteBalanceEffect");
 }
 
 int ResampleEffect_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 0);
-	return wrap_lua_object<ResampleEffect>(L, "ResampleEffect");
+	return wrap_lua_object_nonowned<ResampleEffect>(L, "ResampleEffect");
 }
 
 int PaddingEffect_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 0);
-	return wrap_lua_object<PaddingEffect>(L, "PaddingEffect");
+	return wrap_lua_object_nonowned<PaddingEffect>(L, "PaddingEffect");
 }
 
 int IntegralPaddingEffect_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 0);
-	return wrap_lua_object<IntegralPaddingEffect>(L, "IntegralPaddingEffect");
+	return wrap_lua_object_nonowned<IntegralPaddingEffect>(L, "IntegralPaddingEffect");
 }
 
 int OverlayEffect_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 0);
-	return wrap_lua_object<OverlayEffect>(L, "OverlayEffect");
+	return wrap_lua_object_nonowned<OverlayEffect>(L, "OverlayEffect");
 }
 
 int ResizeEffect_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 0);
-	return wrap_lua_object<ResizeEffect>(L, "ResizeEffect");
+	return wrap_lua_object_nonowned<ResizeEffect>(L, "ResizeEffect");
 }
 
 int MixEffect_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 0);
-	return wrap_lua_object<MixEffect>(L, "MixEffect");
+	return wrap_lua_object_nonowned<MixEffect>(L, "MixEffect");
 }
 
 int InputStateInfo_get_width(lua_State* L)
@@ -409,6 +439,7 @@ int Effect_set_vec4(lua_State *L)
 
 const luaL_Reg EffectChain_funcs[] = {
 	{ "new", EffectChain_new },
+	{ "__gc", EffectChain_gc },
 	{ "add_live_input", EffectChain_add_live_input },
 	{ "add_effect", EffectChain_add_effect },
 	{ "finalize", EffectChain_finalize },
@@ -653,6 +684,11 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool, unsigned num_car
 	num_channels = luaL_checknumber(L, 1);
 	lua_pop(L, 1);
 	assert(lua_gettop(L) == 0);
+}
+
+Theme::~Theme()
+{
+	lua_close(L);
 }
 
 void Theme::register_class(const char *class_name, const luaL_Reg *funcs)

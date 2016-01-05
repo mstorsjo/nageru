@@ -13,6 +13,12 @@
 class QMouseEvent;
 class QWidget;
 
+namespace movit {
+
+class ResourcePool;
+
+}  // namespace movit
+
 // Note: We use the older QGLWidget instead of QOpenGLWidget as it is
 // much faster (does not go through a separate offscreen rendering step).
 //
@@ -23,12 +29,13 @@ class GLWidget : public QGLWidget
 
 public:
 	GLWidget(QWidget *parent = 0);
-	~GLWidget();
 
 	void set_output(Mixer::Output output)
 	{
 		this->output = output;
 	}
+
+	void clean_context();
 
 protected:
 	void initializeGL() override;
@@ -45,6 +52,7 @@ private:
 	Mixer::Output output;
 	GLuint vao, program_num;
 	GLuint position_vbo, texcoord_vbo;
+	movit::ResourcePool *resource_pool = nullptr;
 };
 
 #endif

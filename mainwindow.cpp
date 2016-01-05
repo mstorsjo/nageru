@@ -117,6 +117,15 @@ void MainWindow::mixer_created(Mixer *mixer)
 	mixer->set_audio_level_callback(bind(&MainWindow::audio_level_callback, this, _1, _2, _3, _4, _5, _6));
 }
 
+void MainWindow::mixer_shutting_down()
+{
+	ui->me_live->clean_context();
+	ui->me_preview->clean_context();
+	for (Ui::Display *display : previews) {
+		display->display->clean_context();
+	}
+}
+
 void MainWindow::cutoff_knob_changed(int value)
 {
 	float octaves = value * 0.1f;

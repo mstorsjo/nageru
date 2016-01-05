@@ -7,6 +7,7 @@
 #include <epoxy/gl.h>
 #include <epoxy/egl.h>
 #include <QSurfaceFormat>
+#include <movit/resource_pool.h>
 
 #include "glwidget.h"
 
@@ -36,8 +37,12 @@ GLWidget::GLWidget(QWidget *parent)
 {
 }
 
-GLWidget::~GLWidget()
+void GLWidget::clean_context()
 {
+	if (resource_pool != nullptr) {
+		makeCurrent();
+		resource_pool->clean_context();
+	}
 }
 
 void GLWidget::initializeGL()
@@ -82,6 +87,12 @@ void GLWidget::paintGL()
 	check_error();
 	frame.chain->render_to_screen();
 	check_error();
+
+	if (resource_pool == nullptr) {
+		resource_pool = frame.chain->get_resource_pool();
+	} else {
+		assert(resource_pool == frame.chain->get_resource_pool());
+	}
 }
 
 void GLWidget::mousePressEvent(QMouseEvent *event)

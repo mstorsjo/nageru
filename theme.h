@@ -40,6 +40,7 @@ public:
 class Theme {
 public:
 	Theme(const char *filename, movit::ResourcePool *resource_pool, unsigned num_cards);
+	~Theme();
 
 	struct Chain {
 		movit::EffectChain *chain;

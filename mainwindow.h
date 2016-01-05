@@ -27,6 +27,10 @@ public:
 	void resizeEvent(QResizeEvent *event) override;
 	void mixer_created(Mixer *mixer);
 
+	// Used to release FBOs on the global ResourcePool. Call after the
+	// mixer has been shut down but not destroyed yet.
+	void mixer_shutting_down();
+
 public slots:
 	void transition_clicked(int transition_number);
 	void channel_clicked(int channel_number);
