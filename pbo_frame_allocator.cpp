@@ -106,7 +106,7 @@ FrameAllocator::Frame PBOFrameAllocator::alloc_frame()
 {
         Frame vf;
 
-	std::unique_lock<std::mutex> lock(freelist_mutex);  // Meh.
+	unique_lock<mutex> lock(freelist_mutex);  // Meh.
 	if (freelist.empty()) {
 		printf("Frame overrun (no more spare PBO frames), dropping frame!\n");
 	} else {
@@ -125,7 +125,7 @@ void PBOFrameAllocator::release_frame(Frame frame)
 		printf("%d bytes overflow after last (PBO) frame\n", int(frame.overflow));
 	}
 
-	std::unique_lock<std::mutex> lock(freelist_mutex);
+	unique_lock<mutex> lock(freelist_mutex);
 	freelist.push(frame);
 	//--sumsum;
 }

@@ -204,7 +204,7 @@ float find_peak(const float *samples, size_t num_samples)
 {
 	float m = fabs(samples[0]);
 	for (size_t i = 1; i < num_samples; ++i) {
-		m = std::max(m, fabs(samples[i]));
+		m = max(m, fabs(samples[i]));
 	}
 	return m;
 }

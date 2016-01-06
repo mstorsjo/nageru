@@ -11,6 +11,8 @@
 
 #include "filter.h"
 
+using namespace std;
+
 #ifdef __SSE__
 
 // For SSE, we set the denormals-as-zero flag instead.
@@ -49,8 +51,8 @@ void Filter::update()
 
 	float sn, cs;
 	float cutoff_freq = omega;
-	cutoff_freq = std::min(cutoff_freq, (float)M_PI);
-	cutoff_freq = std::max(cutoff_freq, 0.001f);
+	cutoff_freq = min(cutoff_freq, (float)M_PI);
+	cutoff_freq = max(cutoff_freq, 0.001f);
 	calcSinCos(cutoff_freq, &sn, &cs);
 	if (resonance <= 0) resonance = 0.001f;
 
@@ -352,9 +354,9 @@ void StereoFilter::render(float *inout_left_ptr, unsigned n_samples, float cutof
   we need to raise the answer to the Nth power.
 
 */
-std::complex<double> Filter::evaluate_transfer_function(float omega)
+complex<double> Filter::evaluate_transfer_function(float omega)
 {
-	std::complex<float> z = exp(std::complex<float>(0.0f, omega));
-	std::complex<float> z2 = z * z;
-	return std::pow((b0 * z2 + b1 * z + b2) / (1.0f * z2 + a1 * z + a2), filter_order);
+	complex<float> z = exp(complex<float>(0.0f, omega));
+	complex<float> z2 = z * z;
+	return pow((b0 * z2 + b1 * z + b2) / (1.0f * z2 + a1 * z + a2), filter_order);
 }

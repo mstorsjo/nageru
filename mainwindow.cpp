@@ -51,7 +51,7 @@ MainWindow::MainWindow()
 	transition_btn1 = ui->transition_btn1;
 	transition_btn2 = ui->transition_btn2;
 	transition_btn3 = ui->transition_btn3;
-	qRegisterMetaType<std::vector<std::string>>("std::vector<std::string>");
+	qRegisterMetaType<vector<string>>("std::vector<std::string>");
 	connect(ui->me_preview, &GLWidget::transition_names_updated, this, &MainWindow::set_transition_names);
 	qRegisterMetaType<Mixer::Output>("Mixer::Output");
 }
@@ -220,12 +220,12 @@ void MainWindow::relayout()
 	// The previews will be constrained by the remaining height, and the width.
 	double preview_label_height = previews[0]->title_bar->geometry().height() + ui->preview_displays->spacing();  // Wrong spacing?
 	int preview_total_width = ui->preview_displays->geometry().width();
-	double preview_height = std::min(remaining_height - preview_label_height, (preview_total_width / double(previews.size())) * 9.0 / 16.0);
+	double preview_height = min(remaining_height - preview_label_height, (preview_total_width / double(previews.size())) * 9.0 / 16.0);
 	remaining_height -= preview_height + preview_label_height + ui->vertical_layout->spacing();
 
 	ui->vertical_layout->setStretch(0, lrintf(me_height));
 	ui->vertical_layout->setStretch(1, 0);  // Don't stretch the audiostrip.
-	ui->vertical_layout->setStretch(2, std::max<int>(1, remaining_height));  // Spacer.
+	ui->vertical_layout->setStretch(2, max<int>(1, remaining_height));  // Spacer.
 	ui->vertical_layout->setStretch(3, lrintf(preview_height + preview_label_height));
 
 	// Set the widths for the previews.

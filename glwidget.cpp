@@ -47,8 +47,8 @@ void GLWidget::clean_context()
 
 void GLWidget::initializeGL()
 {
-	static std::once_flag flag;
-	std::call_once(flag, [this]{
+	static once_flag flag;
+	call_once(flag, [this]{
 		global_mixer = new Mixer(QGLFormat::toSurfaceFormat(format()), global_flags.num_cards);
 		global_mainwindow->mixer_created(global_mixer);
 		global_mixer->start();

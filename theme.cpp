@@ -89,7 +89,7 @@ int wrap_lua_object(lua_State* L, const char *class_name, Args&&... args)
 {
 	// Construct the C++ object and put it on the stack.
 	void *mem = lua_newuserdata(L, sizeof(T));
-	new(mem) T(std::forward<Args>(args)...);
+	new(mem) T(forward<Args>(args)...);
 
 	// Look up the metatable named <class_name>, and set it on the new object.
 	luaL_getmetatable(L, class_name);
@@ -111,7 +111,7 @@ int wrap_lua_object_nonowned(lua_State* L, const char *class_name, Args&&... arg
 {
 	// Construct the pointer ot the C++ object and put it on the stack.
 	T **obj = (T **)lua_newuserdata(L, sizeof(T *));
-	*obj = new T(std::forward<Args>(args)...);
+	*obj = new T(forward<Args>(args)...);
 
 	// Look up the metatable named <class_name>, and set it on the new object.
 	luaL_getmetatable(L, class_name);
@@ -157,11 +157,11 @@ bool checkbool(lua_State* L, int idx)
 	return lua_toboolean(L, idx);
 }
 
-std::string checkstdstring(lua_State *L, int index)
+string checkstdstring(lua_State *L, int index)
 {
 	size_t len;
 	const char* cstr = lua_tolstring(L, index, &len);
-	return std::string(cstr, len);
+	return string(cstr, len);
 }
 
 int EffectChain_new(lua_State* L)
@@ -284,7 +284,7 @@ int LiveInputWrapper_connect_signal(lua_State* L)
 int ImageInput_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 1);
-	std::string filename = checkstdstring(L, 1);
+	string filename = checkstdstring(L, 1);
 	return wrap_lua_object_nonowned<ImageInput>(L, "ImageInput", filename);
 }
 
@@ -384,7 +384,7 @@ int Effect_set_float(lua_State *L)
 {
 	assert(lua_gettop(L) == 3);
 	Effect *effect = (Effect *)get_effect(L, 1);
-	std::string key = checkstdstring(L, 2);
+	string key = checkstdstring(L, 2);
 	float value = luaL_checknumber(L, 3);
 	if (!effect->set_float(key, value)) {
 		luaL_error(L, "Effect refused set_float(\"%s\", %d) (invalid key?)", key.c_str(), int(value));
@@ -396,7 +396,7 @@ int Effect_set_int(lua_State *L)
 {
 	assert(lua_gettop(L) == 3);
 	Effect *effect = (Effect *)get_effect(L, 1);
-	std::string key = checkstdstring(L, 2);
+	string key = checkstdstring(L, 2);
 	float value = luaL_checknumber(L, 3);
 	if (!effect->set_int(key, value)) {
 		luaL_error(L, "Effect refused set_int(\"%s\", %d) (invalid key?)", key.c_str(), int(value));
@@ -408,7 +408,7 @@ int Effect_set_vec3(lua_State *L)
 {
 	assert(lua_gettop(L) == 5);
 	Effect *effect = (Effect *)get_effect(L, 1);
-	std::string key = checkstdstring(L, 2);
+	string key = checkstdstring(L, 2);
 	float v[3];
 	v[0] = luaL_checknumber(L, 3);
 	v[1] = luaL_checknumber(L, 4);
@@ -424,7 +424,7 @@ int Effect_set_vec4(lua_State *L)
 {
 	assert(lua_gettop(L) == 6);
 	Effect *effect = (Effect *)get_effect(L, 1);
-	std::string key = checkstdstring(L, 2);
+	string key = checkstdstring(L, 2);
 	float v[4];
 	v[0] = luaL_checknumber(L, 3);
 	v[1] = luaL_checknumber(L, 4);
@@ -756,7 +756,7 @@ Theme::Chain Theme::get_chain(unsigned num, float t, unsigned width, unsigned he
 	return chain;
 }
 
-std::string Theme::get_channel_name(unsigned channel)
+string Theme::get_channel_name(unsigned channel)
 {
 	unique_lock<mutex> lock(m);
 	lua_getglobal(L, "channel_name");
@@ -766,7 +766,7 @@ std::string Theme::get_channel_name(unsigned channel)
 		exit(1);
 	}
 
-	std::string ret = lua_tostring(L, -1);
+	string ret = lua_tostring(L, -1);
 	lua_pop(L, 1);
 	assert(lua_gettop(L) == 0);
 	return ret;
@@ -804,7 +804,7 @@ void Theme::set_wb(unsigned channel, double r, double g, double b)
 	assert(lua_gettop(L) == 0);
 }
 
-std::vector<std::string> Theme::get_transition_names(float t)
+vector<string> Theme::get_transition_names(float t)
 {
 	unique_lock<mutex> lock(m);
 	lua_getglobal(L, "get_transitions");
@@ -814,7 +814,7 @@ std::vector<std::string> Theme::get_transition_names(float t)
 		exit(1);
 	}
 
-	std::vector<std::string> ret;
+	vector<string> ret;
 	lua_pushnil(L);
 	while (lua_next(L, -2) != 0) {
 		ret.push_back(lua_tostring(L, -1));

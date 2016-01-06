@@ -4,6 +4,8 @@
 
 #include "stereocompressor.h"
 
+using namespace std;
+
 namespace {
 
 // Implement a less accurate but faster pow(x, y). We use the standard identity
@@ -99,9 +101,9 @@ void StereoCompressor::process(float *buf, size_t num_samples, float threshold, 
 		if (fabs(*right_ptr) > peak_level) peak_level = float(fabs(*right_ptr));
 
 		if (peak_level > compr_level) {
-			compr_level = std::min(compr_level * attack_increment, peak_level);
+			compr_level = min(compr_level * attack_increment, peak_level);
 		} else {
-			compr_level = std::max(compr_level * release_increment, 0.0001f);
+			compr_level = max(compr_level * release_increment, 0.0001f);
 		}
 
 		float scalefactor_with_gain = compressor_knee(compr_level, threshold, inv_threshold, inv_ratio_minus_one, makeup_gain);
@@ -112,7 +114,7 @@ void StereoCompressor::process(float *buf, size_t num_samples, float threshold, 
 		*right_ptr *= scalefactor_with_gain;
 		right_ptr += 2;
 
-		peak_level = std::max(peak_level * peak_increment, 0.0001f);
+		peak_level = max(peak_level * peak_increment, 0.0001f);
 	}
 
 	// Store attenuation level for debug/visualization.

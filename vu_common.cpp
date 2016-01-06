@@ -20,8 +20,8 @@ int lufs_to_pos(float level_lu, int height)
 	}
 
 	int y = lrintf(height * (level_lu - min_level) / (max_level - min_level));
-	y = std::max(y, 0);
-	y = std::min(y, height - 1);
+	y = max(y, 0);
+	y = min(y, height - 1);
 	return y;
 }
 
@@ -45,8 +45,8 @@ void draw_vu_meter(QPainter &painter, float range_low_lu, float range_high_lu, i
 		int max_y = lufs_to_pos(level, height) - 1;
 
 		painter.fillRect(margin, min_y, width - 2 * margin, max_y - min_y, off);
-		int min_draw_y = std::max(min_y, min_on_y);
-		int max_draw_y = std::min(max_y, max_on_y);
+		int min_draw_y = max(min_y, min_on_y);
+		int max_draw_y = min(max_y, max_on_y);
 		if (min_draw_y < max_draw_y) {
 			painter.fillRect(margin, min_draw_y, width - 2 * margin, max_draw_y - min_draw_y, on);
 		}

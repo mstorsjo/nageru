@@ -33,6 +33,8 @@
 #include "httpd.h"
 #include "timebase.h"
 
+using namespace std;
+
 class QOpenGLContext;
 class QSurface;
 
@@ -1623,7 +1625,7 @@ void H264Encoder::save_codeddata(storage_task task)
     // Encode and add all audio frames up to and including the pts of this video frame.
     for ( ;; ) {
         int64_t audio_pts;
-        std::vector<float> audio;
+        vector<float> audio;
         {
              unique_lock<mutex> lock(frame_queue_mutex);
              frame_queue_nonempty.wait(lock, [this]{ return copy_thread_should_quit || !pending_audio_frames.empty(); });
@@ -1697,7 +1699,7 @@ void H264Encoder::save_codeddata(storage_task task)
 // this is weird. but it seems to put a new frame onto the queue
 void H264Encoder::storage_task_enqueue(storage_task task)
 {
-	std::unique_lock<std::mutex> lock(storage_task_queue_mutex);
+	unique_lock<mutex> lock(storage_task_queue_mutex);
 	storage_task_queue.push(move(task));
 	srcsurface_status[task.display_order % SURFACE_NUM] = SRC_SURFACE_IN_ENCODING;
 	storage_task_queue_changed.notify_all();
@@ -1709,7 +1711,7 @@ void H264Encoder::storage_task_thread()
 		storage_task current;
 		{
 			// wait until there's an encoded frame  
-			std::unique_lock<std::mutex> lock(storage_task_queue_mutex);
+			unique_lock<mutex> lock(storage_task_queue_mutex);
 			storage_task_queue_changed.wait(lock, [this]{ return storage_thread_should_quit || !storage_task_queue.empty(); });
 			if (storage_thread_should_quit) return;
 			current = move(storage_task_queue.front());
@@ -1724,7 +1726,7 @@ void H264Encoder::storage_task_thread()
 		save_codeddata(move(current));
 
 		{
-			std::unique_lock<std::mutex> lock(storage_task_queue_mutex);
+			unique_lock<mutex> lock(storage_task_queue_mutex);
 			srcsurface_status[current.display_order % SURFACE_NUM] = SRC_SURFACE_FREE;
 			storage_task_queue_changed.notify_all();
 		}
@@ -1792,9 +1794,9 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
 	memset(&pic_param, 0, sizeof(pic_param));
 	memset(&slice_param, 0, sizeof(slice_param));
 
-	storage_thread = std::thread(&H264Encoder::storage_task_thread, this);
+	storage_thread = thread(&H264Encoder::storage_task_thread, this);
 
-	copy_thread = std::thread([this]{
+	copy_thread = thread([this]{
 		//SDL_GL_MakeCurrent(window, context);
 		QOpenGLContext *context = create_context(this->surface);
 		eglBindAPI(EGL_OPENGL_API);
@@ -1830,7 +1832,7 @@ bool H264Encoder::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 {
 	{
 		// Wait until this frame slot is done encoding.
-		std::unique_lock<std::mutex> lock(storage_task_queue_mutex);
+		unique_lock<mutex> lock(storage_task_queue_mutex);
 		storage_task_queue_changed.wait(lock, [this]{ return storage_thread_should_quit || (srcsurface_status[current_storage_frame % SURFACE_NUM] == SRC_SURFACE_FREE); });
 		if (storage_thread_should_quit) return false;
 	}
@@ -1890,7 +1892,7 @@ bool H264Encoder::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 	return true;
 }
 
-void H264Encoder::add_audio(int64_t pts, std::vector<float> audio)
+void H264Encoder::add_audio(int64_t pts, vector<float> audio)
 {
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
@@ -1899,7 +1901,7 @@ void H264Encoder::add_audio(int64_t pts, std::vector<float> audio)
 	frame_queue_nonempty.notify_all();
 }
 
-void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const std::vector<RefCountedFrame> &input_frames)
+void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const vector<RefCountedFrame> &input_frames)
 {
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
