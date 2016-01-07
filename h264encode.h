@@ -81,8 +81,14 @@ private:
 		std::vector<float> audio;
 		int64_t pts, dts;
 	};
+	struct PendingFrame {
+		RefCountedGLsync fence;
+		std::vector<RefCountedFrame> input_frames;
+		int64_t pts;
+	};
 
 	void copy_thread_func();
+	void encode_frame(PendingFrame frame, int64_t pts, int64_t dts);
 	void storage_task_thread();
 	void storage_task_enqueue(storage_task task);
 	void save_codeddata(storage_task task);
@@ -103,11 +109,6 @@ private:
 	//int ;
 	int current_storage_frame;
 
-	struct PendingFrame {
-		RefCountedGLsync fence;
-		std::vector<RefCountedFrame> input_frames;
-		int64_t pts;
-	};
 	std::map<int, PendingFrame> pending_video_frames;  // under frame_queue_mutex
 	std::map<int64_t, std::vector<float>> pending_audio_frames;  // under frame_queue_mutex
 	QSurface *surface;

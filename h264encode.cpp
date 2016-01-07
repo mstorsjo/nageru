@@ -1928,69 +1928,76 @@ void H264Encoder::copy_thread_func()
 		{
 			unique_lock<mutex> lock(frame_queue_mutex);
 			frame_queue_nonempty.wait(lock, [this]{ return copy_thread_should_quit || pending_video_frames.count(current_frame_display) != 0; });
-			if (copy_thread_should_quit) return;
-			frame = move(pending_video_frames[current_frame_display]);
-			pending_video_frames.erase(current_frame_display);
-		}
-
-		// Wait for the GPU to be done with the frame.
-		glClientWaitSync(frame.fence.get(), 0, 0);
-
-		// Release back any input frames we needed to render this frame.
-		frame.input_frames.clear();
-
-		// Unmap the image.
-		GLSurface *surf = &gl_surfaces[current_frame_display % SURFACE_NUM];
-		eglDestroyImageKHR(eglGetCurrentDisplay(), surf->y_egl_image);
-		eglDestroyImageKHR(eglGetCurrentDisplay(), surf->cbcr_egl_image);
-		VAStatus va_status = vaReleaseBufferHandle(va_dpy, surf->surface_image.buf);
-		CHECK_VASTATUS(va_status, "vaReleaseBufferHandle");
-		va_status = vaDestroyImage(va_dpy, surf->surface_image.image_id);
-		CHECK_VASTATUS(va_status, "vaDestroyImage");
-
-		VASurfaceID surface = surf->src_surface;
-
-		// Schedule the frame for encoding.
-		va_status = vaBeginPicture(va_dpy, context_id, surface);
-		CHECK_VASTATUS(va_status, "vaBeginPicture");
-
-		if (current_frame_type == FRAME_IDR) {
-			render_sequence();
-			render_picture();            
-			if (h264_packedheader) {
-				render_packedsequence();
-				render_packedpicture();
+			if (copy_thread_should_quit) {
+				return;
+			} else {
+				frame = move(pending_video_frames[current_frame_display]);
+				pending_video_frames.erase(current_frame_display);
 			}
-		} else {
-			//render_sequence();
-			render_picture();
 		}
-		render_slice();
-		
-		va_status = vaEndPicture(va_dpy, context_id);
-		CHECK_VASTATUS(va_status, "vaEndPicture");
 
-		// Determine the pts and dts of this frame.
-		int64_t pts = frame.pts;
+		// Determine the dts of this frame.
 		int64_t dts;
 		if (pts_lag == -1) {
 			assert(last_dts != -1);
 			dts = last_dts + (TIMEBASE / MAX_FPS);
 		} else {
-			dts = pts - pts_lag;
+			dts = frame.pts - pts_lag;
 		}
 		last_dts = dts;
 
-		// so now the data is done encoding (well, async job kicked off)...
-		// we send that to the storage thread
-		storage_task tmp;
-		tmp.display_order = current_frame_display;
-		tmp.frame_type = current_frame_type;
-		tmp.pts = pts;
-		tmp.dts = dts;
-		storage_task_enqueue(move(tmp));
-		
-		update_ReferenceFrames();
+		encode_frame(frame, frame.pts, dts);
 		++current_frame_encoding;
 	}
+}
+
+void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int64_t pts, int64_t dts)
+{
+	// Wait for the GPU to be done with the frame.
+	glClientWaitSync(frame.fence.get(), 0, 0);
+
+	// Release back any input frames we needed to render this frame.
+	frame.input_frames.clear();
+
+	// Unmap the image.
+	GLSurface *surf = &gl_surfaces[current_frame_display % SURFACE_NUM];
+	eglDestroyImageKHR(eglGetCurrentDisplay(), surf->y_egl_image);
+	eglDestroyImageKHR(eglGetCurrentDisplay(), surf->cbcr_egl_image);
+	VAStatus va_status = vaReleaseBufferHandle(va_dpy, surf->surface_image.buf);
+	CHECK_VASTATUS(va_status, "vaReleaseBufferHandle");
+	va_status = vaDestroyImage(va_dpy, surf->surface_image.image_id);
+	CHECK_VASTATUS(va_status, "vaDestroyImage");
+
+	VASurfaceID surface = surf->src_surface;
+
+	// Schedule the frame for encoding.
+	va_status = vaBeginPicture(va_dpy, context_id, surface);
+	CHECK_VASTATUS(va_status, "vaBeginPicture");
+
+	if (current_frame_type == FRAME_IDR) {
+		render_sequence();
+		render_picture();            
+		if (h264_packedheader) {
+			render_packedsequence();
+			render_packedpicture();
+		}
+	} else {
+		//render_sequence();
+		render_picture();
+	}
+	render_slice();
+
+	va_status = vaEndPicture(va_dpy, context_id);
+	CHECK_VASTATUS(va_status, "vaEndPicture");
+
+	// so now the data is done encoding (well, async job kicked off)...
+	// we send that to the storage thread
+	storage_task tmp;
+	tmp.display_order = current_frame_display;
+	tmp.frame_type = current_frame_type;
+	tmp.pts = pts;
+	tmp.dts = dts;
+	storage_task_enqueue(move(tmp));
+
+	update_ReferenceFrames();
 }
