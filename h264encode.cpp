@@ -1610,8 +1610,8 @@ void H264Encoder::save_codeddata(storage_task task)
         vector<float> audio;
         {
              unique_lock<mutex> lock(frame_queue_mutex);
-             frame_queue_nonempty.wait(lock, [this]{ return copy_thread_should_quit || !pending_audio_frames.empty(); });
-             if (copy_thread_should_quit && pending_audio_frames.empty()) return;
+             frame_queue_nonempty.wait(lock, [this]{ return encode_thread_should_quit || !pending_audio_frames.empty(); });
+             if (encode_thread_should_quit && pending_audio_frames.empty()) return;
              auto it = pending_audio_frames.begin();
              if (it->first > task.pts) break;
              audio_pts = it->first;
@@ -1777,7 +1777,7 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
 
 	storage_thread = thread(&H264Encoder::storage_task_thread, this);
 
-	copy_thread = thread([this]{
+	encode_thread = thread([this]{
 		//SDL_GL_MakeCurrent(window, context);
 		QOpenGLContext *context = create_context(this->surface);
 		eglBindAPI(EGL_OPENGL_API);
@@ -1786,7 +1786,7 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
 				eglGetError());
 			exit(1);
 		}
-		copy_thread_func();
+		encode_thread_func();
 	});
 }
 
@@ -1794,10 +1794,10 @@ H264Encoder::~H264Encoder()
 {
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
-		copy_thread_should_quit = true;
+		encode_thread_should_quit = true;
 		frame_queue_nonempty.notify_all();
 	}
-	copy_thread.join();
+	encode_thread.join();
 	{
 		unique_lock<mutex> lock(storage_task_queue_mutex);
 		storage_thread_should_quit = true;
@@ -1892,7 +1892,7 @@ void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const vector<Re
 	frame_queue_nonempty.notify_all();
 }
 
-void H264Encoder::copy_thread_func()
+void H264Encoder::encode_thread_func()
 {
 	int64_t last_dts = -1;
 	int gop_start_display_frame_num = 0;
@@ -1911,9 +1911,9 @@ void H264Encoder::copy_thread_func()
 		{
 			unique_lock<mutex> lock(frame_queue_mutex);
 			frame_queue_nonempty.wait(lock, [this, display_frame_num]{
-				return copy_thread_should_quit || pending_video_frames.count(display_frame_num) != 0;
+				return encode_thread_should_quit || pending_video_frames.count(display_frame_num) != 0;
 			});
-			if (copy_thread_should_quit) {
+			if (encode_thread_should_quit) {
 				return;
 			} else {
 				frame = move(pending_video_frames[display_frame_num]);

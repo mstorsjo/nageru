@@ -87,14 +87,14 @@ private:
 		int64_t pts;
 	};
 
-	void copy_thread_func();
+	void encode_thread_func();
 	void encode_frame(PendingFrame frame, int encoding_frame_num, int display_frame_num, int gop_start_display_frame_num,
 	                  int frame_type, int64_t pts, int64_t dts);
 	void storage_task_thread();
 	void storage_task_enqueue(storage_task task);
 	void save_codeddata(storage_task task);
 
-	std::thread copy_thread, storage_thread;
+	std::thread encode_thread, storage_thread;
 
 	std::mutex storage_task_queue_mutex;
 	std::condition_variable storage_task_queue_changed;
@@ -104,7 +104,7 @@ private:
 
 	std::mutex frame_queue_mutex;
 	std::condition_variable frame_queue_nonempty;
-	bool copy_thread_should_quit = false;  // under frame_queue_mutex
+	bool encode_thread_should_quit = false;  // under frame_queue_mutex
 
 	//int frame_width, frame_height;
 	//int ;
