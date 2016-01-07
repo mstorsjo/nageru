@@ -1610,8 +1610,8 @@ void H264Encoder::save_codeddata(storage_task task)
         vector<float> audio;
         {
              unique_lock<mutex> lock(frame_queue_mutex);
-             frame_queue_nonempty.wait(lock, [this]{ return encode_thread_should_quit || !pending_audio_frames.empty(); });
-             if (encode_thread_should_quit && pending_audio_frames.empty()) return;
+             frame_queue_nonempty.wait(lock, [this]{ return storage_thread_should_quit || !pending_audio_frames.empty(); });
+             if (storage_thread_should_quit && pending_audio_frames.empty()) return;
              auto it = pending_audio_frames.begin();
              if (it->first > task.pts) break;
              audio_pts = it->first;
@@ -1695,7 +1695,7 @@ void H264Encoder::storage_task_thread()
 			// wait until there's an encoded frame  
 			unique_lock<mutex> lock(storage_task_queue_mutex);
 			storage_task_queue_changed.wait(lock, [this]{ return storage_thread_should_quit || !storage_task_queue.empty(); });
-			if (storage_thread_should_quit) return;
+			if (storage_thread_should_quit && storage_task_queue.empty()) return;
 			current = move(storage_task_queue.front());
 			storage_task_queue.pop();
 		}
@@ -1801,6 +1801,7 @@ H264Encoder::~H264Encoder()
 	{
 		unique_lock<mutex> lock(storage_task_queue_mutex);
 		storage_thread_should_quit = true;
+		frame_queue_nonempty.notify_all();
 		storage_task_queue_changed.notify_all();
 	}
 	storage_thread.join();
