@@ -1611,7 +1611,7 @@ void H264Encoder::save_codeddata(storage_task task)
         {
              unique_lock<mutex> lock(frame_queue_mutex);
              frame_queue_nonempty.wait(lock, [this]{ return copy_thread_should_quit || !pending_audio_frames.empty(); });
-             if (copy_thread_should_quit) return;
+             if (copy_thread_should_quit && pending_audio_frames.empty()) return;
              auto it = pending_audio_frames.begin();
              if (it->first > task.pts) break;
              audio_pts = it->first;
@@ -1793,17 +1793,17 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
 H264Encoder::~H264Encoder()
 {
 	{
-		unique_lock<mutex> lock(storage_task_queue_mutex);
-		storage_thread_should_quit = true;
-		storage_task_queue_changed.notify_all();
-	}
-	{
 		unique_lock<mutex> lock(frame_queue_mutex);
 		copy_thread_should_quit = true;
 		frame_queue_nonempty.notify_all();
 	}
-	storage_thread.join();
 	copy_thread.join();
+	{
+		unique_lock<mutex> lock(storage_task_queue_mutex);
+		storage_thread_should_quit = true;
+		storage_task_queue_changed.notify_all();
+	}
+	storage_thread.join();
 
 	release_encode();
 	deinit_va();
