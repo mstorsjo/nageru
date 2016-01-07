@@ -1206,12 +1206,12 @@ static void sort_two(VAPictureH264 ref[], int left, int right, unsigned int key,
     sort_one(ref, j+1, right, list1_ascending, frame_idx);
 }
 
-static int update_ReferenceFrames(int frame_type)
+static void update_ReferenceFrames(int frame_type)
 {
     int i;
     
     if (frame_type == FRAME_B)
-        return 0;
+        return;
 
     CurrentCurrPic.flags = VA_PICTURE_H264_SHORT_TERM_REFERENCE;
     numShortTerm++;
@@ -1224,8 +1224,6 @@ static int update_ReferenceFrames(int frame_type)
     current_frame_num++;
     if (current_frame_num > MaxFrameNum)
         current_frame_num = 0;
-    
-    return 0;
 }
 
 
