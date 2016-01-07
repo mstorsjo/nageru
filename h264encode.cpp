@@ -134,7 +134,6 @@ static  int rc_default_modes[] = {
 static  unsigned long long current_frame_display = 0;
 static  unsigned long long current_IDR_display = 0;
 static  unsigned int current_frame_num = 0;
-static  int current_frame_type;
 
 static  int misc_priv_type = 0;
 static  int misc_priv_value = 0;
@@ -1209,11 +1208,11 @@ static void sort_two(VAPictureH264 ref[], int left, int right, unsigned int key,
     sort_one(ref, j+1, right, list1_ascending, frame_idx);
 }
 
-static int update_ReferenceFrames(void)
+static int update_ReferenceFrames(int frame_type)
 {
     int i;
     
-    if (current_frame_type == FRAME_B)
+    if (frame_type == FRAME_B)
         return 0;
 
     CurrentCurrPic.flags = VA_PICTURE_H264_SHORT_TERM_REFERENCE;
@@ -1224,8 +1223,7 @@ static int update_ReferenceFrames(void)
         ReferenceFrames[i] = ReferenceFrames[i-1];
     ReferenceFrames[0] = CurrentCurrPic;
     
-    if (current_frame_type != FRAME_B)
-        current_frame_num++;
+    current_frame_num++;
     if (current_frame_num > MaxFrameNum)
         current_frame_num = 0;
     
@@ -1233,16 +1231,16 @@ static int update_ReferenceFrames(void)
 }
 
 
-static int update_RefPicList(void)
+static int update_RefPicList(int frame_type)
 {
     unsigned int current_poc = CurrentCurrPic.TopFieldOrderCnt;
     
-    if (current_frame_type == FRAME_P) {
+    if (frame_type == FRAME_P) {
         memcpy(RefPicList0_P, ReferenceFrames, numShortTerm * sizeof(VAPictureH264));
         sort_one(RefPicList0_P, 0, numShortTerm-1, 0, 1);
     }
     
-    if (current_frame_type == FRAME_B) {
+    if (frame_type == FRAME_B) {
         memcpy(RefPicList0_B, ReferenceFrames, numShortTerm * sizeof(VAPictureH264));
         sort_two(RefPicList0_B, 0, numShortTerm-1, current_poc, 0,
                  1, 0, 1);
@@ -1336,13 +1334,13 @@ static int render_sequence(void)
     return 0;
 }
 
-static int calc_poc(int pic_order_cnt_lsb)
+static int calc_poc(int pic_order_cnt_lsb, int frame_type)
 {
     static int PicOrderCntMsb_ref = 0, pic_order_cnt_lsb_ref = 0;
     int prevPicOrderCntMsb, prevPicOrderCntLsb;
     int PicOrderCntMsb, TopFieldOrderCnt;
     
-    if (current_frame_type == FRAME_IDR)
+    if (frame_type == FRAME_IDR)
         prevPicOrderCntMsb = prevPicOrderCntLsb = 0;
     else {
         prevPicOrderCntMsb = PicOrderCntMsb_ref;
@@ -1360,7 +1358,7 @@ static int calc_poc(int pic_order_cnt_lsb)
     
     TopFieldOrderCnt = PicOrderCntMsb + pic_order_cnt_lsb;
 
-    if (current_frame_type != FRAME_B) {
+    if (frame_type != FRAME_B) {
         PicOrderCntMsb_ref = PicOrderCntMsb;
         pic_order_cnt_lsb_ref = pic_order_cnt_lsb;
     }
@@ -1368,7 +1366,7 @@ static int calc_poc(int pic_order_cnt_lsb)
     return TopFieldOrderCnt;
 }
 
-static int render_picture(void)
+static int render_picture(int frame_type)
 {
     VABufferID pic_param_buf;
     VAStatus va_status;
@@ -1377,29 +1375,18 @@ static int render_picture(void)
     pic_param.CurrPic.picture_id = gl_surfaces[current_frame_display % SURFACE_NUM].ref_surface;
     pic_param.CurrPic.frame_idx = current_frame_num;
     pic_param.CurrPic.flags = 0;
-    pic_param.CurrPic.TopFieldOrderCnt = calc_poc((current_frame_display - current_IDR_display) % MaxPicOrderCntLsb);
+    pic_param.CurrPic.TopFieldOrderCnt = calc_poc((current_frame_display - current_IDR_display) % MaxPicOrderCntLsb, frame_type);
     pic_param.CurrPic.BottomFieldOrderCnt = pic_param.CurrPic.TopFieldOrderCnt;
     CurrentCurrPic = pic_param.CurrPic;
 
-    if (getenv("TO_DEL")) { /* set RefPicList into ReferenceFrames */
-        update_RefPicList(); /* calc RefPicList */
-        memset(pic_param.ReferenceFrames, 0xff, 16 * sizeof(VAPictureH264)); /* invalid all */
-        if (current_frame_type == FRAME_P) {
-            pic_param.ReferenceFrames[0] = RefPicList0_P[0];
-        } else if (current_frame_type == FRAME_B) {
-            pic_param.ReferenceFrames[0] = RefPicList0_B[0];
-            pic_param.ReferenceFrames[1] = RefPicList1_B[0];
-        }
-    } else {
-        memcpy(pic_param.ReferenceFrames, ReferenceFrames, numShortTerm*sizeof(VAPictureH264));
-        for (i = numShortTerm; i < SURFACE_NUM; i++) {
-            pic_param.ReferenceFrames[i].picture_id = VA_INVALID_SURFACE;
-            pic_param.ReferenceFrames[i].flags = VA_PICTURE_H264_INVALID;
-        }
+    memcpy(pic_param.ReferenceFrames, ReferenceFrames, numShortTerm*sizeof(VAPictureH264));
+    for (i = numShortTerm; i < SURFACE_NUM; i++) {
+        pic_param.ReferenceFrames[i].picture_id = VA_INVALID_SURFACE;
+        pic_param.ReferenceFrames[i].flags = VA_PICTURE_H264_INVALID;
     }
     
-    pic_param.pic_fields.bits.idr_pic_flag = (current_frame_type == FRAME_IDR);
-    pic_param.pic_fields.bits.reference_pic_flag = (current_frame_type != FRAME_B);
+    pic_param.pic_fields.bits.idr_pic_flag = (frame_type == FRAME_IDR);
+    pic_param.pic_fields.bits.reference_pic_flag = (frame_type != FRAME_B);
     pic_param.pic_fields.bits.entropy_coding_mode_flag = h264_entropy_mode;
     pic_param.pic_fields.bits.deblocking_filter_control_present_flag = 1;
     pic_param.frame_num = current_frame_num;
@@ -1524,22 +1511,22 @@ static void render_packedslice()
     free(packedslice_buffer);
 }
 
-static int render_slice(int encoding_frame_num)
+static int render_slice(int encoding_frame_num, int frame_type)
 {
     VABufferID slice_param_buf;
     VAStatus va_status;
     int i;
 
-    update_RefPicList();
+    update_RefPicList(frame_type);
     
     /* one frame, one slice */
     slice_param.macroblock_address = 0;
     slice_param.num_macroblocks = frame_width_mbaligned * frame_height_mbaligned/(16*16); /* Measured by MB */
-    slice_param.slice_type = (current_frame_type == FRAME_IDR)?2:current_frame_type;
-    if (current_frame_type == FRAME_IDR) {
+    slice_param.slice_type = (frame_type == FRAME_IDR)?2:frame_type;
+    if (frame_type == FRAME_IDR) {
         if (encoding_frame_num != 0)
             ++slice_param.idr_pic_id;
-    } else if (current_frame_type == FRAME_P) {
+    } else if (frame_type == FRAME_P) {
         int refpiclist0_max = h264_maxref & 0xffff;
         memcpy(slice_param.RefPicList0, RefPicList0_P, refpiclist0_max*sizeof(VAPictureH264));
 
@@ -1547,7 +1534,7 @@ static int render_slice(int encoding_frame_num)
             slice_param.RefPicList0[i].picture_id = VA_INVALID_SURFACE;
             slice_param.RefPicList0[i].flags = VA_PICTURE_H264_INVALID;
         }
-    } else if (current_frame_type == FRAME_B) {
+    } else if (frame_type == FRAME_B) {
         int refpiclist0_max = h264_maxref & 0xffff;
         int refpiclist1_max = (h264_maxref >> 16) & 0xffff;
 
@@ -1915,9 +1902,10 @@ void H264Encoder::copy_thread_func()
 	for (int encoding_frame_num = 0; ; ++encoding_frame_num) {
 		PendingFrame frame;
 		int pts_lag;
+		int frame_type;
 		encoding2display_order(encoding_frame_num, intra_period, intra_idr_period, ip_period,
-				       &current_frame_display, &current_frame_type, &pts_lag);
-		if (current_frame_type == FRAME_IDR) {
+				       &current_frame_display, &frame_type, &pts_lag);
+		if (frame_type == FRAME_IDR) {
 			numShortTerm = 0;
 			current_frame_num = 0;
 			current_IDR_display = current_frame_display;
@@ -1944,11 +1932,11 @@ void H264Encoder::copy_thread_func()
 		}
 		last_dts = dts;
 
-		encode_frame(frame, encoding_frame_num, frame.pts, dts);
+		encode_frame(frame, encoding_frame_num, frame_type, frame.pts, dts);
 	}
 }
 
-void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int encoding_frame_num, int64_t pts, int64_t dts)
+void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int encoding_frame_num, int frame_type, int64_t pts, int64_t dts)
 {
 	// Wait for the GPU to be done with the frame.
 	glClientWaitSync(frame.fence.get(), 0, 0);
@@ -1971,18 +1959,18 @@ void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int encoding_fra
 	va_status = vaBeginPicture(va_dpy, context_id, surface);
 	CHECK_VASTATUS(va_status, "vaBeginPicture");
 
-	if (current_frame_type == FRAME_IDR) {
+	if (frame_type == FRAME_IDR) {
 		render_sequence();
-		render_picture();            
+		render_picture(frame_type);
 		if (h264_packedheader) {
 			render_packedsequence();
 			render_packedpicture();
 		}
 	} else {
 		//render_sequence();
-		render_picture();
+		render_picture(frame_type);
 	}
-	render_slice(encoding_frame_num);
+	render_slice(encoding_frame_num, frame_type);
 
 	va_status = vaEndPicture(va_dpy, context_id);
 	CHECK_VASTATUS(va_status, "vaEndPicture");
@@ -1991,10 +1979,10 @@ void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int encoding_fra
 	// we send that to the storage thread
 	storage_task tmp;
 	tmp.display_order = current_frame_display;
-	tmp.frame_type = current_frame_type;
+	tmp.frame_type = frame_type;
 	tmp.pts = pts;
 	tmp.dts = dts;
 	storage_task_enqueue(move(tmp));
 
-	update_ReferenceFrames();
+	update_ReferenceFrames(frame_type);
 }
