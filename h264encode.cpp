@@ -131,7 +131,6 @@ static  int rc_default_modes[] = {
     VA_RC_VCM,
     VA_RC_NONE,
 };
-static  unsigned long long current_frame_display = 0;
 static  unsigned long long current_IDR_display = 0;
 static  unsigned int current_frame_num = 0;
 
@@ -661,9 +660,9 @@ static int build_packed_slice_buffer(unsigned char **header_buffer)
 #define FRAME_I 2
 #define FRAME_IDR 7
 void encoding2display_order(
-    unsigned long long encoding_order, int intra_period,
+    int encoding_order, int intra_period,
     int intra_idr_period, int ip_period,
-    unsigned long long *displaying_order,
+    int *displaying_order,
     int *frame_type, int *pts_lag)
 {
     int encoding_order_gop = 0;
@@ -1366,16 +1365,16 @@ static int calc_poc(int pic_order_cnt_lsb, int frame_type)
     return TopFieldOrderCnt;
 }
 
-static int render_picture(int frame_type)
+static int render_picture(int frame_type, int display_frame_num)
 {
     VABufferID pic_param_buf;
     VAStatus va_status;
     int i = 0;
 
-    pic_param.CurrPic.picture_id = gl_surfaces[current_frame_display % SURFACE_NUM].ref_surface;
+    pic_param.CurrPic.picture_id = gl_surfaces[display_frame_num % SURFACE_NUM].ref_surface;
     pic_param.CurrPic.frame_idx = current_frame_num;
     pic_param.CurrPic.flags = 0;
-    pic_param.CurrPic.TopFieldOrderCnt = calc_poc((current_frame_display - current_IDR_display) % MaxPicOrderCntLsb, frame_type);
+    pic_param.CurrPic.TopFieldOrderCnt = calc_poc((display_frame_num - current_IDR_display) % MaxPicOrderCntLsb, frame_type);
     pic_param.CurrPic.BottomFieldOrderCnt = pic_param.CurrPic.TopFieldOrderCnt;
     CurrentCurrPic = pic_param.CurrPic;
 
@@ -1390,7 +1389,7 @@ static int render_picture(int frame_type)
     pic_param.pic_fields.bits.entropy_coding_mode_flag = h264_entropy_mode;
     pic_param.pic_fields.bits.deblocking_filter_control_present_flag = 1;
     pic_param.frame_num = current_frame_num;
-    pic_param.coded_buf = gl_surfaces[current_frame_display % SURFACE_NUM].coded_buf;
+    pic_param.coded_buf = gl_surfaces[display_frame_num % SURFACE_NUM].coded_buf;
     pic_param.last_picture = false;  // FIXME
     pic_param.pic_init_qp = initial_qp;
 
@@ -1511,7 +1510,7 @@ static void render_packedslice()
     free(packedslice_buffer);
 }
 
-static int render_slice(int encoding_frame_num, int frame_type)
+static int render_slice(int encoding_frame_num, int display_frame_num, int frame_type)
 {
     VABufferID slice_param_buf;
     VAStatus va_status;
@@ -1554,7 +1553,7 @@ static int render_slice(int encoding_frame_num, int frame_type)
     slice_param.slice_alpha_c0_offset_div2 = 0;
     slice_param.slice_beta_offset_div2 = 0;
     slice_param.direct_spatial_mv_pred_flag = 1;
-    slice_param.pic_order_cnt_lsb = (current_frame_display - current_IDR_display) % MaxPicOrderCntLsb;
+    slice_param.pic_order_cnt_lsb = (display_frame_num - current_IDR_display) % MaxPicOrderCntLsb;
     
 
     if (h264_packedheader &&
@@ -1902,23 +1901,25 @@ void H264Encoder::copy_thread_func()
 	for (int encoding_frame_num = 0; ; ++encoding_frame_num) {
 		PendingFrame frame;
 		int pts_lag;
-		int frame_type;
+		int frame_type, display_frame_num;
 		encoding2display_order(encoding_frame_num, intra_period, intra_idr_period, ip_period,
-				       &current_frame_display, &frame_type, &pts_lag);
+				       &display_frame_num, &frame_type, &pts_lag);
 		if (frame_type == FRAME_IDR) {
 			numShortTerm = 0;
 			current_frame_num = 0;
-			current_IDR_display = current_frame_display;
+			current_IDR_display = display_frame_num;
 		}
 
 		{
 			unique_lock<mutex> lock(frame_queue_mutex);
-			frame_queue_nonempty.wait(lock, [this]{ return copy_thread_should_quit || pending_video_frames.count(current_frame_display) != 0; });
+			frame_queue_nonempty.wait(lock, [this, display_frame_num]{
+				return copy_thread_should_quit || pending_video_frames.count(display_frame_num) != 0;
+			});
 			if (copy_thread_should_quit) {
 				return;
 			} else {
-				frame = move(pending_video_frames[current_frame_display]);
-				pending_video_frames.erase(current_frame_display);
+				frame = move(pending_video_frames[display_frame_num]);
+				pending_video_frames.erase(display_frame_num);
 			}
 		}
 
@@ -1932,11 +1933,12 @@ void H264Encoder::copy_thread_func()
 		}
 		last_dts = dts;
 
-		encode_frame(frame, encoding_frame_num, frame_type, frame.pts, dts);
+		encode_frame(frame, encoding_frame_num, display_frame_num, frame_type, frame.pts, dts);
 	}
 }
 
-void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int encoding_frame_num, int frame_type, int64_t pts, int64_t dts)
+void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int encoding_frame_num, int display_frame_num,
+                               int frame_type, int64_t pts, int64_t dts)
 {
 	// Wait for the GPU to be done with the frame.
 	glClientWaitSync(frame.fence.get(), 0, 0);
@@ -1945,7 +1947,7 @@ void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int encoding_fra
 	frame.input_frames.clear();
 
 	// Unmap the image.
-	GLSurface *surf = &gl_surfaces[current_frame_display % SURFACE_NUM];
+	GLSurface *surf = &gl_surfaces[display_frame_num % SURFACE_NUM];
 	eglDestroyImageKHR(eglGetCurrentDisplay(), surf->y_egl_image);
 	eglDestroyImageKHR(eglGetCurrentDisplay(), surf->cbcr_egl_image);
 	VAStatus va_status = vaReleaseBufferHandle(va_dpy, surf->surface_image.buf);
@@ -1961,16 +1963,16 @@ void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int encoding_fra
 
 	if (frame_type == FRAME_IDR) {
 		render_sequence();
-		render_picture(frame_type);
+		render_picture(frame_type, display_frame_num);
 		if (h264_packedheader) {
 			render_packedsequence();
 			render_packedpicture();
 		}
 	} else {
 		//render_sequence();
-		render_picture(frame_type);
+		render_picture(frame_type, display_frame_num);
 	}
-	render_slice(encoding_frame_num, frame_type);
+	render_slice(encoding_frame_num, display_frame_num, frame_type);
 
 	va_status = vaEndPicture(va_dpy, context_id);
 	CHECK_VASTATUS(va_status, "vaEndPicture");
@@ -1978,7 +1980,7 @@ void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int encoding_fra
 	// so now the data is done encoding (well, async job kicked off)...
 	// we send that to the storage thread
 	storage_task tmp;
-	tmp.display_order = current_frame_display;
+	tmp.display_order = display_frame_num;
 	tmp.frame_type = frame_type;
 	tmp.pts = pts;
 	tmp.dts = dts;

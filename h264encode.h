@@ -88,7 +88,8 @@ private:
 	};
 
 	void copy_thread_func();
-	void encode_frame(PendingFrame frame, int encoding_frame_num, int frame_type, int64_t pts, int64_t dts);
+	void encode_frame(PendingFrame frame, int encoding_frame_num, int display_frame_num,
+	                  int frame_type, int64_t pts, int64_t dts);
 	void storage_task_thread();
 	void storage_task_enqueue(storage_task task);
 	void save_codeddata(storage_task task);
