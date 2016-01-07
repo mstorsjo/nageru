@@ -131,7 +131,6 @@ static  int rc_default_modes[] = {
     VA_RC_VCM,
     VA_RC_NONE,
 };
-static  unsigned long long current_frame_encoding = 0;
 static  unsigned long long current_frame_display = 0;
 static  unsigned long long current_IDR_display = 0;
 static  unsigned int current_frame_num = 0;
@@ -1525,7 +1524,7 @@ static void render_packedslice()
     free(packedslice_buffer);
 }
 
-static int render_slice(void)
+static int render_slice(int encoding_frame_num)
 {
     VABufferID slice_param_buf;
     VAStatus va_status;
@@ -1538,7 +1537,7 @@ static int render_slice(void)
     slice_param.num_macroblocks = frame_width_mbaligned * frame_height_mbaligned/(16*16); /* Measured by MB */
     slice_param.slice_type = (current_frame_type == FRAME_IDR)?2:current_frame_type;
     if (current_frame_type == FRAME_IDR) {
-        if (current_frame_encoding != 0)
+        if (encoding_frame_num != 0)
             ++slice_param.idr_pic_id;
     } else if (current_frame_type == FRAME_P) {
         int refpiclist0_max = h264_maxref & 0xffff;
@@ -1780,7 +1779,6 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
 	frame_width_mbaligned = (frame_width + 15) & (~15);
 	frame_height_mbaligned = (frame_height + 15) & (~15);
         frame_bitrate = 15000000;  // / 60;
-	current_frame_encoding = 0;
 
 	//print_input();
 
@@ -1914,10 +1912,10 @@ void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const vector<Re
 void H264Encoder::copy_thread_func()
 {
 	int64_t last_dts = -1;
-	for ( ;; ) {
+	for (int encoding_frame_num = 0; ; ++encoding_frame_num) {
 		PendingFrame frame;
 		int pts_lag;
-		encoding2display_order(current_frame_encoding, intra_period, intra_idr_period, ip_period,
+		encoding2display_order(encoding_frame_num, intra_period, intra_idr_period, ip_period,
 				       &current_frame_display, &current_frame_type, &pts_lag);
 		if (current_frame_type == FRAME_IDR) {
 			numShortTerm = 0;
@@ -1946,12 +1944,11 @@ void H264Encoder::copy_thread_func()
 		}
 		last_dts = dts;
 
-		encode_frame(frame, frame.pts, dts);
-		++current_frame_encoding;
+		encode_frame(frame, encoding_frame_num, frame.pts, dts);
 	}
 }
 
-void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int64_t pts, int64_t dts)
+void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int encoding_frame_num, int64_t pts, int64_t dts)
 {
 	// Wait for the GPU to be done with the frame.
 	glClientWaitSync(frame.fence.get(), 0, 0);
@@ -1985,7 +1982,7 @@ void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int64_t pts, int
 		//render_sequence();
 		render_picture();
 	}
-	render_slice();
+	render_slice(encoding_frame_num);
 
 	va_status = vaEndPicture(va_dpy, context_id);
 	CHECK_VASTATUS(va_status, "vaEndPicture");
