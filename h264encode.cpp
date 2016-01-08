@@ -1914,7 +1914,13 @@ void H264Encoder::encode_thread_func()
 			frame_queue_nonempty.wait(lock, [this, display_frame_num]{
 				return encode_thread_should_quit || pending_video_frames.count(display_frame_num) != 0;
 			});
-			if (encode_thread_should_quit) {
+			if (encode_thread_should_quit && pending_video_frames.count(display_frame_num) == 0) {
+				// We have queued frames that were supposed to be B-frames,
+				// but will be no P-frame to encode them against. Encode them all
+				// as P-frames instead. Note that this happens under the mutex,
+				// but nobody else uses it at this point, since we're shutting down,
+				// so there's no contention.
+				encode_remaining_frames_as_p(encoding_frame_num, gop_start_display_frame_num, last_dts);
 				return;
 			} else {
 				frame = move(pending_video_frames[display_frame_num]);
@@ -1933,6 +1939,23 @@ void H264Encoder::encode_thread_func()
 		last_dts = dts;
 
 		encode_frame(frame, encoding_frame_num, display_frame_num, gop_start_display_frame_num, frame_type, frame.pts, dts);
+	}
+}
+
+void H264Encoder::encode_remaining_frames_as_p(int encoding_frame_num, int gop_start_display_frame_num, int64_t last_dts)
+{
+	if (pending_video_frames.empty()) {
+		return;
+	}
+
+	for (auto &pending_frame : pending_video_frames) {
+		int display_frame_num = pending_frame.first;
+		assert(display_frame_num > 0);
+		PendingFrame frame = move(pending_frame.second);
+		int64_t dts = last_dts + (TIMEBASE / MAX_FPS);
+		printf("Finalizing encode: Encoding leftover frame %d as P-frame instead of B-frame.\n", display_frame_num);
+		encode_frame(frame, encoding_frame_num++, display_frame_num, gop_start_display_frame_num, FRAME_P, frame.pts, dts);
+		last_dts = dts;
 	}
 }
 

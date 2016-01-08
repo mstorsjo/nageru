@@ -88,6 +88,7 @@ private:
 	};
 
 	void encode_thread_func();
+	void encode_remaining_frames_as_p(int encoding_frame_num, int gop_start_display_frame_num, int64_t last_dts);
 	void encode_frame(PendingFrame frame, int encoding_frame_num, int display_frame_num, int gop_start_display_frame_num,
 	                  int frame_type, int64_t pts, int64_t dts);
 	void storage_task_thread();
