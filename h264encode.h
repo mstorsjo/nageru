@@ -26,97 +26,33 @@
 #ifndef _H264ENCODE_H
 #define _H264ENCODE_H
 
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
-}
 #include <epoxy/gl.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <atomic>
-#include <condition_variable>
-#include <map>
 #include <memory>
-#include <mutex>
-#include <queue>
-#include <thread>
 #include <vector>
 
-#include "bmusb/bmusb.h"
-#include "context.h"
-#include "pbo_frame_allocator.h"
 #include "ref_counted_frame.h"
 #include "ref_counted_gl_sync.h"
 
+class H264EncoderImpl;
 class HTTPD;
 class QSurface;
 
-#define SURFACE_NUM 16 /* 16 surfaces for source YUV */
-
+// This is just a pimpl, because including anything X11-related in a .h file
+// tends to trip up Qt. All the real logic is in H264EncoderImpl, defined in the
+// .cpp file.
 class H264Encoder {
 public:
-	H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd);
-	~H264Encoder();
-	//void add_frame(FrameAllocator::Frame frame, GLsync fence);
+        H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd);
+        ~H264Encoder();
 
-#if 0
-	struct Frame {
-	public:
-		GLuint fbo;
-		GLuint y_tex, cbcr_tex;	
-
-	private:
-		//int surface_subnum;
-	};
-	void 
-#endif
 	void add_audio(int64_t pts, std::vector<float> audio);  // Needs to come before end_frame() of same pts.
 	bool begin_frame(GLuint *y_tex, GLuint *cbcr_tex);
 	void end_frame(RefCountedGLsync fence, int64_t pts, const std::vector<RefCountedFrame> &input_frames);
 
 private:
-	struct storage_task {
-		unsigned long long display_order;
-		int frame_type;
-		std::vector<float> audio;
-		int64_t pts, dts;
-	};
-	struct PendingFrame {
-		RefCountedGLsync fence;
-		std::vector<RefCountedFrame> input_frames;
-		int64_t pts;
-	};
-
-	void encode_thread_func();
-	void encode_remaining_frames_as_p(int encoding_frame_num, int gop_start_display_frame_num, int64_t last_dts);
-	void encode_frame(PendingFrame frame, int encoding_frame_num, int display_frame_num, int gop_start_display_frame_num,
-	                  int frame_type, int64_t pts, int64_t dts);
-	void storage_task_thread();
-	void storage_task_enqueue(storage_task task);
-	void save_codeddata(storage_task task);
-
-	std::thread encode_thread, storage_thread;
-
-	std::mutex storage_task_queue_mutex;
-	std::condition_variable storage_task_queue_changed;
-	int srcsurface_status[SURFACE_NUM];  // protected by storage_task_queue_mutex
-	std::queue<storage_task> storage_task_queue;  // protected by storage_task_queue_mutex
-	bool storage_thread_should_quit = false;  // protected by storage_task_queue_mutex
-
-	std::mutex frame_queue_mutex;
-	std::condition_variable frame_queue_nonempty;
-	bool encode_thread_should_quit = false;  // under frame_queue_mutex
-
-	//int frame_width, frame_height;
-	//int ;
-	int current_storage_frame;
-
-	std::map<int, PendingFrame> pending_video_frames;  // under frame_queue_mutex
-	std::map<int64_t, std::vector<float>> pending_audio_frames;  // under frame_queue_mutex
-	QSurface *surface;
-
-	AVCodecContext *context_audio;
-	HTTPD *httpd;
+	std::unique_ptr<H264EncoderImpl> impl;
 };
 
 #endif

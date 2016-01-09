@@ -6,11 +6,14 @@
 #include <X11/Xlib.h>
 #include <assert.h>
 #include <epoxy/egl.h>
+extern "C" {
 #include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
 #include <libavutil/channel_layout.h>
 #include <libavutil/frame.h>
 #include <libavutil/rational.h>
 #include <libavutil/samplefmt.h>
+}
 #include <libdrm/drm_fourcc.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,6 +24,7 @@
 #include <va/va_x11.h>
 #include <condition_variable>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -148,6 +152,60 @@ struct __bitstream {
 typedef struct __bitstream bitstream;
 
 using namespace std;
+
+class H264EncoderImpl {
+public:
+	H264EncoderImpl(QSurface *surface, int width, int height, HTTPD *httpd);
+	~H264EncoderImpl();
+	void add_audio(int64_t pts, std::vector<float> audio);  // Needs to come before end_frame() of same pts.
+	bool begin_frame(GLuint *y_tex, GLuint *cbcr_tex);
+	void end_frame(RefCountedGLsync fence, int64_t pts, const std::vector<RefCountedFrame> &input_frames);
+
+private:
+	struct storage_task {
+		unsigned long long display_order;
+		int frame_type;
+		std::vector<float> audio;
+		int64_t pts, dts;
+	};
+	struct PendingFrame {
+		RefCountedGLsync fence;
+		std::vector<RefCountedFrame> input_frames;
+		int64_t pts;
+	};
+
+	void encode_thread_func();
+	void encode_remaining_frames_as_p(int encoding_frame_num, int gop_start_display_frame_num, int64_t last_dts);
+	void encode_frame(PendingFrame frame, int encoding_frame_num, int display_frame_num, int gop_start_display_frame_num,
+	                  int frame_type, int64_t pts, int64_t dts);
+	void storage_task_thread();
+	void storage_task_enqueue(storage_task task);
+	void save_codeddata(storage_task task);
+
+	std::thread encode_thread, storage_thread;
+
+	std::mutex storage_task_queue_mutex;
+	std::condition_variable storage_task_queue_changed;
+	int srcsurface_status[SURFACE_NUM];  // protected by storage_task_queue_mutex
+	std::queue<storage_task> storage_task_queue;  // protected by storage_task_queue_mutex
+	bool storage_thread_should_quit = false;  // protected by storage_task_queue_mutex
+
+	std::mutex frame_queue_mutex;
+	std::condition_variable frame_queue_nonempty;
+	bool encode_thread_should_quit = false;  // under frame_queue_mutex
+
+	//int frame_width, frame_height;
+	//int ;
+	int current_storage_frame;
+
+	std::map<int, PendingFrame> pending_video_frames;  // under frame_queue_mutex
+	std::map<int64_t, std::vector<float>> pending_audio_frames;  // under frame_queue_mutex
+	QSurface *surface;
+
+	AVCodecContext *context_audio;
+	HTTPD *httpd;
+};
+
 
 // Supposedly vaRenderPicture() is supposed to destroy the buffer implicitly,
 // but if we don't delete it here, we get leaks. The GStreamer implementation
@@ -1568,7 +1626,7 @@ static int render_slice(int encoding_frame_num, int display_frame_num, int gop_s
 
 
 
-void H264Encoder::save_codeddata(storage_task task)
+void H264EncoderImpl::save_codeddata(storage_task task)
 {    
     VACodedBufferSegment *buf_list = NULL;
     VAStatus va_status;
@@ -1679,7 +1737,7 @@ void H264Encoder::save_codeddata(storage_task task)
 
 
 // this is weird. but it seems to put a new frame onto the queue
-void H264Encoder::storage_task_enqueue(storage_task task)
+void H264EncoderImpl::storage_task_enqueue(storage_task task)
 {
 	unique_lock<mutex> lock(storage_task_queue_mutex);
 	storage_task_queue.push(move(task));
@@ -1687,7 +1745,7 @@ void H264Encoder::storage_task_enqueue(storage_task task)
 	storage_task_queue_changed.notify_all();
 }
 
-void H264Encoder::storage_task_thread()
+void H264EncoderImpl::storage_task_thread()
 {
 	for ( ;; ) {
 		storage_task current;
@@ -1741,7 +1799,7 @@ static int deinit_va()
 }
 
 
-H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
+H264EncoderImpl::H264EncoderImpl(QSurface *surface, int width, int height, HTTPD *httpd)
 	: current_storage_frame(0), surface(surface), httpd(httpd)
 {
 	AVCodec *codec_audio = avcodec_find_encoder(AUDIO_OUTPUT_CODEC);
@@ -1775,7 +1833,7 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
 	memset(&pic_param, 0, sizeof(pic_param));
 	memset(&slice_param, 0, sizeof(slice_param));
 
-	storage_thread = thread(&H264Encoder::storage_task_thread, this);
+	storage_thread = thread(&H264EncoderImpl::storage_task_thread, this);
 
 	encode_thread = thread([this]{
 		//SDL_GL_MakeCurrent(window, context);
@@ -1790,7 +1848,7 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
 	});
 }
 
-H264Encoder::~H264Encoder()
+H264EncoderImpl::~H264EncoderImpl()
 {
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
@@ -1810,7 +1868,7 @@ H264Encoder::~H264Encoder()
 	deinit_va();
 }
 
-bool H264Encoder::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
+bool H264EncoderImpl::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 {
 	{
 		// Wait until this frame slot is done encoding.
@@ -1874,7 +1932,7 @@ bool H264Encoder::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 	return true;
 }
 
-void H264Encoder::add_audio(int64_t pts, vector<float> audio)
+void H264EncoderImpl::add_audio(int64_t pts, vector<float> audio)
 {
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
@@ -1883,7 +1941,7 @@ void H264Encoder::add_audio(int64_t pts, vector<float> audio)
 	frame_queue_nonempty.notify_all();
 }
 
-void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const vector<RefCountedFrame> &input_frames)
+void H264EncoderImpl::end_frame(RefCountedGLsync fence, int64_t pts, const vector<RefCountedFrame> &input_frames)
 {
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
@@ -1893,7 +1951,7 @@ void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const vector<Re
 	frame_queue_nonempty.notify_all();
 }
 
-void H264Encoder::encode_thread_func()
+void H264EncoderImpl::encode_thread_func()
 {
 	int64_t last_dts = -1;
 	int gop_start_display_frame_num = 0;
@@ -1942,7 +2000,7 @@ void H264Encoder::encode_thread_func()
 	}
 }
 
-void H264Encoder::encode_remaining_frames_as_p(int encoding_frame_num, int gop_start_display_frame_num, int64_t last_dts)
+void H264EncoderImpl::encode_remaining_frames_as_p(int encoding_frame_num, int gop_start_display_frame_num, int64_t last_dts)
 {
 	if (pending_video_frames.empty()) {
 		return;
@@ -1959,8 +2017,8 @@ void H264Encoder::encode_remaining_frames_as_p(int encoding_frame_num, int gop_s
 	}
 }
 
-void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int encoding_frame_num, int display_frame_num, int gop_start_display_frame_num,
-                               int frame_type, int64_t pts, int64_t dts)
+void H264EncoderImpl::encode_frame(H264EncoderImpl::PendingFrame frame, int encoding_frame_num, int display_frame_num, int gop_start_display_frame_num,
+                                   int frame_type, int64_t pts, int64_t dts)
 {
 	// Wait for the GPU to be done with the frame.
 	glClientWaitSync(frame.fence.get(), 0, 0);
@@ -2010,3 +2068,27 @@ void H264Encoder::encode_frame(H264Encoder::PendingFrame frame, int encoding_fra
 
 	update_ReferenceFrames(frame_type);
 }
+
+// Proxy object.
+H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
+	: impl(new H264EncoderImpl(surface, width, height, httpd)) {}
+
+// Must be defined here because unique_ptr<> destructor needs to know the impl.
+H264Encoder::~H264Encoder() {}
+
+void H264Encoder::add_audio(int64_t pts, std::vector<float> audio)
+{
+	impl->add_audio(pts, audio);
+}
+
+bool H264Encoder::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
+{
+	return impl->begin_frame(y_tex, cbcr_tex);
+}
+
+void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const std::vector<RefCountedFrame> &input_frames)
+{
+	impl->end_frame(fence, pts, input_frames);
+}
+
+// Real class.
