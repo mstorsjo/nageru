@@ -261,7 +261,7 @@ function get_frame_rate(signal_num)
 	if nom % den == 0 then
 		return nom / den
 	else
-		return string.format("%.2f", num / den)
+		return string.format("%.2f", nom / den)
 	end
 end
 
