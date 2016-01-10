@@ -43,6 +43,7 @@ MainWindow::MainWindow()
 
 	// The menu.
 	connect(ui->cut_action, &QAction::triggered, this, &MainWindow::cut_triggered);
+	connect(ui->exit_action, &QAction::triggered, this, &MainWindow::exit_triggered);
 
 	// Hook up the transition buttons.
 	// TODO: Make them dynamic.
@@ -132,6 +133,11 @@ void MainWindow::mixer_shutting_down()
 void MainWindow::cut_triggered()
 {
 	global_mixer->schedule_cut();
+}
+
+void MainWindow::exit_triggered()
+{
+	close();
 }
 
 void MainWindow::cutoff_knob_changed(int value)

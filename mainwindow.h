@@ -33,6 +33,7 @@ public:
 
 public slots:
 	void cut_triggered();
+	void exit_triggered();
 	void transition_clicked(int transition_number);
 	void channel_clicked(int channel_number);
 	void wb_button_clicked(int channel_number);
