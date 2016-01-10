@@ -110,7 +110,7 @@ class H264EncoderImpl {
 public:
 	H264EncoderImpl(QSurface *surface, int width, int height, HTTPD *httpd);
 	~H264EncoderImpl();
-	void add_audio(int64_t pts, vector<float> audio);  // Needs to come before end_frame() of same pts.
+	void add_audio(int64_t pts, vector<float> audio);
 	bool begin_frame(GLuint *y_tex, GLuint *cbcr_tex);
 	void end_frame(RefCountedGLsync fence, int64_t pts, const vector<RefCountedFrame> &input_frames);
 	void shutdown();

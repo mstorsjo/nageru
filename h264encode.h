@@ -47,7 +47,7 @@ public:
         H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd);
         ~H264Encoder();
 
-	void add_audio(int64_t pts, std::vector<float> audio);  // Needs to come before end_frame() of same pts.
+	void add_audio(int64_t pts, std::vector<float> audio);
 	bool begin_frame(GLuint *y_tex, GLuint *cbcr_tex);
 	void end_frame(RefCountedGLsync fence, int64_t pts, const std::vector<RefCountedFrame> &input_frames);
 	void shutdown();  // Blocking.
