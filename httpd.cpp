@@ -24,20 +24,9 @@ struct MHD_Response;
 
 using namespace std;
 
-HTTPD::HTTPD(const char *output_filename, int width, int height)
+HTTPD::HTTPD(int width, int height)
 	: width(width), height(height)
 {
-	AVFormatContext *avctx = avformat_alloc_context();
-	avctx->oformat = av_guess_format(NULL, output_filename, NULL);
-	strcpy(avctx->filename, output_filename);
-	int ret = avio_open2(&avctx->pb, output_filename, AVIO_FLAG_WRITE, &avctx->interrupt_callback, NULL);
-	if (ret < 0) {
-		char tmp[AV_ERROR_MAX_STRING_SIZE];
-		fprintf(stderr, "%s: avio_open2() failed: %s\n", output_filename, av_make_error_string(tmp, sizeof(tmp), ret));
-		exit(1);
-	}
-
-	file_mux.reset(new Mux(avctx, width, height));
 }
 
 void HTTPD::start(int port)
@@ -53,7 +42,31 @@ void HTTPD::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 	for (Stream *stream : streams) {
 		stream->add_packet(pkt, pts, dts);
 	}
-	file_mux->add_packet(pkt, pts, dts);
+	if (file_mux) {
+		file_mux->add_packet(pkt, pts, dts);
+	}
+}
+
+void HTTPD::open_output_file(const string &filename)
+{
+	AVFormatContext *avctx = avformat_alloc_context();
+	avctx->oformat = av_guess_format(NULL, filename.c_str(), NULL);
+	strcpy(avctx->filename, filename.c_str());
+
+	string url = "file:" + filename;
+	int ret = avio_open2(&avctx->pb, url.c_str(), AVIO_FLAG_WRITE, &avctx->interrupt_callback, NULL);
+	if (ret < 0) {
+		char tmp[AV_ERROR_MAX_STRING_SIZE];
+		fprintf(stderr, "%s: avio_open2() failed: %s\n", filename.c_str(), av_make_error_string(tmp, sizeof(tmp), ret));
+		exit(1);
+	}
+
+	file_mux.reset(new Mux(avctx, width, height));
+}
+
+void HTTPD::close_output_file()
+{
+	file_mux.reset();
 }
 
 int HTTPD::answer_to_connection_thunk(void *cls, MHD_Connection *connection,

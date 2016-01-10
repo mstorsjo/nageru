@@ -169,6 +169,11 @@ public:
 		compressor_enabled = enabled;
 	}
 
+	void schedule_cut()
+	{
+		should_cut = true;
+	}
+
 	void reset_meters();
 
 private:
@@ -252,6 +257,7 @@ private:
 	std::thread mixer_thread;
 	std::thread audio_thread;
 	std::atomic<bool> should_quit{false};
+	std::atomic<bool> should_cut{false};
 
 	audio_level_callback_t audio_level_callback = nullptr;
 	std::mutex r128_mutex;

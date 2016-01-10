@@ -29,9 +29,13 @@ extern "C" {
 
 class HTTPD {
 public:
-	HTTPD(const char *output_filename, int width, int height);
+	HTTPD(int width, int height);
 	void start(int port);
 	void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts);
+
+	// You can only have one going at the same time.
+	void open_output_file(const std::string &filename);
+	void close_output_file();
 
 private:
 	static int answer_to_connection_thunk(void *cls, MHD_Connection *connection,

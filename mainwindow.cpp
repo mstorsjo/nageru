@@ -41,6 +41,9 @@ MainWindow::MainWindow()
 	ui->me_live->set_output(Mixer::OUTPUT_LIVE);
 	ui->me_preview->set_output(Mixer::OUTPUT_PREVIEW);
 
+	// The menu.
+	connect(ui->cut_action, &QAction::triggered, this, &MainWindow::cut_triggered);
+
 	// Hook up the transition buttons.
 	// TODO: Make them dynamic.
 	connect(ui->transition_btn1, &QPushButton::clicked, bind(&MainWindow::transition_clicked, this, 0));
@@ -124,6 +127,11 @@ void MainWindow::mixer_shutting_down()
 	for (Ui::Display *display : previews) {
 		display->display->clean_context();
 	}
+}
+
+void MainWindow::cut_triggered()
+{
+	global_mixer->schedule_cut();
 }
 
 void MainWindow::cutoff_knob_changed(int value)

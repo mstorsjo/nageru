@@ -32,6 +32,7 @@ public:
 	void mixer_shutting_down();
 
 public slots:
+	void cut_triggered();
 	void transition_clicked(int transition_number);
 	void channel_clicked(int channel_number);
 	void wb_button_clicked(int channel_number);

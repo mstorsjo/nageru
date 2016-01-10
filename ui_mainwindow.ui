@@ -721,6 +721,7 @@
     <property name="title">
      <string>Video</string>
     </property>
+    <addaction name="cut_action"/>
     <addaction name="exit_action"/>
    </widget>
    <addaction name="menuWhat"/>
@@ -728,6 +729,11 @@
   <action name="exit_action">
    <property name="text">
     <string>Exit</string>
+   </property>
+  </action>
+  <action name="cut_action">
+   <property name="text">
+    <string>Begin new video segment</string>
    </property>
   </action>
  </widget>

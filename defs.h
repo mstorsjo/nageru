@@ -14,7 +14,8 @@
 #define AUDIO_OUTPUT_SAMPLE_FMT AV_SAMPLE_FMT_S32
 #define AUDIO_OUTPUT_BIT_RATE 0
 
-#define LOCAL_DUMP_FILE_NAME "test.mov"
+#define LOCAL_DUMP_PREFIX "record-"
+#define LOCAL_DUMP_SUFFIX ".mov"
 #define STREAM_MUX_NAME "mov"
 #define MUX_OPTS {{ "movflags", "empty_moov+frag_keyframe+default_base_moof" }}
 

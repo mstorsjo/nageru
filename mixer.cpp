@@ -74,10 +74,27 @@ void insert_new_frame(RefCountedFrame frame, unsigned field_num, bool interlaced
 	}
 }
 
+string generate_local_dump_filename(int frame)
+{
+	time_t now = time(NULL);
+	tm now_tm;
+	localtime_r(&now, &now_tm);
+
+	char timestamp[256];
+	strftime(timestamp, sizeof(timestamp), "%F-%T%z", &now_tm);
+
+	// Use the frame number to disambiguate between two cuts starting
+	// on the same second.
+	char filename[256];
+	snprintf(filename, sizeof(filename), "%s%s-f%02d%s",
+		LOCAL_DUMP_PREFIX, timestamp, frame % 100, LOCAL_DUMP_SUFFIX);
+	return filename;
+}
+
 }  // namespace
 
 Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
-	: httpd(LOCAL_DUMP_FILE_NAME, WIDTH, HEIGHT),
+	: httpd(WIDTH, HEIGHT),
 	  num_cards(num_cards),
 	  mixer_surface(create_surface(format)),
 	  h264_encoder_surface(create_surface(format)),
@@ -85,6 +102,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	  limiter(OUTPUT_FREQUENCY),
 	  compressor(OUTPUT_FREQUENCY)
 {
+	httpd.open_output_file(generate_local_dump_filename(/*frame=*/0).c_str());
 	httpd.start(9095);
 
 	CHECK(init_movit(MOVIT_SHADER_DIR, MOVIT_DEBUG_OFF));
@@ -624,6 +642,15 @@ void Mixer::thread_func()
 				frame, stats_dropped_frames, elapsed, frame / elapsed,
 				1e3 * elapsed / frame);
 		//	chain->print_phase_timing();
+		}
+
+		if (should_cut.exchange(false)) {  // Test and clear.
+			string filename = generate_local_dump_filename(frame);
+			printf("Starting new recording: %s\n", filename.c_str());
+			h264_encoder->shutdown();
+			httpd.close_output_file();
+			httpd.open_output_file(filename.c_str());
+			h264_encoder.reset(new H264Encoder(h264_encoder_surface, WIDTH, HEIGHT, &httpd));
 		}
 
 #if 0
