@@ -30,8 +30,10 @@ HTTPD::HTTPD(const char *output_filename, int width, int height)
 	AVFormatContext *avctx = avformat_alloc_context();
 	avctx->oformat = av_guess_format(NULL, output_filename, NULL);
 	strcpy(avctx->filename, output_filename);
-	if (avio_open2(&avctx->pb, output_filename, AVIO_FLAG_WRITE, &avctx->interrupt_callback, NULL) < 0) {
-		fprintf(stderr, "%s: avio_open2() failed\n", output_filename);
+	int ret = avio_open2(&avctx->pb, output_filename, AVIO_FLAG_WRITE, &avctx->interrupt_callback, NULL);
+	if (ret < 0) {
+		char tmp[AV_ERROR_MAX_STRING_SIZE];
+		fprintf(stderr, "%s: avio_open2() failed: %s\n", output_filename, av_make_error_string(tmp, sizeof(tmp), ret));
 		exit(1);
 	}
 
