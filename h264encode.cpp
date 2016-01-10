@@ -110,20 +110,20 @@ class H264EncoderImpl {
 public:
 	H264EncoderImpl(QSurface *surface, int width, int height, HTTPD *httpd);
 	~H264EncoderImpl();
-	void add_audio(int64_t pts, std::vector<float> audio);  // Needs to come before end_frame() of same pts.
+	void add_audio(int64_t pts, vector<float> audio);  // Needs to come before end_frame() of same pts.
 	bool begin_frame(GLuint *y_tex, GLuint *cbcr_tex);
-	void end_frame(RefCountedGLsync fence, int64_t pts, const std::vector<RefCountedFrame> &input_frames);
+	void end_frame(RefCountedGLsync fence, int64_t pts, const vector<RefCountedFrame> &input_frames);
 
 private:
 	struct storage_task {
 		unsigned long long display_order;
 		int frame_type;
-		std::vector<float> audio;
+		vector<float> audio;
 		int64_t pts, dts;
 	};
 	struct PendingFrame {
 		RefCountedGLsync fence;
-		std::vector<RefCountedFrame> input_frames;
+		vector<RefCountedFrame> input_frames;
 		int64_t pts;
 	};
 
@@ -155,22 +155,22 @@ private:
 	void update_ReferenceFrames(int frame_type);
 	int update_RefPicList(int frame_type);
 
-	std::thread encode_thread, storage_thread;
+	thread encode_thread, storage_thread;
 
-	std::mutex storage_task_queue_mutex;
-	std::condition_variable storage_task_queue_changed;
+	mutex storage_task_queue_mutex;
+	condition_variable storage_task_queue_changed;
 	int srcsurface_status[SURFACE_NUM];  // protected by storage_task_queue_mutex
-	std::queue<storage_task> storage_task_queue;  // protected by storage_task_queue_mutex
+	queue<storage_task> storage_task_queue;  // protected by storage_task_queue_mutex
 	bool storage_thread_should_quit = false;  // protected by storage_task_queue_mutex
 
-	std::mutex frame_queue_mutex;
-	std::condition_variable frame_queue_nonempty;
+	mutex frame_queue_mutex;
+	condition_variable frame_queue_nonempty;
 	bool encode_thread_should_quit = false;  // under frame_queue_mutex
 
 	int current_storage_frame;
 
-	std::map<int, PendingFrame> pending_video_frames;  // under frame_queue_mutex
-	std::map<int64_t, std::vector<float>> pending_audio_frames;  // under frame_queue_mutex
+	map<int, PendingFrame> pending_video_frames;  // under frame_queue_mutex
+	map<int64_t, vector<float>> pending_audio_frames;  // under frame_queue_mutex
 	QSurface *surface;
 
 	AVCodecContext *context_audio;
@@ -1876,7 +1876,7 @@ H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
 // Must be defined here because unique_ptr<> destructor needs to know the impl.
 H264Encoder::~H264Encoder() {}
 
-void H264Encoder::add_audio(int64_t pts, std::vector<float> audio)
+void H264Encoder::add_audio(int64_t pts, vector<float> audio)
 {
 	impl->add_audio(pts, audio);
 }
@@ -1886,7 +1886,7 @@ bool H264Encoder::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 	return impl->begin_frame(y_tex, cbcr_tex);
 }
 
-void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const std::vector<RefCountedFrame> &input_frames)
+void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const vector<RefCountedFrame> &input_frames)
 {
 	impl->end_frame(fence, pts, input_frames);
 }
