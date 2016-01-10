@@ -22,6 +22,7 @@ extern "C" {
 #include <va/va_drmcommon.h>
 #include <va/va_enc_h264.h>
 #include <va/va_x11.h>
+#include <algorithm>
 #include <condition_variable>
 #include <cstdint>
 #include <map>
@@ -1067,68 +1068,15 @@ int H264EncoderImpl::setup_encode()
     return 0;
 }
 
-
-
-#define partition(ref, field, key, ascending)   \
-    while (i <= j) {                            \
-        if (ascending) {                        \
-            while (ref[i].field < key)          \
-                i++;                            \
-            while (ref[j].field > key)          \
-                j--;                            \
-        } else {                                \
-            while (ref[i].field > key)          \
-                i++;                            \
-            while (ref[j].field < key)          \
-                j--;                            \
-        }                                       \
-        if (i <= j) {                           \
-            tmp = ref[i];                       \
-            ref[i] = ref[j];                    \
-            ref[j] = tmp;                       \
-            i++;                                \
-            j--;                                \
-        }                                       \
-    }                                           \
-
-static void sort_one(VAPictureH264 ref[], int left, int right,
-                     int ascending, int frame_idx)
+// Given a list like 1 9 3 0 2 8 4 and a pivot element 3, will produce
+//
+//   2 1 0 [3] 4 8 9
+template<class T, class C>
+static void sort_two(T *begin, T *end, const T &pivot, const C &less_than)
 {
-    int i = left, j = right;
-    unsigned int key;
-    VAPictureH264 tmp;
-
-    if (frame_idx) {
-        key = ref[(left + right) / 2].frame_idx;
-        partition(ref, frame_idx, key, ascending);
-    } else {
-        key = ref[(left + right) / 2].TopFieldOrderCnt;
-        partition(ref, TopFieldOrderCnt, (signed int)key, ascending);
-    }
-    
-    /* recursion */
-    if (left < j)
-        sort_one(ref, left, j, ascending, frame_idx);
-    
-    if (i < right)
-        sort_one(ref, i, right, ascending, frame_idx);
-}
-
-static void sort_two(VAPictureH264 ref[], int left, int right, unsigned int key, unsigned int frame_idx,
-                     int partition_ascending, int list0_ascending, int list1_ascending)
-{
-    int i = left, j = right;
-    VAPictureH264 tmp;
-
-    if (frame_idx) {
-        partition(ref, frame_idx, key, partition_ascending);
-    } else {
-        partition(ref, TopFieldOrderCnt, (signed int)key, partition_ascending);
-    }
-    
-
-    sort_one(ref, left, i-1, list0_ascending, frame_idx);
-    sort_one(ref, j+1, right, list1_ascending, frame_idx);
+	T *middle = partition(begin, end, [&](const T &elem) { return less_than(elem, pivot); });
+	sort(begin, middle, [&](const T &a, const T &b) { return less_than(b, a); });
+	sort(middle, end, less_than);
 }
 
 void H264EncoderImpl::update_ReferenceFrames(int frame_type)
@@ -1154,21 +1102,25 @@ void H264EncoderImpl::update_ReferenceFrames(int frame_type)
 
 int H264EncoderImpl::update_RefPicList(int frame_type)
 {
-    unsigned int current_poc = CurrentCurrPic.TopFieldOrderCnt;
+    const auto descending_by_frame_idx = [](const VAPictureH264 &a, const VAPictureH264 &b) {
+        return a.frame_idx > b.frame_idx;
+    };
+    const auto ascending_by_top_field_order_cnt = [](const VAPictureH264 &a, const VAPictureH264 &b) {
+        return a.TopFieldOrderCnt < b.TopFieldOrderCnt;
+    };
+    const auto descending_by_top_field_order_cnt = [](const VAPictureH264 &a, const VAPictureH264 &b) {
+        return a.TopFieldOrderCnt > b.TopFieldOrderCnt;
+    };
     
     if (frame_type == FRAME_P) {
         memcpy(RefPicList0_P, ReferenceFrames, numShortTerm * sizeof(VAPictureH264));
-        sort_one(RefPicList0_P, 0, numShortTerm-1, 0, 1);
-    }
-    
-    if (frame_type == FRAME_B) {
+        sort(&RefPicList0_P[0], &RefPicList0_P[numShortTerm], descending_by_frame_idx);
+    } else if (frame_type == FRAME_B) {
         memcpy(RefPicList0_B, ReferenceFrames, numShortTerm * sizeof(VAPictureH264));
-        sort_two(RefPicList0_B, 0, numShortTerm-1, current_poc, 0,
-                 1, 0, 1);
+        sort_two(&RefPicList0_B[0], &RefPicList0_B[numShortTerm], CurrentCurrPic, ascending_by_top_field_order_cnt);
 
         memcpy(RefPicList1_B, ReferenceFrames, numShortTerm * sizeof(VAPictureH264));
-        sort_two(RefPicList1_B, 0, numShortTerm-1, current_poc, 0,
-                 0, 1, 0);
+        sort_two(&RefPicList1_B[0], &RefPicList1_B[numShortTerm], CurrentCurrPic, descending_by_top_field_order_cnt);
     }
     
     return 0;
