@@ -113,6 +113,7 @@ public:
 	void add_audio(int64_t pts, vector<float> audio);  // Needs to come before end_frame() of same pts.
 	bool begin_frame(GLuint *y_tex, GLuint *cbcr_tex);
 	void end_frame(RefCountedGLsync fence, int64_t pts, const vector<RefCountedFrame> &input_frames);
+	void shutdown();
 
 private:
 	struct storage_task {
@@ -154,6 +155,8 @@ private:
 	int release_encode();
 	void update_ReferenceFrames(int frame_type);
 	int update_RefPicList(int frame_type);
+
+	bool is_shutdown = false;
 
 	thread encode_thread, storage_thread;
 
@@ -228,7 +231,6 @@ private:
 	int frame_width_mbaligned;
 	int frame_height_mbaligned;
 };
-
 
 // Supposedly vaRenderPicture() is supposed to destroy the buffer implicitly,
 // but if we don't delete it here, we get leaks. The GStreamer implementation
@@ -1650,26 +1652,12 @@ H264EncoderImpl::H264EncoderImpl(QSurface *surface, int width, int height, HTTPD
 
 H264EncoderImpl::~H264EncoderImpl()
 {
-	{
-		unique_lock<mutex> lock(frame_queue_mutex);
-		encode_thread_should_quit = true;
-		frame_queue_nonempty.notify_all();
-	}
-	encode_thread.join();
-	{
-		unique_lock<mutex> lock(storage_task_queue_mutex);
-		storage_thread_should_quit = true;
-		frame_queue_nonempty.notify_all();
-		storage_task_queue_changed.notify_all();
-	}
-	storage_thread.join();
-
-	release_encode();
-	deinit_va();
+	shutdown();
 }
 
 bool H264EncoderImpl::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 {
+	assert(!is_shutdown);
 	{
 		// Wait until this frame slot is done encoding.
 		unique_lock<mutex> lock(storage_task_queue_mutex);
@@ -1734,6 +1722,7 @@ bool H264EncoderImpl::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 
 void H264EncoderImpl::add_audio(int64_t pts, vector<float> audio)
 {
+	assert(!is_shutdown);
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
 		pending_audio_frames[pts] = move(audio);
@@ -1743,12 +1732,38 @@ void H264EncoderImpl::add_audio(int64_t pts, vector<float> audio)
 
 void H264EncoderImpl::end_frame(RefCountedGLsync fence, int64_t pts, const vector<RefCountedFrame> &input_frames)
 {
+	assert(!is_shutdown);
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
 		pending_video_frames[current_storage_frame] = PendingFrame{ fence, input_frames, pts };
 		++current_storage_frame;
 	}
 	frame_queue_nonempty.notify_all();
+}
+
+void H264EncoderImpl::shutdown()
+{
+	if (is_shutdown) {
+		return;
+	}
+
+	{
+		unique_lock<mutex> lock(frame_queue_mutex);
+		encode_thread_should_quit = true;
+		frame_queue_nonempty.notify_all();
+	}
+	encode_thread.join();
+	{
+		unique_lock<mutex> lock(storage_task_queue_mutex);
+		storage_thread_should_quit = true;
+		frame_queue_nonempty.notify_all();
+		storage_task_queue_changed.notify_all();
+	}
+	storage_thread.join();
+
+	release_encode();
+	deinit_va();
+	is_shutdown = true;
 }
 
 void H264EncoderImpl::encode_thread_func()
@@ -1889,6 +1904,11 @@ bool H264Encoder::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const vector<RefCountedFrame> &input_frames)
 {
 	impl->end_frame(fence, pts, input_frames);
+}
+
+void H264Encoder::shutdown()
+{
+	impl->shutdown();
 }
 
 // Real class.
