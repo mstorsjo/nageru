@@ -77,57 +77,13 @@ class QSurface;
 #define PROFILE_IDC_HIGH        100
    
 #define BITSTREAM_ALLOCATE_STEPPING     4096
-
 #define SURFACE_NUM 16 /* 16 surfaces for source YUV */
-static  VADisplay va_dpy;
-static  VAProfile h264_profile = (VAProfile)~0;
-static  VAConfigAttrib config_attrib[VAConfigAttribTypeMax];
-static  int config_attrib_num = 0, enc_packed_header_idx;
 
-struct GLSurface {
-	VASurfaceID src_surface, ref_surface;
-	VABufferID coded_buf;
-
-	VAImage surface_image;
-	GLuint y_tex, cbcr_tex;
-	EGLImage y_egl_image, cbcr_egl_image;
-};
-GLSurface gl_surfaces[SURFACE_NUM];
-
-static  VAConfigID config_id;
-static  VAContextID context_id;
-static  VAEncSequenceParameterBufferH264 seq_param;
-static  VAEncPictureParameterBufferH264 pic_param;
-static  VAEncSliceParameterBufferH264 slice_param;
-static  VAPictureH264 CurrentCurrPic;
-static  VAPictureH264 ReferenceFrames[16], RefPicList0_P[32], RefPicList0_B[32], RefPicList1_B[32];
-
-static  unsigned int MaxFrameNum = (2<<16);
-static  unsigned int MaxPicOrderCntLsb = (2<<8);
-static  unsigned int Log2MaxFrameNum = 16;
-static  unsigned int Log2MaxPicOrderCntLsb = 8;
-
-static  unsigned int num_ref_frames = 2;
-static  unsigned int numShortTerm = 0;
-static  int constraint_set_flag = 0;
-static  int h264_packedheader = 0; /* support pack header? */
-static  int h264_maxref = (1<<16|1);
-static  int h264_entropy_mode = 1; /* cabac */
-
-static  int frame_width = 176;
-static  int frame_height = 144;
-static  int frame_width_mbaligned;
-static  int frame_height_mbaligned;
-static  unsigned int frame_bitrate = 0;
-static  double frame_size = 0;
-static  int initial_qp = 15;
-//static  int initial_qp = 28;
-static  int minimal_qp = 0;
-static  int intra_period = 30;
-static  int intra_idr_period = MAX_FPS;  // About a second; more at lower frame rates. Not ideal.
-static  int ip_period = 3;
-static  int rc_mode = -1;
-static  int rc_default_modes[] = {
+static constexpr unsigned int MaxFrameNum = (2<<16);
+static constexpr unsigned int MaxPicOrderCntLsb = (2<<8);
+static constexpr unsigned int Log2MaxFrameNum = 16;
+static constexpr unsigned int Log2MaxPicOrderCntLsb = 8;
+static constexpr int rc_default_modes[] = {  // Priority list of modes.
     VA_RC_VBR,
     VA_RC_CQP,
     VA_RC_VBR_CONSTRAINED,
@@ -135,10 +91,6 @@ static  int rc_default_modes[] = {
     VA_RC_VCM,
     VA_RC_NONE,
 };
-static  unsigned int current_frame_num = 0;
-
-static  int misc_priv_type = 0;
-static  int misc_priv_value = 0;
 
 /* thread to save coded data */
 #define SRC_SURFACE_FREE        0
@@ -181,6 +133,26 @@ private:
 	void storage_task_thread();
 	void storage_task_enqueue(storage_task task);
 	void save_codeddata(storage_task task);
+	int render_packedsequence();
+	int render_packedpicture();
+	void render_packedslice();
+	int render_sequence();
+	int render_picture(int frame_type, int display_frame_num, int gop_start_display_frame_num);
+	void sps_rbsp(bitstream *bs);
+	void pps_rbsp(bitstream *bs);
+	int build_packed_pic_buffer(unsigned char **header_buffer);
+	int render_slice(int encoding_frame_num, int display_frame_num, int gop_start_display_frame_num, int frame_type);
+	void slice_header(bitstream *bs);
+	int build_packed_seq_buffer(unsigned char **header_buffer);
+	int build_packed_slice_buffer(unsigned char **header_buffer);
+	int init_va();
+	int deinit_va();
+	VADisplay va_open_display(void);
+	void va_close_display(VADisplay va_dpy);
+	int setup_encode();
+	int release_encode();
+	void update_ReferenceFrames(int frame_type);
+	int update_RefPicList(int frame_type);
 
 	std::thread encode_thread, storage_thread;
 
@@ -194,8 +166,6 @@ private:
 	std::condition_variable frame_queue_nonempty;
 	bool encode_thread_should_quit = false;  // under frame_queue_mutex
 
-	//int frame_width, frame_height;
-	//int ;
 	int current_storage_frame;
 
 	std::map<int, PendingFrame> pending_video_frames;  // under frame_queue_mutex
@@ -204,6 +174,58 @@ private:
 
 	AVCodecContext *context_audio;
 	HTTPD *httpd;
+
+	Display *x11_display;
+	Window x11_window;
+
+	// Encoder parameters
+	VADisplay va_dpy;
+	VAProfile h264_profile = (VAProfile)~0;
+	VAConfigAttrib config_attrib[VAConfigAttribTypeMax];
+	int config_attrib_num = 0, enc_packed_header_idx;
+
+	struct GLSurface {
+		VASurfaceID src_surface, ref_surface;
+		VABufferID coded_buf;
+
+		VAImage surface_image;
+		GLuint y_tex, cbcr_tex;
+		EGLImage y_egl_image, cbcr_egl_image;
+	};
+	GLSurface gl_surfaces[SURFACE_NUM];
+
+	VAConfigID config_id;
+	VAContextID context_id;
+	VAEncSequenceParameterBufferH264 seq_param;
+	VAEncPictureParameterBufferH264 pic_param;
+	VAEncSliceParameterBufferH264 slice_param;
+	VAPictureH264 CurrentCurrPic;
+	VAPictureH264 ReferenceFrames[16], RefPicList0_P[32], RefPicList0_B[32], RefPicList1_B[32];
+
+	// Static quality settings.
+	static constexpr unsigned int frame_bitrate = 15000000 / 60;  // Doesn't really matter; only initial_qp does.
+	static constexpr unsigned int num_ref_frames = 2;
+	static constexpr int initial_qp = 15;
+	static constexpr int minimal_qp = 0;
+	static constexpr int intra_period = 30;
+	static constexpr int intra_idr_period = MAX_FPS;  // About a second; more at lower frame rates. Not ideal.
+
+	// Quality settings that are meant to be static, but might be overridden
+	// by the profile.
+	int constraint_set_flag = 0;
+	int h264_packedheader = 0; /* support pack header? */
+	int h264_maxref = (1<<16|1);
+	int h264_entropy_mode = 1; /* cabac */
+	int ip_period = 3;
+
+	int rc_mode = -1;
+	unsigned int current_frame_num = 0;
+	unsigned int numShortTerm = 0;
+
+	int frame_width;
+	int frame_height;
+	int frame_width_mbaligned;
+	int frame_height_mbaligned;
 };
 
 
@@ -216,7 +238,7 @@ static void render_picture_and_delete(VADisplay dpy, VAContextID context, VABuff
     CHECK_VASTATUS(va_status, "vaRenderPicture");
 
     for (int i = 0; i < num_buffers; ++i) {
-        va_status = vaDestroyBuffer(va_dpy, buffers[i]);
+        va_status = vaDestroyBuffer(dpy, buffers[i]);
         CHECK_VASTATUS(va_status, "vaDestroyBuffer");
     }
 }
@@ -347,7 +369,7 @@ static void nal_header(bitstream *bs, int nal_ref_idc, int nal_unit_type)
     bitstream_put_ui(bs, nal_unit_type, 5);
 }
 
-static void sps_rbsp(bitstream *bs)
+void H264EncoderImpl::sps_rbsp(bitstream *bs)
 {
     int profile_idc = PROFILE_IDC_BASELINE;
 
@@ -455,7 +477,7 @@ static void sps_rbsp(bitstream *bs)
 }
 
 
-static void pps_rbsp(bitstream *bs)
+void H264EncoderImpl::pps_rbsp(bitstream *bs)
 {
     bitstream_put_ue(bs, pic_param.pic_parameter_set_id);      /* pic_parameter_set_id */
     bitstream_put_ue(bs, pic_param.seq_parameter_set_id);      /* seq_parameter_set_id */
@@ -488,7 +510,7 @@ static void pps_rbsp(bitstream *bs)
     rbsp_trailing_bits(bs);
 }
 
-static void slice_header(bitstream *bs)
+void H264EncoderImpl::slice_header(bitstream *bs)
 {
     int first_mb_in_slice = slice_param.macroblock_address;
 
@@ -583,8 +605,7 @@ static void slice_header(bitstream *bs)
     }
 }
 
-static int
-build_packed_pic_buffer(unsigned char **header_buffer)
+int H264EncoderImpl::build_packed_pic_buffer(unsigned char **header_buffer)
 {
     bitstream bs;
 
@@ -598,8 +619,8 @@ build_packed_pic_buffer(unsigned char **header_buffer)
     return bs.bit_offset;
 }
 
-static int
-build_packed_seq_buffer(unsigned char **header_buffer)
+int
+H264EncoderImpl::build_packed_seq_buffer(unsigned char **header_buffer)
 {
     bitstream bs;
 
@@ -613,7 +634,7 @@ build_packed_seq_buffer(unsigned char **header_buffer)
     return bs.bit_offset;
 }
 
-static int build_packed_slice_buffer(unsigned char **header_buffer)
+int H264EncoderImpl::build_packed_slice_buffer(unsigned char **header_buffer)
 {
     bitstream bs;
     int is_idr = !!pic_param.pic_fields.bits.idr_pic_flag;
@@ -783,7 +804,7 @@ void encoding2display_order(
 }
 
 
-static const char *rc_to_string(int rcmode)
+static const char *rc_to_string(int rc_mode)
 {
     switch (rc_mode) {
     case VA_RC_NONE:
@@ -885,12 +906,6 @@ static int process_cmdline(int argc, char *argv[])
         case 13:
             calc_psnr = 1;
             break;
-        case 14:
-            misc_priv_type = strtol(optarg, NULL, 0);
-            break;
-        case 15:
-            misc_priv_value = strtol(optarg, NULL, 0);
-            break;
         case 17:
             h264_entropy_mode = atoi(optarg) ? 1: 0;
             break;
@@ -952,11 +967,7 @@ static int process_cmdline(int argc, char *argv[])
 }
 #endif
 
-static Display *x11_display;
-static Window   x11_window;
-
-VADisplay
-va_open_display(void)
+VADisplay H264EncoderImpl::va_open_display(void)
 {
     x11_display = XOpenDisplay(NULL);
     if (!x11_display) {
@@ -966,8 +977,7 @@ va_open_display(void)
     return vaGetDisplay(x11_display);
 }
 
-void
-va_close_display(VADisplay va_dpy)
+void H264EncoderImpl::va_close_display(VADisplay va_dpy)
 {
     if (!x11_display)
         return;
@@ -981,7 +991,7 @@ va_close_display(VADisplay va_dpy)
     x11_display = NULL;
 }
 
-static int init_va(void)
+int H264EncoderImpl::init_va()
 {
     VAProfile profile_list[]={VAProfileH264High, VAProfileH264Main, VAProfileH264Baseline, VAProfileH264ConstrainedBaseline};
     VAEntrypoint *entrypoints;
@@ -1131,7 +1141,7 @@ static int init_va(void)
     return 0;
 }
 
-static int setup_encode()
+int H264EncoderImpl::setup_encode()
 {
     VAStatus va_status;
     VASurfaceID *tmp_surfaceid;
@@ -1264,7 +1274,7 @@ static void sort_two(VAPictureH264 ref[], int left, int right, unsigned int key,
     sort_one(ref, j+1, right, list1_ascending, frame_idx);
 }
 
-static void update_ReferenceFrames(int frame_type)
+void H264EncoderImpl::update_ReferenceFrames(int frame_type)
 {
     int i;
     
@@ -1285,7 +1295,7 @@ static void update_ReferenceFrames(int frame_type)
 }
 
 
-static int update_RefPicList(int frame_type)
+int H264EncoderImpl::update_RefPicList(int frame_type)
 {
     unsigned int current_poc = CurrentCurrPic.TopFieldOrderCnt;
     
@@ -1308,11 +1318,11 @@ static int update_RefPicList(int frame_type)
 }
 
 
-static int render_sequence(void)
+int H264EncoderImpl::render_sequence()
 {
-    VABufferID seq_param_buf, rc_param_buf, misc_param_tmpbuf, render_id[2];
+    VABufferID seq_param_buf, rc_param_buf, render_id[2];
     VAStatus va_status;
-    VAEncMiscParameterBuffer *misc_param, *misc_param_tmp;
+    VAEncMiscParameterBuffer *misc_param;
     VAEncMiscParameterRateControl *misc_rate_ctrl;
     
     seq_param.level_idc = 41 /*SH_LEVEL_3*/;
@@ -1370,20 +1380,6 @@ static int render_sequence(void)
     render_id[1] = rc_param_buf;
     
     render_picture_and_delete(va_dpy, context_id, &render_id[0], 2);
-
-    if (misc_priv_type != 0) {
-        va_status = vaCreateBuffer(va_dpy, context_id,
-                                   VAEncMiscParameterBufferType,
-                                   sizeof(VAEncMiscParameterBuffer),
-                                   1, NULL, &misc_param_tmpbuf);
-        CHECK_VASTATUS(va_status, "vaCreateBuffer");
-        vaMapBuffer(va_dpy, misc_param_tmpbuf, (void **)&misc_param_tmp);
-        misc_param_tmp->type = (VAEncMiscParameterType)misc_priv_type;
-        misc_param_tmp->data[0] = misc_priv_value;
-        vaUnmapBuffer(va_dpy, misc_param_tmpbuf);
-    
-        render_picture_and_delete(va_dpy, context_id, &misc_param_tmpbuf, 1);
-    }
     
     return 0;
 }
@@ -1420,7 +1416,7 @@ static int calc_poc(int pic_order_cnt_lsb, int frame_type)
     return TopFieldOrderCnt;
 }
 
-static int render_picture(int frame_type, int display_frame_num, int gop_start_display_frame_num)
+int H264EncoderImpl::render_picture(int frame_type, int display_frame_num, int gop_start_display_frame_num)
 {
     VABufferID pic_param_buf;
     VAStatus va_status;
@@ -1457,7 +1453,7 @@ static int render_picture(int frame_type, int display_frame_num, int gop_start_d
     return 0;
 }
 
-static int render_packedsequence(void)
+int H264EncoderImpl::render_packedsequence()
 {
     VAEncPackedHeaderParameterBuffer packedheader_param_buffer;
     VABufferID packedseq_para_bufid, packedseq_data_bufid, render_id[2];
@@ -1495,7 +1491,7 @@ static int render_packedsequence(void)
 }
 
 
-static int render_packedpicture(void)
+int H264EncoderImpl::render_packedpicture()
 {
     VAEncPackedHeaderParameterBuffer packedheader_param_buffer;
     VABufferID packedpic_para_bufid, packedpic_data_bufid, render_id[2];
@@ -1531,7 +1527,7 @@ static int render_packedpicture(void)
     return 0;
 }
 
-static void render_packedslice()
+void H264EncoderImpl::render_packedslice()
 {
     VAEncPackedHeaderParameterBuffer packedheader_param_buffer;
     VABufferID packedslice_para_bufid, packedslice_data_bufid, render_id[2];
@@ -1565,7 +1561,7 @@ static void render_packedslice()
     free(packedslice_buffer);
 }
 
-static int render_slice(int encoding_frame_num, int display_frame_num, int gop_start_display_frame_num, int frame_type)
+int H264EncoderImpl::render_slice(int encoding_frame_num, int display_frame_num, int gop_start_display_frame_num, int frame_type)
 {
     VABufferID slice_param_buf;
     VAStatus va_status;
@@ -1630,7 +1626,6 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 {    
     VACodedBufferSegment *buf_list = NULL;
     VAStatus va_status;
-    unsigned int coded_size = 0;
 
     string data;
 
@@ -1641,8 +1636,6 @@ void H264EncoderImpl::save_codeddata(storage_task task)
     while (buf_list != NULL) {
         data.append(reinterpret_cast<const char *>(buf_list->buf), buf_list->size);
         buf_list = (VACodedBufferSegment *) buf_list->next;
-
-        frame_size += coded_size;
     }
     vaUnmapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf);
 
@@ -1731,7 +1724,6 @@ void H264EncoderImpl::save_codeddata(storage_task task)
             break;
     }
     printf("%08lld", encode_order);
-    printf("(%06d bytes coded)", coded_size);
 #endif
 }
 
@@ -1773,7 +1765,7 @@ void H264EncoderImpl::storage_task_thread()
 	}
 }
 
-static int release_encode()
+int H264EncoderImpl::release_encode()
 {
     int i;
     
@@ -1789,7 +1781,7 @@ static int release_encode()
     return 0;
 }
 
-static int deinit_va()
+int H264EncoderImpl::deinit_va()
 { 
     vaTerminate(va_dpy);
 
@@ -1819,7 +1811,6 @@ H264EncoderImpl::H264EncoderImpl(QSurface *surface, int width, int height, HTTPD
 	frame_height = height;
 	frame_width_mbaligned = (frame_width + 15) & (~15);
 	frame_height_mbaligned = (frame_height + 15) & (~15);
-        frame_bitrate = 15000000;  // / 60;
 
 	//print_input();
 
