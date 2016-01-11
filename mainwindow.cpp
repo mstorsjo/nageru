@@ -109,6 +109,10 @@ void MainWindow::mixer_created(Mixer *mixer)
 	connect(ui->locut_cutoff_knob, &QDial::valueChanged, this, &MainWindow::cutoff_knob_changed);
 	cutoff_knob_changed(ui->locut_cutoff_knob->value());
 
+	connect(ui->gainstaging_auto_checkbox, &QCheckBox::stateChanged, [this](int state){
+		global_mixer->set_gainstaging_auto(state == Qt::Checked);
+	});
+
 	connect(ui->limiter_threshold_knob, &QDial::valueChanged, this, &MainWindow::limiter_threshold_knob_changed);
 	connect(ui->compressor_threshold_knob, &QDial::valueChanged, this, &MainWindow::compressor_threshold_knob_changed);
 	connect(ui->limiter_enabled, &QCheckBox::stateChanged, [this](int state){

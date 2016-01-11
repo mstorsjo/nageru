@@ -169,6 +169,11 @@ public:
 		compressor_enabled = enabled;
 	}
 
+	void set_gainstaging_auto(bool enabled)
+	{
+		level_compressor = enabled;
+	}
+
 	void schedule_cut()
 	{
 		should_cut = true;
@@ -272,6 +277,7 @@ private:
 	// First compressor; takes us up to about -12 dBFS.
 	StereoCompressor level_compressor;
 	float last_gain_staging_db = 0.0f;
+	std::atomic<bool> level_compressor_enabled{true};
 
 	static constexpr float ref_level_dbfs = -14.0f;
 
