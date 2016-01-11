@@ -715,7 +715,6 @@ void Mixer::process_audio_one_frame(int64_t frame_pts_int, int num_samples)
 	// then apply a makeup gain to get it to -14 dBFS. -14 dBFS is, of course,
 	// entirely arbitrary, but from practical tests with speech, it seems to
 	// put ut around -23 LUFS, so it's a reasonable starting point for later use.
-	float ref_level_dbfs = -14.0f;
 	{
 		float threshold = 0.01f;   // -40 dBFS.
 		float ratio = 20.0f;
