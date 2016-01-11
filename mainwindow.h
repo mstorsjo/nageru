@@ -39,6 +39,7 @@ public slots:
 	void wb_button_clicked(int channel_number);
 	void set_transition_names(std::vector<std::string> transition_names);
 	void update_channel_name(Mixer::Output output);
+	void gain_staging_knob_changed(int value);
 	void cutoff_knob_changed(int value);
 	void limiter_threshold_knob_changed(int value);
 	void compressor_threshold_knob_changed(int value);

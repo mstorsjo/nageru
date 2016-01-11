@@ -109,8 +109,10 @@ void MainWindow::mixer_created(Mixer *mixer)
 	connect(ui->locut_cutoff_knob, &QDial::valueChanged, this, &MainWindow::cutoff_knob_changed);
 	cutoff_knob_changed(ui->locut_cutoff_knob->value());
 
+	// Not QDial::valueChanged, as we call setValue() all the time.
+	connect(ui->gainstaging_knob, &QAbstractSlider::sliderMoved, this, &MainWindow::gain_staging_knob_changed);
 	connect(ui->gainstaging_auto_checkbox, &QCheckBox::stateChanged, [this](int state){
-		global_mixer->set_gainstaging_auto(state == Qt::Checked);
+		global_mixer->set_gain_staging_auto(state == Qt::Checked);
 	});
 
 	connect(ui->limiter_threshold_knob, &QDial::valueChanged, this, &MainWindow::limiter_threshold_knob_changed);
@@ -142,6 +144,16 @@ void MainWindow::cut_triggered()
 void MainWindow::exit_triggered()
 {
 	close();
+}
+
+void MainWindow::gain_staging_knob_changed(int value)
+{
+	ui->gainstaging_auto_checkbox->setCheckState(Qt::Unchecked);
+
+	float gain_db = value * 0.1f;
+	global_mixer->set_gain_staging_db(gain_db);
+
+	// The label will be updated by the audio level callback.
 }
 
 void MainWindow::cutoff_knob_changed(int value)
@@ -182,7 +194,7 @@ void MainWindow::reset_meters_button_clicked()
 	ui->peak_display->setStyleSheet("");
 }
 
-void MainWindow::audio_level_callback(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float auto_gain_staging_db)
+void MainWindow::audio_level_callback(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float gain_staging_db)
 {
 	timeval now;
 	gettimeofday(&now, nullptr);
@@ -209,8 +221,8 @@ void MainWindow::audio_level_callback(float level_lufs, float peak_db, float glo
 			ui->peak_display->setStyleSheet("");
 		}
 
-		ui->gainstaging_knob->setValue(lrintf(auto_gain_staging_db * 10.0f));
-		snprintf(buf, sizeof(buf), "%+.1f dB", auto_gain_staging_db);
+		ui->gainstaging_knob->setValue(lrintf(gain_staging_db * 10.0f));
+		snprintf(buf, sizeof(buf), "%+.1f dB", gain_staging_db);
 		ui->gainstaging_db_display->setText(buf);
 	});
 }

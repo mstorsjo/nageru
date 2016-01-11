@@ -526,7 +526,7 @@ void Mixer::thread_func()
 		}
 
 		if (audio_level_callback != nullptr) {
-			unique_lock<mutex> lock(r128_mutex);
+			unique_lock<mutex> lock(compressor_mutex);
 			double loudness_s = r128.loudness_S();
 			double loudness_i = r128.integrated();
 			double loudness_range_low = r128.range_min();
@@ -534,7 +534,7 @@ void Mixer::thread_func()
 
 			audio_level_callback(loudness_s, 20.0 * log10(peak),
 			                     loudness_i, loudness_range_low, loudness_range_high,
-			                     last_gain_staging_db);
+			                     gain_staging_db);
 		}
 
 		for (unsigned card_index = 1; card_index < num_cards; ++card_index) {
@@ -715,14 +715,23 @@ void Mixer::process_audio_one_frame(int64_t frame_pts_int, int num_samples)
 	// then apply a makeup gain to get it to -14 dBFS. -14 dBFS is, of course,
 	// entirely arbitrary, but from practical tests with speech, it seems to
 	// put ut around -23 LUFS, so it's a reasonable starting point for later use.
-	if (level_compressor_enabled) {
-		float threshold = 0.01f;   // -40 dBFS.
-		float ratio = 20.0f;
-		float attack_time = 0.5f;
-		float release_time = 20.0f;
-		float makeup_gain = pow(10.0f, (ref_level_dbfs - (-40.0f)) / 20.0f);  // +26 dB.
-		level_compressor.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
-		last_gain_staging_db = 20.0 * log10(level_compressor.get_attenuation() * makeup_gain);
+	{
+		unique_lock<mutex> lock(level_compressor_mutex);
+		if (level_compressor_enabled) {
+			float threshold = 0.01f;   // -40 dBFS.
+			float ratio = 20.0f;
+			float attack_time = 0.5f;
+			float release_time = 20.0f;
+			float makeup_gain = pow(10.0f, (ref_level_dbfs - (-40.0f)) / 20.0f);  // +26 dB.
+			level_compressor.process(samples_out.data(), samples_out.size() / 2, threshold, ratio, attack_time, release_time, makeup_gain);
+			gain_staging_db = 20.0 * log10(level_compressor.get_attenuation() * makeup_gain);
+		} else {
+			// Just apply the gain we already had.
+			float g = pow(10.0f, gain_staging_db / 20.0f);
+			for (size_t i = 0; i < samples_out.size(); ++i) {
+				samples_out[i] *= g;
+			}
+		}
 	}
 
 #if 0
@@ -778,7 +787,7 @@ void Mixer::process_audio_one_frame(int64_t frame_pts_int, int num_samples)
 	deinterleave_samples(samples_out, &left, &right);
 	float *ptrs[] = { left.data(), right.data() };
 	{
-		unique_lock<mutex> lock(r128_mutex);
+		unique_lock<mutex> lock(compressor_mutex);
 		r128.process(left.size(), ptrs);
 	}
 

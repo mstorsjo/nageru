@@ -103,7 +103,7 @@ public:
 
 	typedef std::function<void(float level_lufs, float peak_db,
 	                           float global_level_lufs, float range_low_lufs, float range_high_lufs,
-	                           float auto_gain_staging_db)> audio_level_callback_t;
+	                           float gain_staging_db)> audio_level_callback_t;
 	void set_audio_level_callback(audio_level_callback_t callback)
 	{
 		audio_level_callback = callback;
@@ -169,9 +169,17 @@ public:
 		compressor_enabled = enabled;
 	}
 
-	void set_gainstaging_auto(bool enabled)
+	void set_gain_staging_db(float gain_db)
 	{
-		level_compressor = enabled;
+		std::unique_lock<std::mutex> lock(level_compressor_mutex);
+		level_compressor_enabled = false;
+		gain_staging_db = gain_db;
+	}
+
+	void set_gain_staging_auto(bool enabled)
+	{
+		std::unique_lock<std::mutex> lock(level_compressor_mutex);
+		level_compressor_enabled = enabled;
 	}
 
 	void schedule_cut()
@@ -265,8 +273,8 @@ private:
 	std::atomic<bool> should_cut{false};
 
 	audio_level_callback_t audio_level_callback = nullptr;
-	std::mutex r128_mutex;
-	Ebu_r128_proc r128;  // Under r128_mutex.
+	std::mutex compressor_mutex;
+	Ebu_r128_proc r128;  // Under compressor_mutex.
 
 	Resampler peak_resampler;
 	std::atomic<float> peak{0.0f};
@@ -275,9 +283,10 @@ private:
 	std::atomic<float> locut_cutoff_hz;
 
 	// First compressor; takes us up to about -12 dBFS.
-	StereoCompressor level_compressor;
-	float last_gain_staging_db = 0.0f;
-	std::atomic<bool> level_compressor_enabled{true};
+	std::mutex level_compressor_mutex;
+	StereoCompressor level_compressor;  // Under compressor_mutex. Used to set/override gain_staging_db if <level_compressor_enabled>.
+	float gain_staging_db = 0.0f;  // Under compressor_mutex.
+	bool level_compressor_enabled = true;  // Under compressor_mutex.
 
 	static constexpr float ref_level_dbfs = -14.0f;
 
