@@ -1,5 +1,6 @@
-// Parts of the code is adapted from Adriaensen's project Zita-ajbridge,
-// although it has been heavily reworked for this use case. Original copyright follows:
+// Parts of the code is adapted from Adriaensen's project Zita-ajbridge
+// (as of November 2015), although it has been heavily reworked for this use
+// case. Original copyright follows:
 //
 //  Copyright (C) 2012-2015 Fons Adriaensen <fons@linuxaudio.org>
 //    
