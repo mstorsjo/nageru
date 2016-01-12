@@ -15,6 +15,7 @@
 #include <QSize>
 #include <QString>
 
+#include "aboutdialog.h"
 #include "glwidget.h"
 #include "lrameter.h"
 #include "mixer.h"
@@ -41,9 +42,10 @@ MainWindow::MainWindow()
 	ui->me_live->set_output(Mixer::OUTPUT_LIVE);
 	ui->me_preview->set_output(Mixer::OUTPUT_PREVIEW);
 
-	// The menu.
+	// The menus.
 	connect(ui->cut_action, &QAction::triggered, this, &MainWindow::cut_triggered);
 	connect(ui->exit_action, &QAction::triggered, this, &MainWindow::exit_triggered);
+	connect(ui->about_action, &QAction::triggered, this, &MainWindow::about_triggered),
 
 	// Hook up the transition buttons.
 	// TODO: Make them dynamic.
@@ -148,6 +150,11 @@ void MainWindow::cut_triggered()
 void MainWindow::exit_triggered()
 {
 	close();
+}
+
+void MainWindow::about_triggered()
+{
+	AboutDialog().exec();
 }
 
 void MainWindow::gain_staging_knob_changed(int value)

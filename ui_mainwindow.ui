@@ -791,7 +791,14 @@
     <addaction name="cut_action"/>
     <addaction name="exit_action"/>
    </widget>
+   <widget class="QMenu" name="menu_Help">
+    <property name="title">
+     <string>&amp;Help</string>
+    </property>
+    <addaction name="about_action"/>
+   </widget>
    <addaction name="menuWhat"/>
+   <addaction name="menu_Help"/>
   </widget>
   <action name="exit_action">
    <property name="text">
@@ -801,6 +808,11 @@
   <action name="cut_action">
    <property name="text">
     <string>&amp;Begin new video segment</string>
+   </property>
+  </action>
+  <action name="about_action">
+   <property name="text">
+    <string>&amp;About Nageru…</string>
    </property>
   </action>
  </widget>
