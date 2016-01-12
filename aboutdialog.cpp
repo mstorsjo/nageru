@@ -8,5 +8,7 @@ AboutDialog::AboutDialog()
 	: ui(new Ui::AboutDialog)
 {
 	ui->setupUi(this);
+
+	connect(ui->button_box, &QDialogButtonBox::accepted, [this]{ this->close(); });
 }
 
