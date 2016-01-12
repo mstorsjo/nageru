@@ -1,0 +1,212 @@
+From 66c3edf744415f117c3be95ae83f0bab6e128830 Mon Sep 17 00:00:00 2001
+From: "Steinar H. Gunderson" <sesse@google.com>
+Date: Wed, 9 Dec 2015 10:03:15 +0100
+Subject: [PATCH] Add support for persistent device memory.
+
+Add a function to allocate memory belonging to a specific device,
+so that the operating system can DMA straight into it for zerocopy,
+and also avoid some clearing. Also, this allows up-front memory
+allocation in the kernel at program startup; memory allocation is
+otherwise done per-transfer, which can fail in a system where memory has become
+fragmented over time).
+
+This mirrors new functionality going into Linux' USB stack (recently
+reviewed and acked upstream); only Linux is supported as a backend
+currently.
+---
+ libusb/core.c           | 29 +++++++++++++++++++++++++++++
+ libusb/libusb-1.0.def   |  4 ++++
+ libusb/libusb.h         | 30 +++++++++++++++++++++++++++++-
+ libusb/libusbi.h        | 10 ++++++++++
+ libusb/os/linux_usbfs.c | 30 ++++++++++++++++++++++++++++++
+ 5 files changed, 102 insertions(+), 1 deletion(-)
+
+diff --git a/libusb/core.c b/libusb/core.c
+index 9c617fb..3eba85a 100644
+--- a/libusb/core.c
++++ b/libusb/core.c
+@@ -351,6 +351,8 @@ if (cfg != desired)
+   * - libusb_control_transfer_get_setup()
+   * - libusb_cpu_to_le16()
+   * - libusb_detach_kernel_driver()
++  * - libusb_dev_mem_alloc()
++  * - libusb_dev_mem_free()
+   * - libusb_error_name()
+   * - libusb_event_handler_active()
+   * - libusb_event_handling_ok()
+@@ -1805,6 +1807,33 @@ int API_EXPORTED libusb_free_streams(libusb_device_handle *dev,
+ 		return LIBUSB_ERROR_NOT_SUPPORTED;
+ }
+ 
++API_EXPORTED unsigned char *libusb_dev_mem_alloc(libusb_device_handle *dev,
++        int length)
++{
++	if (!dev->dev->attached)
++		return NULL;
++
++	if (usbi_backend->dev_mem_alloc)
++		return usbi_backend->dev_mem_alloc(dev, length);
++	else
++		return NULL;
++}
++
++/* Note: No current backends actually use the "dev" parameter; it is only there
++ * for any future, less lenient OSes.
++ */
++int API_EXPORTED libusb_dev_mem_free(libusb_device_handle *dev,
++	unsigned char *buffer, int len)
++{
++	if (!dev->dev->attached)
++		return LIBUSB_ERROR_NO_DEVICE;
++
++	if (usbi_backend->dev_mem_free)
++		return usbi_backend->dev_mem_free(dev, buffer, len);
++	else
++		return LIBUSB_ERROR_NOT_SUPPORTED;
++}
++
+ /** \ingroup dev
+  * Determine if a kernel driver is active on an interface. If a kernel driver
+  * is active, you cannot claim the interface, and libusb will be unable to
+diff --git a/libusb/libusb-1.0.def b/libusb/libusb-1.0.def
+index 538ad49..e040f4b 100644
+--- a/libusb/libusb-1.0.def
++++ b/libusb/libusb-1.0.def
+@@ -20,6 +20,10 @@ EXPORTS
+   libusb_control_transfer@32 = libusb_control_transfer
+   libusb_detach_kernel_driver
+   libusb_detach_kernel_driver@8 = libusb_detach_kernel_driver
++  libusb_dev_mem_alloc
++  libusb_dev_mem_alloc@8 = libusb_dev_mem_alloc
++  libusb_dev_mem_free
++  libusb_dev_mem_free@12 = libusb_dev_mem_free
+   libusb_error_name
+   libusb_error_name@4 = libusb_error_name
+   libusb_event_handler_active
+diff --git a/libusb/libusb.h b/libusb/libusb.h
+index 513945f..5a84f5b 100644
+--- a/libusb/libusb.h
++++ b/libusb/libusb.h
+@@ -141,7 +141,7 @@ typedef unsigned __int32  uint32_t;
+  * Internally, LIBUSB_API_VERSION is defined as follows:
+  * (libusb major << 24) | (libusb minor << 16) | (16 bit incremental)
+  */
+-#define LIBUSB_API_VERSION 0x01000104
++#define LIBUSB_API_VERSION 0x01000105
+ 
+ /* The following is kept for compatibility, but will be deprecated in the future */
+ #define LIBUSBX_API_VERSION LIBUSB_API_VERSION
+@@ -1749,6 +1749,34 @@ int LIBUSB_CALL libusb_interrupt_transfer(libusb_device_handle *dev_handle,
+ 	unsigned char endpoint, unsigned char *data, int length,
+ 	int *actual_length, unsigned int timeout);
+ 
++/** \ingroup asyncio
++ * Attempts to allocate a block of persistent DMA memory suitable for transfers
++ * against the given device. If successful, will return a block of memory
++ * that is suitable for use as "buffer" in \ref libusb_transfer against this
++ * device. Using this memory instead of regular memory means that the host
++ * controller can use DMA directly into the buffer to increase performance, and
++ * also that transfers can no longer fail due to kernel memory fragmentation.
++ *
++ * Note that this means you should not modify this memory (or even data on
++ * the same cache lines) when a transfer is in progress, although it is legal
++ * to have several transfers going on within the same memory block.
++ *
++ * Will return NULL on failure. Many systems do not support such zerocopy
++ * and will always return NULL. Memory allocated with this function must be
++ * freed with \ref libusb_dev_mem_free.
++ *
++ * Since version 1.0.21, \ref LIBUSB_API_VERSION >= 0x01000105
++ *
++ * \param dev a device handle
++ * \param length size of desired data buffer
++ * \returns a pointer to the newly allocated memory, or NULL on failure
++ */
++unsigned char *LIBUSB_CALL libusb_dev_mem_alloc(libusb_device_handle *dev,
++	int length);
++
++int LIBUSB_CALL libusb_dev_mem_free(libusb_device_handle *dev,
++	unsigned char *buffer, int length);
++
+ /** \ingroup desc
+  * Retrieve a descriptor from the default control pipe.
+  * This is a convenience function which formulates the appropriate control
+diff --git a/libusb/libusbi.h b/libusb/libusbi.h
+index f1afd99..66bdf46 100644
+--- a/libusb/libusbi.h
++++ b/libusb/libusbi.h
+@@ -913,6 +913,16 @@ struct usbi_os_backend {
+ 	int (*free_streams)(struct libusb_device_handle *handle,
+ 		unsigned char *endpoints, int num_endpoints);
+ 
++	/* Allocate persistent DMA memory for the given device, suitable for
++	 * zerocopy. May return NULL on failure. Optional to implement.
++	 */
++	unsigned char *(*dev_mem_alloc)(struct libusb_device_handle *handle,
++		size_t len);
++
++	/* Free memory allocated by dev_mem_alloc. */
++	int (*dev_mem_free)(struct libusb_device_handle *handle,
++		unsigned char *buffer, size_t len);
++
+ 	/* Determine if a kernel driver is active on an interface. Optional.
+ 	 *
+ 	 * The presence of a kernel driver on an interface indicates that any
+diff --git a/libusb/os/linux_usbfs.c b/libusb/os/linux_usbfs.c
+index a63852f..a167084 100644
+--- a/libusb/os/linux_usbfs.c
++++ b/libusb/os/linux_usbfs.c
+@@ -33,6 +33,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <sys/ioctl.h>
++#include <sys/mman.h>
+ #include <sys/stat.h>
+ #include <sys/types.h>
+ #include <sys/utsname.h>
+@@ -1561,6 +1562,32 @@ static int op_free_streams(struct libusb_device_handle *handle,
+ 				endpoints, num_endpoints);
+ }
+ 
++static unsigned char *op_dev_mem_alloc(struct libusb_device_handle *handle,
++	size_t len)
++{
++	struct linux_device_handle_priv *hpriv = _device_handle_priv(handle);
++	unsigned char *buffer = (unsigned char *)mmap(NULL, len,
++		PROT_READ | PROT_WRITE, MAP_SHARED, hpriv->fd, 0);
++	if (buffer == MAP_FAILED) {
++		usbi_err(HANDLE_CTX(handle), "alloc dev mem failed errno %d",
++			errno);
++		return NULL;
++	}
++	return buffer;
++}
++
++static int op_dev_mem_free(struct libusb_device_handle *handle,
++	unsigned char *buffer, size_t len)
++{
++	if (munmap(buffer, len) != 0) {
++		usbi_err(HANDLE_CTX(handle), "free dev mem failed errno %d",
++			errno);
++		return LIBUSB_ERROR_OTHER;
++	} else {
++		return LIBUSB_SUCCESS;
++	}
++}
++
+ static int op_kernel_driver_active(struct libusb_device_handle *handle,
+ 	int interface)
+ {
+@@ -2682,6 +2709,9 @@ const struct usbi_os_backend linux_usbfs_backend = {
+ 	.alloc_streams = op_alloc_streams,
+ 	.free_streams = op_free_streams,
+ 
++	.dev_mem_alloc = op_dev_mem_alloc,
++	.dev_mem_free = op_dev_mem_free,
++
+ 	.kernel_driver_active = op_kernel_driver_active,
+ 	.detach_kernel_driver = op_detach_kernel_driver,
+ 	.attach_kernel_driver = op_attach_kernel_driver,
+-- 
+2.6.4
+

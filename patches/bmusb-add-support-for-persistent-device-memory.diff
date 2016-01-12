@@ -1,0 +1,30 @@
+diff --git a/bmusb.cpp b/bmusb.cpp
+index 2ea6407..16ec380 100644
+--- a/bmusb.cpp
++++ b/bmusb.cpp
+@@ -1027,7 +1027,7 @@ void BMUSBCapture::configure_card()
+ 	// set up isochronous transfers for audio and video
+ 	for (int e = 3; e <= 4; ++e) {
+ 		//int num_transfers = (e == 3) ? 6 : 6;
+-		int num_transfers = 10;
++		int num_transfers = 6;
+ 		for (int i = 0; i < num_transfers; ++i) {
+ 			size_t buf_size;
+ 			int num_iso_pack, size;
+@@ -1043,8 +1043,14 @@ void BMUSBCapture::configure_card()
+ 				num_iso_pack = 80;
+ 				buf_size = num_iso_pack * size;
+ 			}
+-			assert(size_t(num_iso_pack * size) <= buf_size);
+-			uint8_t *buf = new uint8_t[buf_size];
++			int num_bytes = num_iso_pack * size;
++			assert(size_t(num_bytes) <= buf_size);
++			uint8_t *buf = libusb_dev_mem_alloc(devh, num_bytes);
++			if (buf == nullptr) {
++				fprintf(stderr, "Failed to allocate persistent DMA memory (probably missing kernel patch).\n");
++				fprintf(stderr, "Will go slower, and likely fail due to memory fragmentation after a few hours.\n");
++				buf = new uint8_t[num_bytes];
++			}
+ 
+ 			xfr = libusb_alloc_transfer(num_iso_pack);
+ 			if (!xfr) {

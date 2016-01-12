@@ -56,6 +56,13 @@ Nageru is in alpha stage. It currently needs:
  - Lua, for driving the theme engine.
 
 
+The patches/ directory contains some patches for upstream software that help
+Nageru performance and/or stability. They are all meant for upstream, but
+probably will not be in by the time Nageru is released. All except the bmusb
+patch are taken to be by Steinar H. Gunderson <sesse@google.com> (ie., my work
+email, unlike Nageru itself and bmusb), and under the same license as the
+projects they patch.
+
 To start it, just hook up your requipment, type “make” and then “./nageru”.
 It is strongly recommended to have the rights to run at real-time priority;
 it will make the USB3 threads do so, which will make them a lot more stable.
