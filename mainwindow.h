@@ -40,6 +40,7 @@ public slots:
 	void set_transition_names(std::vector<std::string> transition_names);
 	void update_channel_name(Mixer::Output output);
 	void gain_staging_knob_changed(int value);
+	void final_makeup_gain_knob_changed(int value);
 	void cutoff_knob_changed(int value);
 	void limiter_threshold_knob_changed(int value);
 	void compressor_threshold_knob_changed(int value);
@@ -51,7 +52,7 @@ private:
 	void set_white_balance(int channel_number, int x, int y);
 
 	// Called from the mixer.
-	void audio_level_callback(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float auto_gain_staging_db);
+	void audio_level_callback(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float gain_staging_db, float final_makeup_gain_db);
 	timeval last_audio_level_callback{0, 0};
 
 	Ui::MainWindow *ui;

@@ -114,6 +114,10 @@ void MainWindow::mixer_created(Mixer *mixer)
 	connect(ui->gainstaging_auto_checkbox, &QCheckBox::stateChanged, [this](int state){
 		global_mixer->set_gain_staging_auto(state == Qt::Checked);
 	});
+	connect(ui->makeup_gain_knob, &QAbstractSlider::sliderMoved, this, &MainWindow::final_makeup_gain_knob_changed);
+	connect(ui->makeup_gain_auto_checkbox, &QCheckBox::stateChanged, [this](int state){
+		global_mixer->set_final_makeup_gain_auto(state == Qt::Checked);
+	});
 
 	connect(ui->limiter_threshold_knob, &QDial::valueChanged, this, &MainWindow::limiter_threshold_knob_changed);
 	connect(ui->compressor_threshold_knob, &QDial::valueChanged, this, &MainWindow::compressor_threshold_knob_changed);
@@ -124,7 +128,7 @@ void MainWindow::mixer_created(Mixer *mixer)
 		global_mixer->set_compressor_enabled(state == Qt::Checked);
 	});
 	connect(ui->reset_meters_button, &QPushButton::clicked, this, &MainWindow::reset_meters_button_clicked);
-	mixer->set_audio_level_callback(bind(&MainWindow::audio_level_callback, this, _1, _2, _3, _4, _5, _6));
+	mixer->set_audio_level_callback(bind(&MainWindow::audio_level_callback, this, _1, _2, _3, _4, _5, _6, _7));
 }
 
 void MainWindow::mixer_shutting_down()
@@ -152,6 +156,16 @@ void MainWindow::gain_staging_knob_changed(int value)
 
 	float gain_db = value * 0.1f;
 	global_mixer->set_gain_staging_db(gain_db);
+
+	// The label will be updated by the audio level callback.
+}
+
+void MainWindow::final_makeup_gain_knob_changed(int value)
+{
+	ui->makeup_gain_auto_checkbox->setCheckState(Qt::Unchecked);
+
+	float gain_db = value * 0.1f;
+	global_mixer->set_final_makeup_gain_db(gain_db);
 
 	// The label will be updated by the audio level callback.
 }
@@ -194,7 +208,7 @@ void MainWindow::reset_meters_button_clicked()
 	ui->peak_display->setStyleSheet("");
 }
 
-void MainWindow::audio_level_callback(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float gain_staging_db)
+void MainWindow::audio_level_callback(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float gain_staging_db, float final_makeup_gain_db)
 {
 	timeval now;
 	gettimeofday(&now, nullptr);
@@ -224,6 +238,10 @@ void MainWindow::audio_level_callback(float level_lufs, float peak_db, float glo
 		ui->gainstaging_knob->setValue(lrintf(gain_staging_db * 10.0f));
 		snprintf(buf, sizeof(buf), "%+.1f dB", gain_staging_db);
 		ui->gainstaging_db_display->setText(buf);
+
+		ui->makeup_gain_knob->setValue(lrintf(final_makeup_gain_db * 10.0f));
+		snprintf(buf, sizeof(buf), "%+.1f dB", final_makeup_gain_db);
+		ui->makeup_gain_db_display->setText(buf);
 	});
 }
 

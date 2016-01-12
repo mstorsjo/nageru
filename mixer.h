@@ -103,7 +103,7 @@ public:
 
 	typedef std::function<void(float level_lufs, float peak_db,
 	                           float global_level_lufs, float range_low_lufs, float range_high_lufs,
-	                           float gain_staging_db)> audio_level_callback_t;
+	                           float gain_staging_db, float final_makeup_gain_db)> audio_level_callback_t;
 	void set_audio_level_callback(audio_level_callback_t callback)
 	{
 		audio_level_callback = callback;
@@ -171,15 +171,28 @@ public:
 
 	void set_gain_staging_db(float gain_db)
 	{
-		std::unique_lock<std::mutex> lock(level_compressor_mutex);
+		std::unique_lock<std::mutex> lock(compressor_mutex);
 		level_compressor_enabled = false;
 		gain_staging_db = gain_db;
 	}
 
 	void set_gain_staging_auto(bool enabled)
 	{
-		std::unique_lock<std::mutex> lock(level_compressor_mutex);
+		std::unique_lock<std::mutex> lock(compressor_mutex);
 		level_compressor_enabled = enabled;
+	}
+
+	void set_final_makeup_gain_db(float gain_db)
+	{
+		std::unique_lock<std::mutex> lock(compressor_mutex);
+		final_makeup_gain_auto = false;
+		final_makeup_gain = pow(10.0f, gain_db / 20.0f);
+	}
+
+	void set_final_makeup_gain_auto(bool enabled)
+	{
+		std::unique_lock<std::mutex> lock(compressor_mutex);
+		final_makeup_gain_auto = enabled;
 	}
 
 	void schedule_cut()
@@ -283,12 +296,12 @@ private:
 	std::atomic<float> locut_cutoff_hz;
 
 	// First compressor; takes us up to about -12 dBFS.
-	std::mutex level_compressor_mutex;
 	StereoCompressor level_compressor;  // Under compressor_mutex. Used to set/override gain_staging_db if <level_compressor_enabled>.
 	float gain_staging_db = 0.0f;  // Under compressor_mutex.
 	bool level_compressor_enabled = true;  // Under compressor_mutex.
 
-	static constexpr float ref_level_dbfs = -14.0f;
+	static constexpr float ref_level_dbfs = -14.0f;  // Chosen so that we end up around 0 LU in practice.
+	static constexpr float ref_level_lufs = -23.0f;  // 0 LU, more or less by definition.
 
 	StereoCompressor limiter;
 	std::atomic<float> limiter_threshold_dbfs{ref_level_dbfs + 4.0f};   // 4 dB.
@@ -296,6 +309,9 @@ private:
 	StereoCompressor compressor;
 	std::atomic<float> compressor_threshold_dbfs{ref_level_dbfs - 12.0f};  // -12 dB.
 	std::atomic<bool> compressor_enabled{true};
+
+	double final_makeup_gain = 1.0;  // Under compressor_mutex. Read/write by the user. Note: Not in dB, we want the numeric precision so that we can change it slowly.
+	bool final_makeup_gain_auto = true;  // Under compressor_mutex.
 
 	std::unique_ptr<ALSAOutput> alsa;
 

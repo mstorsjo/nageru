@@ -534,7 +534,7 @@ void Mixer::thread_func()
 
 			audio_level_callback(loudness_s, 20.0 * log10(peak),
 			                     loudness_i, loudness_range_low, loudness_range_high,
-			                     gain_staging_db);
+			                     gain_staging_db, 20.0 * log10(final_makeup_gain));
 		}
 
 		for (unsigned card_index = 1; card_index < num_cards; ++card_index) {
@@ -716,7 +716,7 @@ void Mixer::process_audio_one_frame(int64_t frame_pts_int, int num_samples)
 	// entirely arbitrary, but from practical tests with speech, it seems to
 	// put ut around -23 LUFS, so it's a reasonable starting point for later use.
 	{
-		unique_lock<mutex> lock(level_compressor_mutex);
+		unique_lock<mutex> lock(compressor_mutex);
 		if (level_compressor_enabled) {
 			float threshold = 0.01f;   // -40 dBFS.
 			float ratio = 20.0f;
@@ -780,6 +780,46 @@ void Mixer::process_audio_one_frame(int64_t frame_pts_int, int num_samples)
 		peak_resampler.process();
 		size_t out_stereo_samples = interpolated_samples_out.size() / 2 - peak_resampler.out_count;
 		peak = max<float>(peak, find_peak(interpolated_samples_out.data(), out_stereo_samples * 2));
+	}
+
+	// At this point, we are most likely close to +0 LU, but all of our
+	// measurements have been on raw sample values, not R128 values.
+	// So we have a final makeup gain to get us to +0 LU; the gain
+	// adjustments required should be relatively small, and also, the
+	// offset shouldn't change much (only if the type of audio changes
+	// significantly). Thus, we shoot for updating this value basically
+	// “whenever we process buffers”, since the R128 calculation isn't exactly
+	// something we get out per-sample.
+	//
+	// Note that there's a feedback loop here, so we choose a very slow filter
+	// (half-time of 100 seconds).
+	double target_loudness_factor, alpha;
+	{
+		unique_lock<mutex> lock(compressor_mutex);
+		double loudness_lu = r128.loudness_M() - ref_level_lufs;
+		double current_makeup_lu = 20.0f * log10(final_makeup_gain);
+		target_loudness_factor = pow(10.0f, -loudness_lu / 20.0f);
+
+		// If we're outside +/- 5 LU uncorrected, we don't count it as
+		// a normal signal (probably silence) and don't change the
+		// correction factor; just apply what we already have.
+		if (fabs(loudness_lu - current_makeup_lu) >= 5.0 || !final_makeup_gain_auto) {
+			alpha = 0.0;
+		} else {
+			// Formula adapted from
+			// https://en.wikipedia.org/wiki/Low-pass_filter#Simple_infinite_impulse_response_filter.
+			const double half_time_s = 100.0;
+			const double fc_mul_2pi_delta_t = 1.0 / (half_time_s * OUTPUT_FREQUENCY);
+			alpha = fc_mul_2pi_delta_t / (fc_mul_2pi_delta_t + 1.0);
+		}
+
+		double m = final_makeup_gain;
+		for (size_t i = 0; i < samples_out.size(); i += 2) {
+			samples_out[i + 0] *= m;
+			samples_out[i + 1] *= m;
+			m += (target_loudness_factor - m) * alpha;
+		}
+		final_makeup_gain = m;
 	}
 
 	// Find R128 levels.
