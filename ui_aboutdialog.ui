@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>AboutDialog</class>
- <widget class="QDialog" name="Dialog">
+ <widget class="QDialog" name="AboutDialog">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -14,6 +14,15 @@
    <string>About Nageru</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QLabel" name="label">
+     <property name="text">
+      <string>&lt;p&gt;&lt;b&gt;Nageru v1.0.0&lt;/b&gt;&lt;/p&gt;
+
+&lt;p&gt;Realtime video mixer&lt;/p&gt;</string>
+     </property>
+    </widget>
+   </item>
    <item>
     <widget class="QTextEdit" name="textEdit">
      <property name="html">
