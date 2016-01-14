@@ -10,9 +10,9 @@ allocation in the kernel at program startup; memory allocation is
 otherwise done per-transfer, which can fail in a system where memory has become
 fragmented over time).
 
-This mirrors new functionality going into Linux' USB stack (recently
-reviewed and acked upstream); only Linux is supported as a backend
-currently.
+This mirrors new functionality going into Linux' USB stack (scheduled
+for inclusion in mainline around 4.6); only Linux is supported as a
+backend currently.
 ---
  libusb/core.c           | 29 +++++++++++++++++++++++++++++
  libusb/libusb-1.0.def   |  4 ++++
