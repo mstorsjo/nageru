@@ -293,7 +293,11 @@ bitstream_put_ui(bitstream *bs, unsigned int val, int size_in_bits)
         bs->buffer[pos] = (bs->buffer[pos] << size_in_bits | val);
     } else {
         size_in_bits -= bit_left;
-        bs->buffer[pos] = (bs->buffer[pos] << bit_left) | (val >> size_in_bits);
+        if (bit_left >= 32) {
+            bs->buffer[pos] = (val >> size_in_bits);
+        } else {
+            bs->buffer[pos] = (bs->buffer[pos] << bit_left) | (val >> size_in_bits);
+        }
         bs->buffer[pos] = va_swap32(bs->buffer[pos]);
 
         if (pos + 1 == bs->max_size_in_dword) {
