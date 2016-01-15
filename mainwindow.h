@@ -53,7 +53,7 @@ private:
 	void set_white_balance(int channel_number, int x, int y);
 
 	// Called from the mixer.
-	void audio_level_callback(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float gain_staging_db, float final_makeup_gain_db);
+	void audio_level_callback(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float gain_staging_db, float final_makeup_gain_db, float correlation);
 	timeval last_audio_level_callback{0, 0};
 
 	Ui::MainWindow *ui;

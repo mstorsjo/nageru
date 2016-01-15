@@ -32,6 +32,11 @@ CorrelationMeasurer::CorrelationMeasurer(unsigned sample_rate,
 {
 }
 
+void CorrelationMeasurer::reset()
+{
+	zl = zr = zll = zlr = zrr = 0.0f;
+}
+
 void CorrelationMeasurer::process_samples(const std::vector<float> &samples)
 {
 	assert(samples.size() % 2 == 0);

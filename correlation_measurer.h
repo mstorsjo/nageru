@@ -38,6 +38,7 @@ public:
 	CorrelationMeasurer(unsigned sample_rate, float lowpass_cutoff_hz = 1000.0f,
 	                    float falloff_seconds = 0.150f);
 	void process_samples(const std::vector<float> &samples);  // Taken to be stereo, interleaved.
+	void reset();
 	float get_correlation() const;
 
 private:

@@ -130,7 +130,7 @@ void MainWindow::mixer_created(Mixer *mixer)
 		global_mixer->set_compressor_enabled(state == Qt::Checked);
 	});
 	connect(ui->reset_meters_button, &QPushButton::clicked, this, &MainWindow::reset_meters_button_clicked);
-	mixer->set_audio_level_callback(bind(&MainWindow::audio_level_callback, this, _1, _2, _3, _4, _5, _6, _7));
+	mixer->set_audio_level_callback(bind(&MainWindow::audio_level_callback, this, _1, _2, _3, _4, _5, _6, _7, _8));
 }
 
 void MainWindow::mixer_shutting_down()
@@ -215,7 +215,10 @@ void MainWindow::reset_meters_button_clicked()
 	ui->peak_display->setStyleSheet("");
 }
 
-void MainWindow::audio_level_callback(float level_lufs, float peak_db, float global_level_lufs, float range_low_lufs, float range_high_lufs, float gain_staging_db, float final_makeup_gain_db)
+void MainWindow::audio_level_callback(float level_lufs, float peak_db, float global_level_lufs,
+                                      float range_low_lufs, float range_high_lufs,
+                                      float gain_staging_db, float final_makeup_gain_db,
+                                      float correlation)
 {
 	timeval now;
 	gettimeofday(&now, nullptr);
@@ -232,6 +235,7 @@ void MainWindow::audio_level_callback(float level_lufs, float peak_db, float glo
 	post_to_main_thread([=]() {
 		ui->vu_meter->set_level(level_lufs);
 		ui->lra_meter->set_levels(global_level_lufs, range_low_lufs, range_high_lufs);
+		ui->correlation_meter->set_correlation(correlation);
 
 		char buf[256];
 		snprintf(buf, sizeof(buf), "%.1f", peak_db);

@@ -35,6 +35,7 @@
 #include "stereocompressor.h"
 #include "filter.h"
 #include "input_state.h"
+#include "correlation_measurer.h"
 
 class H264Encoder;
 class QSurface;
@@ -103,7 +104,8 @@ public:
 
 	typedef std::function<void(float level_lufs, float peak_db,
 	                           float global_level_lufs, float range_low_lufs, float range_high_lufs,
-	                           float gain_staging_db, float final_makeup_gain_db)> audio_level_callback_t;
+	                           float gain_staging_db, float final_makeup_gain_db,
+	                           float correlation)> audio_level_callback_t;
 	void set_audio_level_callback(audio_level_callback_t callback)
 	{
 		audio_level_callback = callback;
@@ -288,6 +290,7 @@ private:
 	audio_level_callback_t audio_level_callback = nullptr;
 	std::mutex compressor_mutex;
 	Ebu_r128_proc r128;  // Under compressor_mutex.
+	CorrelationMeasurer correlation;  // Under compressor_mutex.
 
 	Resampler peak_resampler;
 	std::atomic<float> peak{0.0f};

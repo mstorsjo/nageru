@@ -98,6 +98,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	  num_cards(num_cards),
 	  mixer_surface(create_surface(format)),
 	  h264_encoder_surface(create_surface(format)),
+	  correlation(OUTPUT_FREQUENCY),
 	  level_compressor(OUTPUT_FREQUENCY),
 	  limiter(OUTPUT_FREQUENCY),
 	  compressor(OUTPUT_FREQUENCY)
@@ -534,7 +535,8 @@ void Mixer::thread_func()
 
 			audio_level_callback(loudness_s, 20.0 * log10(peak),
 			                     loudness_i, loudness_range_low, loudness_range_high,
-			                     gain_staging_db, 20.0 * log10(final_makeup_gain));
+			                     gain_staging_db, 20.0 * log10(final_makeup_gain),
+			                     correlation.get_correlation());
 		}
 
 		for (unsigned card_index = 1; card_index < num_cards; ++card_index) {
@@ -822,13 +824,14 @@ void Mixer::process_audio_one_frame(int64_t frame_pts_int, int num_samples)
 		final_makeup_gain = m;
 	}
 
-	// Find R128 levels.
+	// Find R128 levels and L/R correlation.
 	vector<float> left, right;
 	deinterleave_samples(samples_out, &left, &right);
 	float *ptrs[] = { left.data(), right.data() };
 	{
 		unique_lock<mutex> lock(compressor_mutex);
 		r128.process(left.size(), ptrs);
+		correlation.process_samples(samples_out);
 	}
 
 	// Send the samples to the sound card.
@@ -933,6 +936,7 @@ void Mixer::reset_meters()
 	peak = 0.0f;
 	r128.reset();
 	r128.integr_start();
+	correlation.reset();
 }
 
 Mixer::OutputChannel::~OutputChannel()
