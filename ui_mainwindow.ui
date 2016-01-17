@@ -623,13 +623,6 @@
           </property>
          </widget>
         </item>
-        <item row="3" column="0">
-         <widget class="QComboBox" name="comboBox">
-          <property name="currentText">
-           <string/>
-          </property>
-         </widget>
-        </item>
         <item row="3" column="3">
          <widget class="QCheckBox" name="limiter_enabled">
           <property name="text">
@@ -818,6 +811,16 @@
          <widget class="QCheckBox" name="makeup_gain_auto_checkbox">
           <property name="text">
            <string>Auto</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="0">
+         <widget class="QCheckBox" name="locut_enabled">
+          <property name="text">
+           <string>Enabled</string>
           </property>
           <property name="checked">
            <bool>true</bool>

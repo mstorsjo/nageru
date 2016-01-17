@@ -110,6 +110,9 @@ void MainWindow::mixer_created(Mixer *mixer)
 
 	connect(ui->locut_cutoff_knob, &QDial::valueChanged, this, &MainWindow::cutoff_knob_changed);
 	cutoff_knob_changed(ui->locut_cutoff_knob->value());
+	connect(ui->locut_enabled, &QCheckBox::stateChanged, [this](int state){
+		global_mixer->set_locut_enabled(state == Qt::Checked);
+	});
 
 	// Not QDial::valueChanged, as we call setValue() all the time.
 	connect(ui->gainstaging_knob, &QAbstractSlider::sliderMoved, this, &MainWindow::gain_staging_knob_changed);

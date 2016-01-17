@@ -141,6 +141,11 @@ public:
 		locut_cutoff_hz = cutoff_hz;
 	}
 
+	void set_locut_enabled(bool enabled)
+	{
+		locut_enabled = enabled;
+	}
+
 	float get_limiter_threshold_dbfs()
 	{
 		return limiter_threshold_dbfs;
@@ -295,8 +300,9 @@ private:
 	Resampler peak_resampler;
 	std::atomic<float> peak{0.0f};
 
-	StereoFilter locut;  // Default cutoff 150 Hz, 24 dB/oct.
+	StereoFilter locut;  // Default cutoff 120 Hz, 24 dB/oct.
 	std::atomic<float> locut_cutoff_hz;
+	std::atomic<bool> locut_enabled{true};
 
 	// First compressor; takes us up to about -12 dBFS.
 	StereoCompressor level_compressor;  // Under compressor_mutex. Used to set/override gain_staging_db if <level_compressor_enabled>.
