@@ -280,8 +280,9 @@ void MainWindow::relayout()
 	remaining_height -= audiostrip_height + ui->vertical_layout->spacing();
 
 	// The previews will be constrained by the remaining height, and the width.
-	double preview_label_height = previews[0]->title_bar->geometry().height() + ui->preview_displays->spacing();  // Wrong spacing?
-	int preview_total_width = ui->preview_displays->geometry().width();
+	double preview_label_height = previews[0]->title_bar->geometry().height() +
+		previews[0]->main_vertical_layout->spacing();
+	int preview_total_width = ui->preview_displays->geometry().width() - (previews.size() - 1) * ui->preview_displays->spacing();
 	double preview_height = min(remaining_height - preview_label_height, (preview_total_width / double(previews.size())) * 9.0 / 16.0);
 	remaining_height -= preview_height + preview_label_height + ui->vertical_layout->spacing();
 
@@ -292,14 +293,12 @@ void MainWindow::relayout()
 
 	// Set the widths for the previews.
 	double preview_width = preview_height * 16.0 / 9.0;
-	double remaining_preview_width = preview_total_width;
-
 	for (unsigned i = 0; i < previews.size(); ++i) {
 		ui->preview_displays->setStretch(i, lrintf(preview_width));
-		remaining_preview_width -= preview_width + ui->preview_displays->spacing();
 	}
 
 	// The preview horizontal spacer.
+	double remaining_preview_width = preview_total_width - previews.size() * preview_width;
 	ui->preview_displays->setStretch(previews.size(), lrintf(remaining_preview_width));
 }
 
