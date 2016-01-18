@@ -1444,7 +1444,7 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 
     string data;
 
-    const int64_t global_delay = (ip_period - 1) * (TIMEBASE / MAX_FPS);  // So we never get negative dts.
+    const int64_t global_delay = int64_t(ip_period - 1) * (TIMEBASE / MAX_FPS);  // So we never get negative dts.
 
     va_status = vaMapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf, (void **)(&buf_list));
     CHECK_VASTATUS(va_status, "vaMapBuffer");

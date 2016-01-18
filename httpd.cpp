@@ -51,6 +51,7 @@ void HTTPD::open_output_file(const string &filename)
 {
 	AVFormatContext *avctx = avformat_alloc_context();
 	avctx->oformat = av_guess_format(NULL, filename.c_str(), NULL);
+	assert(filename.size() < sizeof(avctx->filename) - 1);
 	strcpy(avctx->filename, filename.c_str());
 
 	string url = "file:" + filename;

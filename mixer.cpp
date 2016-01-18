@@ -256,7 +256,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 
 	decode_video_format(video_format, &width, &height, &second_field_start, &extra_lines_top, &extra_lines_bottom,
 	                    &frame_rate_nom, &frame_rate_den, &interlaced);  // Ignore return value for now.
-	int64_t frame_length = TIMEBASE * frame_rate_den / frame_rate_nom;
+	int64_t frame_length = int64_t(TIMEBASE * frame_rate_den) / frame_rate_nom;
 
 	size_t num_samples = (audio_frame.len >= audio_offset) ? (audio_frame.len - audio_offset) / 8 / 3 : 0;
 	if (num_samples > OUTPUT_FREQUENCY / 10) {
@@ -510,6 +510,7 @@ void Mixer::thread_func()
 		}
 
 		// Resample the audio as needed, including from previously dropped frames.
+		assert(num_cards > 0);
 		for (unsigned frame_num = 0; frame_num < card_copy[0].dropped_frames + 1; ++frame_num) {
 			{
 				// Signal to the audio thread to process this frame.
@@ -784,6 +785,7 @@ void Mixer::process_audio_one_frame(int64_t frame_pts_int, int num_samples)
 		peak_resampler.process();
 		size_t out_stereo_samples = interpolated_samples_out.size() / 2 - peak_resampler.out_count;
 		peak = max<float>(peak, find_peak(interpolated_samples_out.data(), out_stereo_samples * 2));
+		peak_resampler.out_data = nullptr;
 	}
 
 	// At this point, we are most likely close to +0 LU, but all of our
