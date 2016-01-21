@@ -646,6 +646,25 @@ void LiveInputWrapper::connect_signal(int signal_num)
 	}
 }
 
+namespace {
+
+int call_num_channels(lua_State *L)
+{
+	lua_getglobal(L, "num_channels");
+
+	if (lua_pcall(L, 0, 1, 0) != 0) {
+		fprintf(stderr, "error running function `num_channels': %s\n", lua_tostring(L, -1));
+		exit(1);
+	}
+
+	int num_channels = luaL_checknumber(L, 1);
+	lua_pop(L, 1);
+	assert(lua_gettop(L) == 0);
+	return num_channels;
+}
+
+}  // namespace
+
 Theme::Theme(const char *filename, ResourcePool *resource_pool, unsigned num_cards)
 	: resource_pool(resource_pool), num_cards(num_cards)
 {
@@ -674,16 +693,7 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool, unsigned num_car
 	assert(lua_gettop(L) == 0);
 
 	// Ask it for the number of channels.
-	lua_getglobal(L, "num_channels");
-
-	if (lua_pcall(L, 0, 1, 0) != 0) {
-		fprintf(stderr, "error running function `num_channels': %s\n", lua_tostring(L, -1));
-		exit(1);
-	}
-
-	num_channels = luaL_checknumber(L, 1);
-	lua_pop(L, 1);
-	assert(lua_gettop(L) == 0);
+	num_channels = call_num_channels(L);
 }
 
 Theme::~Theme()
