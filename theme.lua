@@ -248,6 +248,7 @@ function set_scale_parameters_if_needed(chain_or_input, width, height)
 	end
 end
 
+-- API ENTRY POINT
 -- Returns the number of outputs in addition to the live (0) and preview (1).
 -- Called only once, at the start of the program.
 function num_channels()
@@ -281,6 +282,7 @@ function get_channel_resolution(signal_num)
 	end
 end
 
+-- API ENTRY POINT
 -- Returns the name for each additional channel (starting from 2).
 -- Called at the start of the program, and then each frame for live
 -- channels in case they change resolution.
@@ -296,12 +298,14 @@ function channel_name(channel)
 	end
 end
 
+-- API ENTRY POINT
 -- Returns if a given channel supports setting white balance (starting from 2).
 -- Called only once for each channel, at the start of the program.
 function supports_set_wb(channel)
 	return channel == 2 or channel == 3
 end
 
+-- API ENTRY POINT
 -- Gets called with a new gray point when the white balance is changing.
 -- The color is in linear light (not sRGB gamma).
 function set_wb(channel, red, green, blue)
@@ -324,6 +328,7 @@ function finish_transitions(t)
 	end
 end
 
+-- API ENTRY POINT
 -- Called every frame.
 function get_transitions(t)
 	finish_transitions(t)
@@ -440,10 +445,12 @@ function transition_clicked(num, t)
 	end
 end
 
+-- API ENTRY POINT
 function channel_clicked(num)
 	preview_signal_num = num
 end
 
+-- API ENTRY POINT
 -- Called every frame. Get the chain for displaying at input <num>,
 -- where 0 is live, 1 is preview, 2 is the first channel to display
 -- in the bottom bar, and so on up to num_channels()+1. t is the
