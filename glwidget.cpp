@@ -6,6 +6,8 @@
 #include <qevent.h>  // Needs to come before egl.h.
 #include <epoxy/gl.h>
 #include <epoxy/egl.h>
+#include <QAction>
+#include <QMenu>
 #include <QSurfaceFormat>
 #include <movit/resource_pool.h>
 
@@ -31,6 +33,7 @@ class QWidget;
 #include <string>
 
 using namespace std;
+using namespace std::placeholders;
 
 GLWidget::GLWidget(QWidget *parent)
     : QGLWidget(parent, global_share_widget)
@@ -58,6 +61,15 @@ void GLWidget::initializeGL()
 		emit transition_names_updated(global_mixer->get_transition_names());
 		emit resolution_updated(output);
 	});
+
+	if (output >= Mixer::OUTPUT_INPUT0) {
+		int signal_num = global_mixer->get_channel_signal(output);
+		if (signal_num != -1) {
+			setContextMenuPolicy(Qt::CustomContextMenu);
+			connect(this, &QWidget::customContextMenuRequested,
+			        bind(&GLWidget::show_context_menu, this, signal_num, _1));
+		}
+	}
 
 	glDisable(GL_BLEND);
 	glDisable(GL_DEPTH_TEST);
@@ -98,4 +110,30 @@ void GLWidget::paintGL()
 void GLWidget::mousePressEvent(QMouseEvent *event)
 {
 	emit clicked();
+}
+
+void GLWidget::show_context_menu(int signal_num, const QPoint &pos)
+{
+	QPoint global_pos = mapToGlobal(pos);
+
+	QMenu menu;
+	QActionGroup group(&menu);
+
+	unsigned num_cards = global_mixer->get_num_cards();
+	unsigned current_card = global_mixer->map_signal(signal_num);
+	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
+		QString description(QString::fromStdString(global_mixer->get_card_description(card_index)));
+		QAction *action = new QAction(description, &group);
+		action->setCheckable(true);
+		if (current_card == card_index) {
+			action->setChecked(true);
+		}
+		action->setData(card_index);
+		menu.addAction(action);
+	}
+	QAction *selected_item = menu.exec(global_pos);
+	if (selected_item) {
+		unsigned card_index = selected_item->data().toInt(nullptr);
+		global_mixer->set_signal_mapping(signal_num, card_index);
+	}
 }

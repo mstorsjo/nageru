@@ -126,6 +126,21 @@ public:
 		return theme->get_channel_name(channel);
 	}
 
+	int get_channel_signal(unsigned channel) const
+	{
+		return theme->get_channel_signal(channel);
+	}
+
+	int map_signal(unsigned channel)
+	{
+		return theme->map_signal(channel);
+	}
+
+	void set_signal_mapping(int signal, int card)
+	{
+		return theme->set_signal_mapping(signal, card);
+	}
+
 	bool get_supports_set_wb(unsigned channel) const
 	{
 		return theme->get_supports_set_wb(channel);
@@ -208,6 +223,13 @@ public:
 	}
 
 	void reset_meters();
+
+	unsigned get_num_cards() const { return num_cards; }
+
+	std::string get_card_description(unsigned card_index) const {
+		assert(card_index < num_cards);
+		return cards[card_index].usb->get_description();
+	}
 
 private:
 	void bm_frame(unsigned card_index, uint16_t timecode,

@@ -299,6 +299,21 @@ function channel_name(channel)
 end
 
 -- API ENTRY POINT
+-- Returns, given a channel number, which signal it corresponds to (starting from 0).
+-- Should return -1 if the channel does not correspond to a simple signal.
+-- Called once for each channel, at the start of the program.
+-- Will never be called for live (0) or preview (1).
+function channel_signal(channel)
+	if channel == 2 then
+		return 0
+	elseif channel == 3 then
+		return 1
+	else
+		return -1
+	end
+end
+
+-- API ENTRY POINT
 -- Returns if a given channel supports setting white balance (starting from 2).
 -- Called only once for each channel, at the start of the program.
 function supports_set_wb(channel)

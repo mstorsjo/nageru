@@ -54,7 +54,9 @@ public:
 
 	int get_num_channels() const { return num_channels; }
 	int map_signal(int signal_num);
+	void set_signal_mapping(int signal_num, int card_num);
 	std::string get_channel_name(unsigned channel);
+	int get_channel_signal(unsigned channel);
 	bool get_supports_set_wb(unsigned channel);
 	void set_wb(unsigned channel, double r, double g, double b);
 
@@ -75,7 +77,9 @@ private:
 	movit::ResourcePool *resource_pool;
 	int num_channels;
 	unsigned num_cards;
-	std::set<int> signals_warned_about;
+
+	std::mutex map_m;
+	std::map<int, int> signal_to_card_mapping;  // Protected by <map_m>.
 
 	friend class LiveInputWrapper;
 };

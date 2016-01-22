@@ -782,6 +782,22 @@ string Theme::get_channel_name(unsigned channel)
 	return ret;
 }
 
+int Theme::get_channel_signal(unsigned channel)
+{
+	unique_lock<mutex> lock(m);
+	lua_getglobal(L, "channel_signal");
+	lua_pushnumber(L, channel);
+	if (lua_pcall(L, 1, 1, 0) != 0) {
+		fprintf(stderr, "error running function `channel_signal': %s\n", lua_tostring(L, -1));
+		exit(1);
+	}
+
+	int ret = luaL_checknumber(L, 1);
+	lua_pop(L, 1);
+	assert(lua_gettop(L) == 0);
+	return ret;
+}
+
 bool Theme::get_supports_set_wb(unsigned channel)
 {
 	unique_lock<mutex> lock(m);
@@ -837,14 +853,23 @@ vector<string> Theme::get_transition_names(float t)
 
 int Theme::map_signal(int signal_num)
 {
-	if (signal_num >= int(num_cards)) {
-		if (signals_warned_about.insert(signal_num).second) {
-			fprintf(stderr, "WARNING: Theme asked for input %d, but we only have %u card(s).\n", signal_num, num_cards);
-			fprintf(stderr, "Mapping to card %d instead.\n", signal_num % num_cards);
-		}
-		signal_num %= num_cards;
+	unique_lock<mutex> lock(map_m);
+	if (signal_to_card_mapping.count(signal_num)) {
+		return signal_to_card_mapping[signal_num];
 	}
-	return signal_num;
+	if (signal_num >= int(num_cards)) {
+		fprintf(stderr, "WARNING: Theme asked for input %d, but we only have %u card(s).\n", signal_num, num_cards);
+		fprintf(stderr, "Mapping to card %d instead.\n", signal_num % num_cards);
+	}
+	signal_to_card_mapping[signal_num] = signal_num % num_cards;
+	return signal_num % num_cards;
+}
+
+void Theme::set_signal_mapping(int signal_num, int card_num)
+{
+	unique_lock<mutex> lock(map_m);
+	assert(card_num < int(num_cards));
+	signal_to_card_mapping[signal_num] = card_num;
 }
 
 void Theme::transition_clicked(int transition_num, float t)

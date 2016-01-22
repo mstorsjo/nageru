@@ -48,6 +48,9 @@ signals:
 	void transition_names_updated(std::vector<std::string> transition_names);
 	void resolution_updated(Mixer::Output output);
 
+private slots:
+	void show_context_menu(int signal_num, const QPoint &pos);
+
 private:
 	Mixer::Output output;
 	GLuint vao, program_num;
