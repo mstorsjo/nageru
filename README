@@ -1,7 +1,7 @@
 Nageru is a live video mixer, based around the standard M/E workflow.
 
 
-Features (those marked with * are still in progress or not started yet):
+Features:
 
  - High performance on modest hardware (720p60 with two input streams
    on my Thinkpad X240[1]); almost all pixel processing is done on the GPU.
@@ -11,8 +11,9 @@ Features (those marked with * are still in progress or not started yet):
    for intermediate calculations, dithered output.
 
  - Proper sound support: Syncing of multiple unrelated sources through
-   high-quality resampling, mixing (*), cue out for headphones,
-   dynamic range compression, fixed EQ, level meters conforming to EBU R128.
+   high-quality resampling, freely selectable input, cue out for headphones,
+   dynamic range compression, simple EQ (lowpass), level meters conforming
+   to EBU R128.
 
  - Theme engine encapsulating the design demands of each individual
    event; Lua code is responsible for setting up the pixel processing

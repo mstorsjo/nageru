@@ -136,6 +136,16 @@ public:
 		return theme->map_signal(channel);
 	}
 
+	unsigned get_audio_source() const
+	{
+		return audio_source_channel;
+	}
+
+	void set_audio_source(unsigned channel)
+	{
+		audio_source_channel = channel;
+	}
+
 	void set_signal_mapping(int signal, int card)
 	{
 		return theme->set_signal_mapping(signal, card);
@@ -249,6 +259,7 @@ private:
 	QSurface *mixer_surface, *h264_encoder_surface;
 	std::unique_ptr<movit::ResourcePool> resource_pool;
 	std::unique_ptr<Theme> theme;
+	std::atomic<unsigned> audio_source_channel{0};
 	std::unique_ptr<movit::EffectChain> display_chain;
 	GLuint cbcr_program_num;  // Owned by <resource_pool>.
 	std::unique_ptr<H264Encoder> h264_encoder;

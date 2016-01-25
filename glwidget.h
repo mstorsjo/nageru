@@ -49,7 +49,7 @@ signals:
 	void resolution_updated(Mixer::Output output);
 
 private slots:
-	void show_context_menu(int signal_num, const QPoint &pos);
+	void show_context_menu(unsigned signal_num, const QPoint &pos);
 
 private:
 	Mixer::Output output;

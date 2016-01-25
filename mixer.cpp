@@ -692,6 +692,11 @@ void Mixer::process_audio_one_frame(int64_t frame_pts_int, int num_samples)
 {
 	vector<float> samples_card;
 	vector<float> samples_out;
+
+	// TODO: Allow mixing audio from several sources.
+	unsigned selected_audio_card = theme->map_signal(audio_source_channel);
+	assert(selected_audio_card < num_cards);
+
 	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 		samples_card.resize(num_samples * 2);
 		{
@@ -700,8 +705,7 @@ void Mixer::process_audio_one_frame(int64_t frame_pts_int, int num_samples)
 				printf("Card %d reported previous underrun.\n", card_index);
 			}
 		}
-		// TODO: Allow using audio from the other card(s) as well.
-		if (card_index == 0) {
+		if (card_index == selected_audio_card) {
 			samples_out = move(samples_card);
 		}
 	}

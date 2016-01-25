@@ -112,11 +112,13 @@ void GLWidget::mousePressEvent(QMouseEvent *event)
 	emit clicked();
 }
 
-void GLWidget::show_context_menu(int signal_num, const QPoint &pos)
+void GLWidget::show_context_menu(unsigned signal_num, const QPoint &pos)
 {
 	QPoint global_pos = mapToGlobal(pos);
 
 	QMenu menu;
+
+	// Add an action for each card.
 	QActionGroup group(&menu);
 
 	unsigned num_cards = global_mixer->get_num_cards();
@@ -131,8 +133,22 @@ void GLWidget::show_context_menu(int signal_num, const QPoint &pos)
 		action->setData(card_index);
 		menu.addAction(action);
 	}
+
+	menu.addSeparator();
+
+	// Add an audio source selector.
+	QAction *audio_source_action = new QAction("Use as audio source", &menu);
+	audio_source_action->setCheckable(true);
+	if (global_mixer->get_audio_source() == signal_num) {
+		audio_source_action->setChecked(true);
+		audio_source_action->setEnabled(false);
+	}
+	menu.addAction(audio_source_action);
+
 	QAction *selected_item = menu.exec(global_pos);
-	if (selected_item) {
+	if (selected_item == audio_source_action) {
+		global_mixer->set_audio_source(signal_num);
+	} else if (selected_item != nullptr) {
 		unsigned card_index = selected_item->data().toInt(nullptr);
 		global_mixer->set_signal_mapping(signal_num, card_index);
 	}
