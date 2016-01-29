@@ -26,18 +26,17 @@ to 800 MHz after 30 seconds due to thermal constraints), Intel HD Graphics
 (so 12.8 GB/sec theoretical memory bandwidth, shared between CPU and GPU).
 
 
-Nageru is in alpha stage. It currently needs:
+Nageru is in beta stage. It currently needs:
 
  - An Intel processor with Intel Quick Sync, or otherwise some hardware
    H.264 encoder exposed through VA-API.
 
- - Two Blackmagic USB3 cards, either HDMI or SDI. Note that on some machines,
-   you may have to run a Linux kernel with power saving compiled out to avoid
-   LPM (link power management) and bandwidth allocation issues with USB3.
-   These are driven through the “bmusb“ driver embedded in bmusb/, using
-   libusb-1.0.
+ - Two or more Blackmagic USB3 cards, either HDMI or SDI. These are driven
+   through the “bmusb” driver embedded in bmusb/, using libusb-1.0.
+   Note that you will want a recent Linux kernel to avoid LPM (link power
+   management) and bandwidth allocation issues with USB3.
 
- - Movit, my GPU-based video filter library (http://movit.sesse.net).
+ - Movit, my GPU-based video filter library (https://movit.sesse.net).
    Newer is almost certainly better; Nageru's needs tends to drive new
    features in Movit.
 
@@ -64,7 +63,7 @@ patch are taken to be by Steinar H. Gunderson <sesse@google.com> (ie., my work
 email, unlike Nageru itself and bmusb), and under the same license as the
 projects they patch.
 
-To start it, just hook up your requipment, type “make” and then “./nageru”.
+To start it, just hook up your equipment, type “make” and then “./nageru”.
 It is strongly recommended to have the rights to run at real-time priority;
 it will make the USB3 threads do so, which will make them a lot more stable.
 (A reasonable hack for testing is probably just to run it as root using sudo,
@@ -83,6 +82,10 @@ be saved live to local disk.
 The name “Nageru” is a play on the Japanese verb 投げる (nageru), which means
 to throw or cast. (I also later learned that it could mean to face defeat or
 give up, but that's not the intended meaning.)
+
+
+Nageru's home page is at https://nageru.sesse.net/, where you can also find
+contact information and link to the latest version.
 
 
 Legalese: TL;DR: Everything is GPLv3-or-newer compatible, and see
