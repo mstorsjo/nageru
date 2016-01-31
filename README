@@ -56,6 +56,16 @@ Nageru is in beta stage. It currently needs:
  - Lua, for driving the theme engine.
 
 
+If on Debian stretch or something similar, you can install everything you need
+except Movit (which you'll need to compile from git yourself) with:
+
+  git submodule update --init
+  apt build-dep movit
+  apt install qtbase5-dev qt5-default pkg-config libusb-dev libmicrohttpd-dev \
+    libusb-1.0-0-dev liblua5.2-dev libzita-resampler-dev libva-dev \
+    libavcodec-dev libavformat-dev libswscale-dev
+
+
 The patches/ directory contains some patches for upstream software that help
 Nageru performance and/or stability. They are all meant for upstream, but
 probably will not be in by the time Nageru is released. All except the bmusb
