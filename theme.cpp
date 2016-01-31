@@ -2,8 +2,7 @@
 
 #include <assert.h>
 #include <lauxlib.h>
-#include <lua.h>
-#include <lualib.h>
+#include <lua.hpp>
 #include <movit/effect.h>
 #include <movit/effect_chain.h>
 #include <movit/image_format.h>

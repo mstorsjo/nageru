@@ -2,8 +2,7 @@
 #define _THEME_H 1
 
 #include <epoxy/gl.h>
-#include <lauxlib.h>
-#include <lua.h>
+#include <lua.hpp>
 #include <movit/effect_chain.h>
 #include <movit/deinterlace_effect.h>
 #include <movit/ycbcr_input.h>
