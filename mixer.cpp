@@ -167,7 +167,26 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	// Set up stuff for NV12 conversion.
 
 	// Cb/Cr shader.
-	string cbcr_vert_shader = read_file("vs-cbcr.130.vert");
+	string cbcr_vert_shader =
+		"#version 130 \n"
+		" \n"
+		"in vec2 position; \n"
+		"in vec2 texcoord; \n"
+		"out vec2 tc0; \n"
+		"uniform vec2 foo_chroma_offset_0; \n"
+		" \n"
+		"void main() \n"
+		"{ \n"
+		"    // The result of glOrtho(0.0, 1.0, 0.0, 1.0, 0.0, 1.0) is: \n"
+		"    // \n"
+		"    //   2.000  0.000  0.000 -1.000 \n"
+		"    //   0.000  2.000  0.000 -1.000 \n"
+		"    //   0.000  0.000 -2.000 -1.000 \n"
+		"    //   0.000  0.000  0.000  1.000 \n"
+		"    gl_Position = vec4(2.0 * position.x - 1.0, 2.0 * position.y - 1.0, -1.0, 1.0); \n"
+		"    vec2 flipped_tc = texcoord; \n"
+		"    tc0 = flipped_tc + foo_chroma_offset_0; \n"
+		"} \n";
 	string cbcr_frag_shader =
 		"#version 130 \n"
 		"in vec2 tc0; \n"
