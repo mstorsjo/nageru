@@ -37,8 +37,7 @@ Nageru is in beta stage. It currently needs:
    management) and bandwidth allocation issues with USB3.
 
  - Movit, my GPU-based video filter library (https://movit.sesse.net).
-   Newer is almost certainly better; Nageru's needs tends to drive new
-   features in Movit.
+   You will need at least version 1.3.0.
 
  - Qt 5.5 or newer for the GUI.
 
@@ -56,14 +55,13 @@ Nageru is in beta stage. It currently needs:
  - Lua, for driving the theme engine.
 
 
-If on Debian stretch or something similar, you can install everything you need
-except Movit (which you'll need to compile from git yourself) with:
+If on Debian sid or something similar (or stretch, once Movit 1.3.0 migrates),
+you can install everything you need with:
 
   git submodule update --init
-  apt build-dep movit
-  apt install qtbase5-dev qt5-default pkg-config libusb-dev libmicrohttpd-dev \
+  apt install qtbase5-dev qt5-default pkg-config libmicrohttpd-dev \
     libusb-1.0-0-dev liblua5.2-dev libzita-resampler-dev libva-dev \
-    libavcodec-dev libavformat-dev libswscale-dev
+    libavcodec-dev libavformat-dev libswscale-dev libmovit-dev
 
 
 The patches/ directory contains some patches for upstream software that help
