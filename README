@@ -61,7 +61,8 @@ you can install everything you need with:
   git submodule update --init
   apt install qtbase5-dev qt5-default pkg-config libmicrohttpd-dev \
     libusb-1.0-0-dev liblua5.2-dev libzita-resampler-dev libva-dev \
-    libavcodec-dev libavformat-dev libswscale-dev libmovit-dev
+    libavcodec-dev libavformat-dev libswscale-dev libmovit-dev \
+    libegl1-mesa-dev libasound2-dev
 
 
 The patches/ directory contains some patches for upstream software that help
