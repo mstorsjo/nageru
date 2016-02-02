@@ -9,16 +9,16 @@
 #include <QAction>
 #include <QMenu>
 #include <QSurfaceFormat>
-#include <movit/resource_pool.h>
 
 #include "glwidget.h"
 
 #include <stdio.h>
 #include <functional>
 #include <mutex>
+#include <movit/effect_chain.h>
+#include <movit/resource_pool.h>
 
 #include "context.h"
-#include "effect_chain.h"
 #include "flags.h"
 #include "mainwindow.h"
 #include "mixer.h"

@@ -4,11 +4,11 @@
 
 #include <assert.h>
 #include <epoxy/egl.h>
-#include <init.h>
 #include <movit/effect_chain.h>
 #include <movit/effect_util.h>
 #include <movit/flat_input.h>
 #include <movit/image_format.h>
+#include <movit/init.h>
 #include <movit/resource_pool.h>
 #include <movit/util.h>
 #include <stdint.h>

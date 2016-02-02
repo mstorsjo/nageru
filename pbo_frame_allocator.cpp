@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <cstddef>
 
-#include "util.h"
+#include <movit/util.h>
 
 using namespace std;
 
