@@ -440,6 +440,8 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		check_error();
 		glBindTexture(GL_TEXTURE_2D, 0);
 		check_error();
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, 0);
+		check_error();
 		GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
 		check_error();
 		assert(fence != nullptr);
