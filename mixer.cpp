@@ -191,8 +191,9 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 		"#version 130 \n"
 		"in vec2 tc0; \n"
 		"uniform sampler2D cbcr_tex; \n"
+		"out vec4 FragColor; \n"
 		"void main() { \n"
-		"    gl_FragColor = texture2D(cbcr_tex, tc0); \n"
+		"    FragColor = texture(cbcr_tex, tc0); \n"
 		"} \n";
 	vector<string> frag_shader_outputs;
 	cbcr_program_num = resource_pool->compile_glsl_program(cbcr_vert_shader, cbcr_frag_shader, frag_shader_outputs);
