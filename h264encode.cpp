@@ -1,6 +1,7 @@
 //#include "sysdeps.h"
 #include "h264encode.h"
 
+#include <movit/util.h>
 #include <EGL/eglplatform.h>
 #include <X11/X.h>
 #include <X11/Xlib.h>
@@ -1109,10 +1110,12 @@ int H264EncoderImpl::setup_encode()
             // buffers, due to potentially differing pitch.
             glGenBuffers(1, &gl_surfaces[i].pbo);
             glBindBuffer(GL_PIXEL_PACK_BUFFER, gl_surfaces[i].pbo);
-            glBufferStorage(GL_PIXEL_PACK_BUFFER, frame_width * frame_height * 2, nullptr, GL_MAP_READ_BIT | GL_MAP_PERSISTENT_BIT);
+            glBufferStorage(GL_PIXEL_PACK_BUFFER, frame_width * frame_height * 2, nullptr, GL_MAP_READ_BIT | GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT);
             uint8_t *ptr = (uint8_t *)glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, frame_width * frame_height * 2, GL_MAP_READ_BIT | GL_MAP_PERSISTENT_BIT);
             gl_surfaces[i].y_ptr = ptr;
             gl_surfaces[i].cbcr_ptr = ptr + frame_width * frame_height;
+            gl_surfaces[i].y_offset = 0;
+            gl_surfaces[i].cbcr_offset = frame_width * frame_height;
             glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
         }
     }
@@ -1799,21 +1802,32 @@ void H264EncoderImpl::end_frame(RefCountedGLsync fence, int64_t pts, const vecto
 
 	if (!use_zerocopy) {
 		GLSurface *surf = &gl_surfaces[current_storage_frame % SURFACE_NUM];
+
 		glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+		check_error();
 
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, surf->pbo);
+		check_error();
 
 		glBindTexture(GL_TEXTURE_2D, surf->y_tex);
+		check_error();
 		glGetTexImage(GL_TEXTURE_2D, 0, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(surf->y_offset));
+		check_error();
 
 		glBindTexture(GL_TEXTURE_2D, surf->cbcr_tex);
+		check_error();
 		glGetTexImage(GL_TEXTURE_2D, 0, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(surf->cbcr_offset));
+		check_error();
 
 		glBindTexture(GL_TEXTURE_2D, 0);
+		check_error();
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+		check_error();
 
 		glMemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
+		check_error();
 		fence = RefCountedGLsync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
+		check_error();
 	}
 
 	{
@@ -1955,10 +1969,8 @@ void H264EncoderImpl::encode_frame(H264EncoderImpl::PendingFrame frame, int enco
 
 		unsigned char *y_ptr = (unsigned char *)surface_p;
 		memcpy_with_pitch(y_ptr, surf->y_ptr, frame_width, surf->surface_image.pitches[0], frame_height);
-		surf->y_offset = 0;
 
 		unsigned char *cbcr_ptr = (unsigned char *)surface_p + frame_width * frame_height;
-		surf->cbcr_offset = frame_width * frame_height;
 		memcpy_with_pitch(cbcr_ptr, surf->cbcr_ptr, (frame_width / 2) * sizeof(uint16_t), surf->surface_image.pitches[1], frame_height / 2);
 
 		va_status = vaUnmapBuffer(va_dpy, surf->surface_image.buf);
