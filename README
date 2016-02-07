@@ -55,8 +55,8 @@ Nageru is in beta stage. It currently needs:
  - Lua, for driving the theme engine.
 
 
-If on Debian sid or something similar (or stretch, once Movit 1.3.0 migrates),
-you can install everything you need with:
+If on Debian stretch or something similar, you can install everything you need
+with:
 
   git submodule update --init
   apt install qtbase5-dev qt5-default pkg-config libmicrohttpd-dev \
