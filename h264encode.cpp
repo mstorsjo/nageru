@@ -159,7 +159,7 @@ private:
 	int update_RefPicList(int frame_type);
 
 	bool is_shutdown = false;
-	bool use_drm;
+	bool use_zerocopy;
 	int drm_fd = -1;
 
 	thread encode_thread, storage_thread;
@@ -183,8 +183,7 @@ private:
 	AVCodecContext *context_audio;
 	HTTPD *httpd;
 
-	Display *x11_display;
-	Window x11_window;
+	Display *x11_display = nullptr;
 
 	// Encoder parameters
 	VADisplay va_dpy;
@@ -198,7 +197,14 @@ private:
 
 		VAImage surface_image;
 		GLuint y_tex, cbcr_tex;
+
+		// Only if use_zerocopy == true.
 		EGLImage y_egl_image, cbcr_egl_image;
+
+		// Only if use_zerocopy == false.
+		RefCountedGLsync readback_done_fence;
+		GLuint pbo;
+		uint8_t *y_ptr, *cbcr_ptr;
 	};
 	GLSurface gl_surfaces[SURFACE_NUM];
 
@@ -843,7 +849,7 @@ VADisplay H264EncoderImpl::va_open_display(const string &va_display)
 			fprintf(stderr, "error: can't connect to X server!\n");
 			return NULL;
 		}
-		use_drm = false;
+		use_zerocopy = true;
 		return vaGetDisplay(x11_display);
 	} else if (va_display[0] != '/') {
 		x11_display = XOpenDisplay(va_display.c_str());
@@ -851,7 +857,7 @@ VADisplay H264EncoderImpl::va_open_display(const string &va_display)
 			fprintf(stderr, "error: can't connect to X server!\n");
 			return NULL;
 		}
-		use_drm = false;
+		use_zerocopy = true;
 		return vaGetDisplay(x11_display);
 	} else {
 		drm_fd = open(va_display.c_str(), O_RDWR);
@@ -859,23 +865,20 @@ VADisplay H264EncoderImpl::va_open_display(const string &va_display)
 			perror(va_display.c_str());
 			return NULL;
 		}
-		use_drm = true;
+		use_zerocopy = false;
 		return vaGetDisplayDRM(drm_fd);
 	}
 }
 
 void H264EncoderImpl::va_close_display(VADisplay va_dpy)
 {
-    if (!x11_display)
-        return;
-
-    if (x11_window) {
-        XUnmapWindow(x11_display, x11_window);
-        XDestroyWindow(x11_display, x11_window);
-        x11_window = None;
-    }
-    XCloseDisplay(x11_display);
-    x11_display = NULL;
+	if (x11_display) {
+		XCloseDisplay(x11_display);
+		x11_display = nullptr;
+	}
+	if (drm_fd != -1) {
+		close(drm_fd);
+	}
 }
 
 int H264EncoderImpl::init_va(const string &va_display)
@@ -917,7 +920,9 @@ int H264EncoderImpl::init_va(const string &va_display)
     }
     
     if (support_encode == 0) {
-        printf("Can't find VAEntrypointEncSlice for H264 profiles\n");
+        printf("Can't find VAEntrypointEncSlice for H264 profiles. If you are using a non-Intel GPU\n");
+        printf("but have one in your system, try launching Nageru with --va-display /dev/dri/card0\n");
+        printf("to use VA-API against DRM instead of X11.\n");
         exit(1);
     } else {
         switch (h264_profile) {
@@ -1087,6 +1092,26 @@ int H264EncoderImpl::setup_encode()
     for (i = 0; i < SURFACE_NUM; i++) {
         glGenTextures(1, &gl_surfaces[i].y_tex);
         glGenTextures(1, &gl_surfaces[i].cbcr_tex);
+
+        if (!use_zerocopy) {
+            // Create Y image.
+            glBindTexture(GL_TEXTURE_2D, gl_surfaces[i].y_tex);
+            glTexStorage2D(GL_TEXTURE_2D, 1, GL_R8, frame_width, frame_height);
+
+            // Create CbCr image.
+            glBindTexture(GL_TEXTURE_2D, gl_surfaces[i].cbcr_tex);
+            glTexStorage2D(GL_TEXTURE_2D, 1, GL_RG8, frame_width / 2, frame_height / 2);
+
+            // Generate a PBO to read into. It doesn't necessarily fit 1:1 with the VA-API
+            // buffers, due to potentially differing pitch.
+            glGenBuffers(1, &gl_surfaces[i].pbo);
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, gl_surfaces[i].pbo);
+            glBufferStorage(GL_PIXEL_PACK_BUFFER, frame_width * frame_height * 2, nullptr, GL_MAP_READ_BIT | GL_MAP_PERSISTENT_BIT);
+            uint8_t *ptr = (uint8_t *)glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, frame_width * frame_height * 2, GL_MAP_READ_BIT | GL_MAP_PERSISTENT_BIT);
+            gl_surfaces[i].y_ptr = ptr;
+            gl_surfaces[i].cbcr_ptr = ptr + frame_width * frame_height;
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        }
     }
 
     for (i = 0; i < SURFACE_NUM; i++) {
@@ -1605,18 +1630,25 @@ void H264EncoderImpl::storage_task_thread()
 
 int H264EncoderImpl::release_encode()
 {
-    int i;
-    
-    for (i = 0; i < SURFACE_NUM; i++) {
-        vaDestroyBuffer(va_dpy, gl_surfaces[i].coded_buf);
-        vaDestroySurfaces(va_dpy, &gl_surfaces[i].src_surface, 1);
-        vaDestroySurfaces(va_dpy, &gl_surfaces[i].ref_surface, 1);
-    }
-    
-    vaDestroyContext(va_dpy, context_id);
-    vaDestroyConfig(va_dpy, config_id);
+	for (unsigned i = 0; i < SURFACE_NUM; i++) {
+		vaDestroyBuffer(va_dpy, gl_surfaces[i].coded_buf);
+		vaDestroySurfaces(va_dpy, &gl_surfaces[i].src_surface, 1);
+		vaDestroySurfaces(va_dpy, &gl_surfaces[i].ref_surface, 1);
 
-    return 0;
+		if (!use_zerocopy) {
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, gl_surfaces[i].pbo);
+			glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+			glDeleteBuffers(1, &gl_surfaces[i].pbo);
+		}
+		glDeleteTextures(1, &gl_surfaces[i].y_tex);
+		glDeleteTextures(1, &gl_surfaces[i].cbcr_tex);
+	}
+
+	vaDestroyContext(va_dpy, context_id);
+	vaDestroyConfig(va_dpy, config_id);
+
+	return 0;
 }
 
 int H264EncoderImpl::deinit_va()
@@ -1697,52 +1729,53 @@ bool H264EncoderImpl::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 	*y_tex = surf->y_tex;
 	*cbcr_tex = surf->cbcr_tex;
 
-	VASurfaceID surface = surf->src_surface;
-        VAStatus va_status = vaDeriveImage(va_dpy, surface, &surf->surface_image);
-        CHECK_VASTATUS(va_status, "vaDeriveImage");
+	VAStatus va_status = vaDeriveImage(va_dpy, surf->src_surface, &surf->surface_image);
+	CHECK_VASTATUS(va_status, "vaDeriveImage");
 
-	VABufferInfo buf_info;
-	buf_info.mem_type = VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME;  // or VA_SURFACE_ATTRIB_MEM_TYPE_KERNEL_DRM?
-	va_status = vaAcquireBufferHandle(va_dpy, surf->surface_image.buf, &buf_info);
-        CHECK_VASTATUS(va_status, "vaAcquireBufferHandle");
+	if (use_zerocopy) {
+		VABufferInfo buf_info;
+		buf_info.mem_type = VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME;  // or VA_SURFACE_ATTRIB_MEM_TYPE_KERNEL_DRM?
+		va_status = vaAcquireBufferHandle(va_dpy, surf->surface_image.buf, &buf_info);
+		CHECK_VASTATUS(va_status, "vaAcquireBufferHandle");
 
-	// Create Y image.
-	surf->y_egl_image = EGL_NO_IMAGE_KHR;
-	EGLint y_attribs[] = {
-		EGL_WIDTH, frame_width,
-		EGL_HEIGHT, frame_height,
-		EGL_LINUX_DRM_FOURCC_EXT, fourcc_code('R', '8', ' ', ' '),
-		EGL_DMA_BUF_PLANE0_FD_EXT, EGLint(buf_info.handle),
-		EGL_DMA_BUF_PLANE0_OFFSET_EXT, EGLint(surf->surface_image.offsets[0]),
-		EGL_DMA_BUF_PLANE0_PITCH_EXT, EGLint(surf->surface_image.pitches[0]),
-		EGL_NONE
-	};
+		// Create Y image.
+		surf->y_egl_image = EGL_NO_IMAGE_KHR;
+		EGLint y_attribs[] = {
+			EGL_WIDTH, frame_width,
+			EGL_HEIGHT, frame_height,
+			EGL_LINUX_DRM_FOURCC_EXT, fourcc_code('R', '8', ' ', ' '),
+			EGL_DMA_BUF_PLANE0_FD_EXT, EGLint(buf_info.handle),
+			EGL_DMA_BUF_PLANE0_OFFSET_EXT, EGLint(surf->surface_image.offsets[0]),
+			EGL_DMA_BUF_PLANE0_PITCH_EXT, EGLint(surf->surface_image.pitches[0]),
+			EGL_NONE
+		};
 
-	surf->y_egl_image = eglCreateImageKHR(eglGetCurrentDisplay(), EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, y_attribs);
-	assert(surf->y_egl_image != EGL_NO_IMAGE_KHR);
+		surf->y_egl_image = eglCreateImageKHR(eglGetCurrentDisplay(), EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, y_attribs);
+		assert(surf->y_egl_image != EGL_NO_IMAGE_KHR);
 
-	// Associate Y image to a texture.
-	glBindTexture(GL_TEXTURE_2D, *y_tex);
-	glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, surf->y_egl_image);
+		// Associate Y image to a texture.
+		glBindTexture(GL_TEXTURE_2D, *y_tex);
+		glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, surf->y_egl_image);
 
-	// Create CbCr image.
-	surf->cbcr_egl_image = EGL_NO_IMAGE_KHR;
-	EGLint cbcr_attribs[] = {
-		EGL_WIDTH, frame_width,
-		EGL_HEIGHT, frame_height,
-		EGL_LINUX_DRM_FOURCC_EXT, fourcc_code('G', 'R', '8', '8'),
-		EGL_DMA_BUF_PLANE0_FD_EXT, EGLint(buf_info.handle),
-		EGL_DMA_BUF_PLANE0_OFFSET_EXT, EGLint(surf->surface_image.offsets[1]),
-		EGL_DMA_BUF_PLANE0_PITCH_EXT, EGLint(surf->surface_image.pitches[1]),
-		EGL_NONE
-	};
+		// Create CbCr image.
+		surf->cbcr_egl_image = EGL_NO_IMAGE_KHR;
+		EGLint cbcr_attribs[] = {
+			EGL_WIDTH, frame_width,
+			EGL_HEIGHT, frame_height,
+			EGL_LINUX_DRM_FOURCC_EXT, fourcc_code('G', 'R', '8', '8'),
+			EGL_DMA_BUF_PLANE0_FD_EXT, EGLint(buf_info.handle),
+			EGL_DMA_BUF_PLANE0_OFFSET_EXT, EGLint(surf->surface_image.offsets[1]),
+			EGL_DMA_BUF_PLANE0_PITCH_EXT, EGLint(surf->surface_image.pitches[1]),
+			EGL_NONE
+		};
 
-	surf->cbcr_egl_image = eglCreateImageKHR(eglGetCurrentDisplay(), EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, cbcr_attribs);
-	assert(surf->cbcr_egl_image != EGL_NO_IMAGE_KHR);
+		surf->cbcr_egl_image = eglCreateImageKHR(eglGetCurrentDisplay(), EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, cbcr_attribs);
+		assert(surf->cbcr_egl_image != EGL_NO_IMAGE_KHR);
 
-	// Associate CbCr image to a texture.
-	glBindTexture(GL_TEXTURE_2D, *cbcr_tex);
-	glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, surf->cbcr_egl_image);
+		// Associate CbCr image to a texture.
+		glBindTexture(GL_TEXTURE_2D, *cbcr_tex);
+		glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, surf->cbcr_egl_image);
+	}
 
 	return true;
 }
@@ -1760,6 +1793,23 @@ void H264EncoderImpl::add_audio(int64_t pts, vector<float> audio)
 void H264EncoderImpl::end_frame(RefCountedGLsync fence, int64_t pts, const vector<RefCountedFrame> &input_frames)
 {
 	assert(!is_shutdown);
+
+	if (!use_zerocopy) {
+		GLSurface *surf = &gl_surfaces[current_storage_frame % SURFACE_NUM];
+		glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+
+		glBindTexture(GL_TEXTURE_2D, surf->y_tex);
+		glGetTexImage(GL_TEXTURE_2D, 0, GL_RED, GL_UNSIGNED_BYTE, surf->y_ptr);
+
+		glBindTexture(GL_TEXTURE_2D, surf->cbcr_tex);
+		glGetTexImage(GL_TEXTURE_2D, 0, GL_RG, GL_UNSIGNED_BYTE, surf->cbcr_ptr);
+
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		glMemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
+		fence = RefCountedGLsync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
+	}
+
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
 		pending_video_frames[current_storage_frame] = PendingFrame{ fence, input_frames, pts };
@@ -1859,6 +1909,23 @@ void H264EncoderImpl::encode_remaining_frames_as_p(int encoding_frame_num, int g
 	}
 }
 
+namespace {
+
+void memcpy_with_pitch(uint8_t *dst, const uint8_t *src, size_t src_width, size_t dst_pitch, size_t height)
+{
+	if (src_width == dst_pitch) {
+		memcpy(dst, src, src_width * height);
+	} else {
+		for (size_t y = 0; y < height; ++y) {
+			const uint8_t *sptr = src + y * src_width;
+			uint8_t *dptr = dst + y * dst_pitch;
+			memcpy(dptr, sptr, src_width);
+		}
+	}
+}
+
+}  // namespace
+
 void H264EncoderImpl::encode_frame(H264EncoderImpl::PendingFrame frame, int encoding_frame_num, int display_frame_num, int gop_start_display_frame_num,
                                    int frame_type, int64_t pts, int64_t dts)
 {
@@ -1868,19 +1935,34 @@ void H264EncoderImpl::encode_frame(H264EncoderImpl::PendingFrame frame, int enco
 	// Release back any input frames we needed to render this frame.
 	frame.input_frames.clear();
 
-	// Unmap the image.
 	GLSurface *surf = &gl_surfaces[display_frame_num % SURFACE_NUM];
-	eglDestroyImageKHR(eglGetCurrentDisplay(), surf->y_egl_image);
-	eglDestroyImageKHR(eglGetCurrentDisplay(), surf->cbcr_egl_image);
-	VAStatus va_status = vaReleaseBufferHandle(va_dpy, surf->surface_image.buf);
-	CHECK_VASTATUS(va_status, "vaReleaseBufferHandle");
+	VAStatus va_status;
+
+	if (use_zerocopy) {
+		eglDestroyImageKHR(eglGetCurrentDisplay(), surf->y_egl_image);
+		eglDestroyImageKHR(eglGetCurrentDisplay(), surf->cbcr_egl_image);
+		va_status = vaReleaseBufferHandle(va_dpy, surf->surface_image.buf);
+		CHECK_VASTATUS(va_status, "vaReleaseBufferHandle");
+	} else {
+		unsigned char *surface_p = nullptr;
+		vaMapBuffer(va_dpy, surf->surface_image.buf, (void **)&surface_p);
+
+		unsigned char *y_ptr = (unsigned char *)surface_p;
+		memcpy_with_pitch(y_ptr, surf->y_ptr, frame_width, surf->surface_image.pitches[0], frame_height);
+
+		unsigned char *cbcr_ptr = (unsigned char *)surface_p + surf->surface_image.offsets[1];
+		memcpy_with_pitch(cbcr_ptr, surf->cbcr_ptr, (frame_width / 2) * sizeof(uint16_t), surf->surface_image.pitches[1], frame_height / 2);
+
+		va_status = vaUnmapBuffer(va_dpy, surf->surface_image.buf);
+		CHECK_VASTATUS(va_status, "vaUnmapBuffer");
+	}
+
 	va_status = vaDestroyImage(va_dpy, surf->surface_image.image_id);
 	CHECK_VASTATUS(va_status, "vaDestroyImage");
 
-	VASurfaceID surface = surf->src_surface;
-
 	// Schedule the frame for encoding.
-	va_status = vaBeginPicture(va_dpy, context_id, surface);
+	VASurfaceID va_surface = surf->src_surface;
+	va_status = vaBeginPicture(va_dpy, context_id, va_surface);
 	CHECK_VASTATUS(va_status, "vaBeginPicture");
 
 	if (frame_type == FRAME_IDR) {
