@@ -51,6 +51,8 @@ class QSurface;
         exit(1);                                                        \
     }
 
+#define BUFFER_OFFSET(i) ((char *)NULL + (i))
+
 //#include "loadsurface.h"
 
 #define NAL_REF_IDC_NONE        0
@@ -205,6 +207,7 @@ private:
 		RefCountedGLsync readback_done_fence;
 		GLuint pbo;
 		uint8_t *y_ptr, *cbcr_ptr;
+		size_t y_offset, cbcr_offset;
 	};
 	GLSurface gl_surfaces[SURFACE_NUM];
 
@@ -1798,13 +1801,16 @@ void H264EncoderImpl::end_frame(RefCountedGLsync fence, int64_t pts, const vecto
 		GLSurface *surf = &gl_surfaces[current_storage_frame % SURFACE_NUM];
 		glPixelStorei(GL_PACK_ROW_LENGTH, 0);
 
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, surf->pbo);
+
 		glBindTexture(GL_TEXTURE_2D, surf->y_tex);
-		glGetTexImage(GL_TEXTURE_2D, 0, GL_RED, GL_UNSIGNED_BYTE, surf->y_ptr);
+		glGetTexImage(GL_TEXTURE_2D, 0, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(surf->y_offset));
 
 		glBindTexture(GL_TEXTURE_2D, surf->cbcr_tex);
-		glGetTexImage(GL_TEXTURE_2D, 0, GL_RG, GL_UNSIGNED_BYTE, surf->cbcr_ptr);
+		glGetTexImage(GL_TEXTURE_2D, 0, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(surf->cbcr_offset));
 
 		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
 		glMemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
 		fence = RefCountedGLsync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
@@ -1949,8 +1955,10 @@ void H264EncoderImpl::encode_frame(H264EncoderImpl::PendingFrame frame, int enco
 
 		unsigned char *y_ptr = (unsigned char *)surface_p;
 		memcpy_with_pitch(y_ptr, surf->y_ptr, frame_width, surf->surface_image.pitches[0], frame_height);
+		surf->y_offset = 0;
 
-		unsigned char *cbcr_ptr = (unsigned char *)surface_p + surf->surface_image.offsets[1];
+		unsigned char *cbcr_ptr = (unsigned char *)surface_p + frame_width * frame_height;
+		surf->cbcr_offset = frame_width * frame_height;
 		memcpy_with_pitch(cbcr_ptr, surf->cbcr_ptr, (frame_width / 2) * sizeof(uint16_t), surf->surface_image.pitches[1], frame_height / 2);
 
 		va_status = vaUnmapBuffer(va_dpy, surf->surface_image.buf);
