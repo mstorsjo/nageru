@@ -1824,7 +1824,7 @@ void H264EncoderImpl::end_frame(RefCountedGLsync fence, int64_t pts, const vecto
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 		check_error();
 
-		glMemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
+		glMemoryBarrier(GL_TEXTURE_UPDATE_BARRIER_BIT | GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
 		check_error();
 		fence = RefCountedGLsync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
 		check_error();
