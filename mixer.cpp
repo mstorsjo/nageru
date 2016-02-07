@@ -30,6 +30,7 @@
 #include "bmusb/bmusb.h"
 #include "context.h"
 #include "defs.h"
+#include "flags.h"
 #include "h264encode.h"
 #include "pbo_frame_allocator.h"
 #include "ref_counted_gl_sync.h"
@@ -132,7 +133,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	display_chain->set_dither_bits(0);  // Don't bother.
 	display_chain->finalize();
 
-	h264_encoder.reset(new H264Encoder(h264_encoder_surface, WIDTH, HEIGHT, &httpd));
+	h264_encoder.reset(new H264Encoder(h264_encoder_surface, global_flags.va_display, WIDTH, HEIGHT, &httpd));
 
 	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 		printf("Configuring card %d...\n", card_index);
@@ -675,7 +676,7 @@ void Mixer::thread_func()
 			h264_encoder->shutdown();
 			httpd.close_output_file();
 			httpd.open_output_file(filename.c_str());
-			h264_encoder.reset(new H264Encoder(h264_encoder_surface, WIDTH, HEIGHT, &httpd));
+			h264_encoder.reset(new H264Encoder(h264_encoder_surface, global_flags.va_display, WIDTH, HEIGHT, &httpd));
 		}
 
 #if 0

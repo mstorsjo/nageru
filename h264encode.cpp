@@ -18,7 +18,9 @@ extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 #include <va/va.h>
+#include <va/va_drm.h>
 #include <va/va_drmcommon.h>
 #include <va/va_enc_h264.h>
 #include <va/va_x11.h>
@@ -108,7 +110,7 @@ using namespace std;
 
 class H264EncoderImpl {
 public:
-	H264EncoderImpl(QSurface *surface, int width, int height, HTTPD *httpd);
+	H264EncoderImpl(QSurface *surface, const string &va_display, int width, int height, HTTPD *httpd);
 	~H264EncoderImpl();
 	void add_audio(int64_t pts, vector<float> audio);
 	bool begin_frame(GLuint *y_tex, GLuint *cbcr_tex);
@@ -147,9 +149,9 @@ private:
 	void slice_header(bitstream *bs);
 	int build_packed_seq_buffer(unsigned char **header_buffer);
 	int build_packed_slice_buffer(unsigned char **header_buffer);
-	int init_va();
+	int init_va(const string &va_display);
 	int deinit_va();
-	VADisplay va_open_display(void);
+	VADisplay va_open_display(const string &va_display);
 	void va_close_display(VADisplay va_dpy);
 	int setup_encode();
 	int release_encode();
@@ -157,6 +159,8 @@ private:
 	int update_RefPicList(int frame_type);
 
 	bool is_shutdown = false;
+	bool use_drm;
+	int drm_fd = -1;
 
 	thread encode_thread, storage_thread;
 
@@ -831,14 +835,33 @@ static const char *rc_to_string(int rc_mode)
     }
 }
 
-VADisplay H264EncoderImpl::va_open_display(void)
+VADisplay H264EncoderImpl::va_open_display(const string &va_display)
 {
-    x11_display = XOpenDisplay(NULL);
-    if (!x11_display) {
-        fprintf(stderr, "error: can't connect to X server!\n");
-        return NULL;
-    }
-    return vaGetDisplay(x11_display);
+	if (va_display.empty()) {
+		x11_display = XOpenDisplay(NULL);
+		if (!x11_display) {
+			fprintf(stderr, "error: can't connect to X server!\n");
+			return NULL;
+		}
+		use_drm = false;
+		return vaGetDisplay(x11_display);
+	} else if (va_display[0] != '/') {
+		x11_display = XOpenDisplay(va_display.c_str());
+		if (!x11_display) {
+			fprintf(stderr, "error: can't connect to X server!\n");
+			return NULL;
+		}
+		use_drm = false;
+		return vaGetDisplay(x11_display);
+	} else {
+		drm_fd = open(va_display.c_str(), O_RDWR);
+		if (drm_fd == -1) {
+			perror(va_display.c_str());
+			return NULL;
+		}
+		use_drm = true;
+		return vaGetDisplayDRM(drm_fd);
+	}
 }
 
 void H264EncoderImpl::va_close_display(VADisplay va_dpy)
@@ -855,7 +878,7 @@ void H264EncoderImpl::va_close_display(VADisplay va_dpy)
     x11_display = NULL;
 }
 
-int H264EncoderImpl::init_va()
+int H264EncoderImpl::init_va(const string &va_display)
 {
     VAProfile profile_list[]={VAProfileH264High, VAProfileH264Main, VAProfileH264Baseline, VAProfileH264ConstrainedBaseline};
     VAEntrypoint *entrypoints;
@@ -865,7 +888,7 @@ int H264EncoderImpl::init_va()
     VAStatus va_status;
     unsigned int i;
 
-    va_dpy = va_open_display();
+    va_dpy = va_open_display(va_display);
     va_status = vaInitialize(va_dpy, &major_ver, &minor_ver);
     CHECK_VASTATUS(va_status, "vaInitialize");
 
@@ -1606,7 +1629,7 @@ int H264EncoderImpl::deinit_va()
 }
 
 
-H264EncoderImpl::H264EncoderImpl(QSurface *surface, int width, int height, HTTPD *httpd)
+H264EncoderImpl::H264EncoderImpl(QSurface *surface, const string &va_display, int width, int height, HTTPD *httpd)
 	: current_storage_frame(0), surface(surface), httpd(httpd)
 {
 	AVCodec *codec_audio = avcodec_find_encoder(AUDIO_OUTPUT_CODEC);
@@ -1629,7 +1652,7 @@ H264EncoderImpl::H264EncoderImpl(QSurface *surface, int width, int height, HTTPD
 
 	//print_input();
 
-	init_va();
+	init_va(va_display);
 	setup_encode();
 
 	// No frames are ready yet.
@@ -1889,8 +1912,8 @@ void H264EncoderImpl::encode_frame(H264EncoderImpl::PendingFrame frame, int enco
 }
 
 // Proxy object.
-H264Encoder::H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd)
-	: impl(new H264EncoderImpl(surface, width, height, httpd)) {}
+H264Encoder::H264Encoder(QSurface *surface, const string &va_display, int width, int height, HTTPD *httpd)
+	: impl(new H264EncoderImpl(surface, va_display, width, height, httpd)) {}
 
 // Must be defined here because unique_ptr<> destructor needs to know the impl.
 H264Encoder::~H264Encoder() {}

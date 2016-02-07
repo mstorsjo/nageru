@@ -10,6 +10,7 @@ void parse_flags(int argc, char * const argv[])
 {
 	static const option long_options[] = {
 		{ "num-cards", required_argument, 0, 'c' },
+		{ "va-display", required_argument, 0, 1000 },
 		{ 0, 0, 0, 0 }
 	};
 	for ( ;; ) {
@@ -22,6 +23,9 @@ void parse_flags(int argc, char * const argv[])
 		switch (c) {
 		case 'c':
 			global_flags.num_cards = atoi(optarg);
+			break;
+		case 1000:
+			global_flags.va_display = optarg;
 			break;
 		default:
 			fprintf(stderr, "Unknown option '%s'\n", argv[option_index]);

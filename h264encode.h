@@ -30,6 +30,7 @@
 #include <stdint.h>
 #include <atomic>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "ref_counted_frame.h"
@@ -44,7 +45,7 @@ class QSurface;
 // .cpp file.
 class H264Encoder {
 public:
-        H264Encoder(QSurface *surface, int width, int height, HTTPD *httpd);
+        H264Encoder(QSurface *surface, const std::string &va_display, int width, int height, HTTPD *httpd);
         ~H264Encoder();
 
 	void add_audio(int64_t pts, std::vector<float> audio);
