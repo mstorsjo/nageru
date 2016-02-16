@@ -1,5 +1,7 @@
 #include <QPainter>
 
+#include <math.h>
+
 #include "correlation_meter.h"
 
 using namespace std;
