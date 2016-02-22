@@ -1967,10 +1967,10 @@ void H264EncoderImpl::encode_frame(H264EncoderImpl::PendingFrame frame, int enco
 		unsigned char *surface_p = nullptr;
 		vaMapBuffer(va_dpy, surf->surface_image.buf, (void **)&surface_p);
 
-		unsigned char *y_ptr = (unsigned char *)surface_p;
+		unsigned char *y_ptr = (unsigned char *)surface_p + surf->surface_image.offsets[0];
 		memcpy_with_pitch(y_ptr, surf->y_ptr, frame_width, surf->surface_image.pitches[0], frame_height);
 
-		unsigned char *cbcr_ptr = (unsigned char *)surface_p + frame_width * frame_height;
+		unsigned char *cbcr_ptr = (unsigned char *)surface_p + surf->surface_image.offsets[1];
 		memcpy_with_pitch(cbcr_ptr, surf->cbcr_ptr, (frame_width / 2) * sizeof(uint16_t), surf->surface_image.pitches[1], frame_height / 2);
 
 		va_status = vaUnmapBuffer(va_dpy, surf->surface_image.buf);
