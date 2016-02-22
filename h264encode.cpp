@@ -205,7 +205,6 @@ private:
 		EGLImage y_egl_image, cbcr_egl_image;
 
 		// Only if use_zerocopy == false.
-		RefCountedGLsync readback_done_fence;
 		GLuint pbo;
 		uint8_t *y_ptr, *cbcr_ptr;
 		size_t y_offset, cbcr_offset;
@@ -1112,10 +1111,10 @@ int H264EncoderImpl::setup_encode()
             glBindBuffer(GL_PIXEL_PACK_BUFFER, gl_surfaces[i].pbo);
             glBufferStorage(GL_PIXEL_PACK_BUFFER, frame_width * frame_height * 2, nullptr, GL_MAP_READ_BIT | GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT);
             uint8_t *ptr = (uint8_t *)glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, frame_width * frame_height * 2, GL_MAP_READ_BIT | GL_MAP_PERSISTENT_BIT);
-            gl_surfaces[i].y_ptr = ptr;
-            gl_surfaces[i].cbcr_ptr = ptr + frame_width * frame_height;
             gl_surfaces[i].y_offset = 0;
             gl_surfaces[i].cbcr_offset = frame_width * frame_height;
+            gl_surfaces[i].y_ptr = ptr + gl_surfaces[i].y_offset;
+            gl_surfaces[i].cbcr_ptr = ptr + gl_surfaces[i].cbcr_offset;
             glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
         }
     }
@@ -1967,11 +1966,11 @@ void H264EncoderImpl::encode_frame(H264EncoderImpl::PendingFrame frame, int enco
 		unsigned char *surface_p = nullptr;
 		vaMapBuffer(va_dpy, surf->surface_image.buf, (void **)&surface_p);
 
-		unsigned char *y_ptr = (unsigned char *)surface_p + surf->surface_image.offsets[0];
-		memcpy_with_pitch(y_ptr, surf->y_ptr, frame_width, surf->surface_image.pitches[0], frame_height);
+		unsigned char *va_y_ptr = (unsigned char *)surface_p + surf->surface_image.offsets[0];
+		memcpy_with_pitch(va_y_ptr, surf->y_ptr, frame_width, surf->surface_image.pitches[0], frame_height);
 
-		unsigned char *cbcr_ptr = (unsigned char *)surface_p + surf->surface_image.offsets[1];
-		memcpy_with_pitch(cbcr_ptr, surf->cbcr_ptr, (frame_width / 2) * sizeof(uint16_t), surf->surface_image.pitches[1], frame_height / 2);
+		unsigned char *va_cbcr_ptr = (unsigned char *)surface_p + surf->surface_image.offsets[1];
+		memcpy_with_pitch(va_cbcr_ptr, surf->cbcr_ptr, (frame_width / 2) * sizeof(uint16_t), surf->surface_image.pitches[1], frame_height / 2);
 
 		va_status = vaUnmapBuffer(va_dpy, surf->surface_image.buf);
 		CHECK_VASTATUS(va_status, "vaUnmapBuffer");
