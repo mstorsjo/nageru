@@ -924,7 +924,7 @@ int H264EncoderImpl::init_va(const string &va_display)
     
     if (support_encode == 0) {
         printf("Can't find VAEntrypointEncSlice for H264 profiles. If you are using a non-Intel GPU\n");
-        printf("but have one in your system, try launching Nageru with --va-display /dev/dri/card0\n");
+        printf("but have one in your system, try launching Nageru with --va-display /dev/dri/renderD128\n");
         printf("to use VA-API against DRM instead of X11.\n");
         exit(1);
     } else {

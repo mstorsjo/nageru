@@ -31,7 +31,7 @@ Nageru is in beta stage. It currently needs:
  - An Intel processor with Intel Quick Sync, or otherwise some hardware
    H.264 encoder exposed through VA-API. Note that you can use VA-API over
    DRM instead of X11, to use a non-Intel GPU for rendering but still use
-   Quick Sync (by giving e.g. “--va-display /dev/dri/card0”).
+   Quick Sync (by giving e.g. “--va-display /dev/dri/renderD128”).
 
  - Two or more Blackmagic USB3 cards, either HDMI or SDI. These are driven
    through the “bmusb” driver embedded in bmusb/, using libusb-1.0.
