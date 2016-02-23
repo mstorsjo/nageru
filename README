@@ -47,9 +47,11 @@ Nageru is in beta stage. It currently needs:
 
  - ffmpeg for muxing, and for encoding audio.
 
- - Working OpenGL; Movit works with almost any modern OpenGL implementation,
-   but Nageru has been tested with Mesa 10.x and 11.x only (you probably want
-   11.x).
+ - Working OpenGL; Movit works with almost any modern OpenGL implementation.
+   Nageru has been tested with Intel on Mesa 10.x and 11.x (you probably want
+   11.x), and with NVIDIA's proprietary drivers. AMD's proprietary drivers
+   (fglrx) are known not to work due to driver bugs; I am in contact with
+   AMD to try to get this resolved.
 
  - libzita-resampler, for resampling sound sources so that they are in sync
    between sources, and also for oversampling for the peak meter.
