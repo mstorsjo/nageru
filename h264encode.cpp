@@ -1949,7 +1949,12 @@ void H264EncoderImpl::encode_frame(H264EncoderImpl::PendingFrame frame, int enco
                                    int frame_type, int64_t pts, int64_t dts)
 {
 	// Wait for the GPU to be done with the frame.
-	glClientWaitSync(frame.fence.get(), 0, 0);
+	GLenum sync_status;
+	do {
+		sync_status = glClientWaitSync(frame.fence.get(), 0, 1000000000);
+		check_error();
+	} while (sync_status == GL_TIMEOUT_EXPIRED);
+	assert(sync_status != GL_WAIT_FAILED);
 
 	// Release back any input frames we needed to render this frame.
 	frame.input_frames.clear();
