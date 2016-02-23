@@ -923,6 +923,8 @@ void Mixer::subsample_chroma(GLuint src_tex, GLuint dst_tex)
 
 	glUseProgram(0);
 	check_error();
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	check_error();
 
 	resource_pool->release_fbo(fbo);
 	glDeleteVertexArrays(1, &vao);
