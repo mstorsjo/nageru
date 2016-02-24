@@ -1,3 +1,17 @@
+Nageru 1.1.0, February 24th, 2016
+
+ - Support doing the H.264 encoding on a different graphics device from the one
+   doing the mixing. In particular, this makes it possible to use Nageru on an
+   NVIDIA GPU while still encoding H.264 video using Intel Quick Sync (NVENC
+   is not supported yet) -- it is less efficient since the data needs to be read
+   back via the CPU, but the NVIDIA cards and drivers are so much faster that it
+   doesn't really matter. Tested on a GTX 950 with the proprietary drivers.
+
+ - In the included example theme, fix fading to/from deinterlaced sources.
+
+ - Various smaller compilation, distribution and documentation fixes.
+
+
 Nageru 1.0.0, January 30th, 2016
 
  - Initial release.
