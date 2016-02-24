@@ -262,6 +262,8 @@ private:
 	std::atomic<unsigned> audio_source_channel{0};
 	std::unique_ptr<movit::EffectChain> display_chain;
 	GLuint cbcr_program_num;  // Owned by <resource_pool>.
+	GLuint cbcr_vbo;  // Holds position and texcoord data.
+	GLuint cbcr_position_attribute_index, cbcr_texcoord_attribute_index;
 	std::unique_ptr<H264Encoder> h264_encoder;
 
 	// Effects part of <display_chain>. Owned by <display_chain>.

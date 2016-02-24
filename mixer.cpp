@@ -199,6 +199,15 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	vector<string> frag_shader_outputs;
 	cbcr_program_num = resource_pool->compile_glsl_program(cbcr_vert_shader, cbcr_frag_shader, frag_shader_outputs);
 
+	float vertices[] = {
+		0.0f, 2.0f,
+		0.0f, 0.0f,
+		2.0f, 0.0f
+	};
+	cbcr_vbo = generate_vbo(2, GL_FLOAT, sizeof(vertices), vertices);
+	cbcr_position_attribute_index = glGetAttribLocation(cbcr_program_num, "position");
+	cbcr_texcoord_attribute_index = glGetAttribLocation(cbcr_program_num, "texcoord");
+
 	r128.init(2, OUTPUT_FREQUENCY);
 	r128.integr_start();
 
@@ -214,6 +223,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 Mixer::~Mixer()
 {
 	resource_pool->release_glsl_program(cbcr_program_num);
+	glDeleteBuffers(1, &cbcr_vbo);
 	BMUSBCapture::stop_bm_thread();
 
 	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
@@ -880,12 +890,6 @@ void Mixer::subsample_chroma(GLuint src_tex, GLuint dst_tex)
 	glGenVertexArrays(1, &vao);
 	check_error();
 
-	float vertices[] = {
-		0.0f, 2.0f,
-		0.0f, 0.0f,
-		2.0f, 0.0f
-	};
-
 	glBindVertexArray(vao);
 	check_error();
 
@@ -912,14 +916,23 @@ void Mixer::subsample_chroma(GLuint src_tex, GLuint dst_tex)
 	float chroma_offset_0[] = { -0.5f / WIDTH, 0.0f };
 	set_uniform_vec2(cbcr_program_num, "foo", "chroma_offset_0", chroma_offset_0);
 
-	GLuint position_vbo = fill_vertex_attribute(cbcr_program_num, "position", 2, GL_FLOAT, sizeof(vertices), vertices);
-	GLuint texcoord_vbo = fill_vertex_attribute(cbcr_program_num, "texcoord", 2, GL_FLOAT, sizeof(vertices), vertices);  // Same as vertices.
+	glBindBuffer(GL_ARRAY_BUFFER, cbcr_vbo);
+	check_error();
+
+	for (GLint attr_index : { cbcr_position_attribute_index, cbcr_texcoord_attribute_index }) {
+		glEnableVertexAttribArray(attr_index);
+		check_error();
+		glVertexAttribPointer(attr_index, 2, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(0));
+		check_error();
+	}
 
 	glDrawArrays(GL_TRIANGLES, 0, 3);
 	check_error();
 
-	cleanup_vertex_attribute(cbcr_program_num, "position", position_vbo);
-	cleanup_vertex_attribute(cbcr_program_num, "texcoord", texcoord_vbo);
+	for (GLint attr_index : { cbcr_position_attribute_index, cbcr_texcoord_attribute_index }) {
+		glDisableVertexAttribArray(attr_index);
+		check_error();
+	}
 
 	glUseProgram(0);
 	check_error();
