@@ -537,12 +537,12 @@ function get_chain(num, t, width, height, signals)
 			local input1_scale = needs_scale(signals, fade_dst_signal, width, height)
 			local chain = fade_chains[input0_type][input0_scale][input1_type][input1_scale][true]
 			prepare = function()
-				if input0_type == "live" then
+				if input0_type == "live" or input0_type == "livedeint" then
 					chain.input0.input:connect_signal(fade_src_signal)
 					set_neutral_color_from_signal(chain.input0.wb_effect, fade_src_signal)
 				end
 				set_scale_parameters_if_needed(chain.input0, width, height)
-				if input1_type == "live" then
+				if input1_type == "live" or input1_type == "livedeint" then
 					chain.input1.input:connect_signal(fade_dst_signal)
 					set_neutral_color_from_signal(chain.input1.wb_effect, fade_dst_signal)
 				end
