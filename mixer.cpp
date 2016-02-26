@@ -277,23 +277,18 @@ void deinterleave_samples(const vector<float> &in, vector<float> *out_l, vector<
 }  // namespace
 
 void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
-                     FrameAllocator::Frame video_frame, size_t video_offset, uint16_t video_format,
+                     FrameAllocator::Frame video_frame, size_t video_offset, VideoFormat video_format,
 		     FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format)
 {
 	CaptureCard *card = &cards[card_index];
 
-	unsigned width, height, second_field_start, frame_rate_nom, frame_rate_den, extra_lines_top, extra_lines_bottom;
-	bool interlaced;
-
-	decode_video_format(video_format, &width, &height, &second_field_start, &extra_lines_top, &extra_lines_bottom,
-	                    &frame_rate_nom, &frame_rate_den, &interlaced);  // Ignore return value for now.
-	int64_t frame_length = int64_t(TIMEBASE * frame_rate_den) / frame_rate_nom;
+	int64_t frame_length = int64_t(TIMEBASE * video_format.frame_rate_den) / video_format.frame_rate_nom;
 
 	size_t num_samples = (audio_frame.len >= audio_offset) ? (audio_frame.len - audio_offset) / 8 / 3 : 0;
 	if (num_samples > OUTPUT_FREQUENCY / 10) {
 		printf("Card %d: Dropping frame with implausible audio length (len=%d, offset=%d) [timecode=0x%04x video_len=%d video_offset=%d video_format=%x)\n",
 			card_index, int(audio_frame.len), int(audio_offset),
-			timecode, int(video_frame.len), int(video_offset), video_format);
+			timecode, int(video_frame.len), int(video_offset), video_format.id);
 		if (video_frame.owner) {
 			video_frame.owner->release_frame(video_frame);
 		}
@@ -320,7 +315,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 
 		// Number of samples per frame if we need to insert silence.
 		// (Could be nonintegral, but resampling will save us then.)
-		int silence_samples = OUTPUT_FREQUENCY * frame_rate_den / frame_rate_nom;
+		int silence_samples = OUTPUT_FREQUENCY * video_format.frame_rate_den / video_format.frame_rate_nom;
 
 		if (dropped_frames > MAX_FPS * 2) {
 			fprintf(stderr, "Card %d lost more than two seconds (or time code jumping around; from 0x%04x to 0x%04x), resetting resampler\n",
@@ -362,7 +357,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		if (card->should_quit) return;
 	}
 
-	size_t expected_length = width * (height + extra_lines_top + extra_lines_bottom) * 2;
+	size_t expected_length = video_format.width * (video_format.height + video_format.extra_lines_top + video_format.extra_lines_bottom) * 2;
 	if (video_frame.len - video_offset == 0 ||
 	    video_frame.len - video_offset != expected_length) {
 		if (video_frame.len != 0) {
@@ -390,48 +385,48 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 
 	PBOFrameAllocator::Userdata *userdata = (PBOFrameAllocator::Userdata *)video_frame.userdata;
 
-	unsigned num_fields = interlaced ? 2 : 1;
+	unsigned num_fields = video_format.interlaced ? 2 : 1;
 	timespec frame_upload_start;
-	if (interlaced) {
+	if (video_format.interlaced) {
 		// Send the two fields along as separate frames; the other side will need to add
 		// a deinterlacer to actually get this right.
-		assert(height % 2 == 0);
-		height /= 2;
+		assert(video_format.height % 2 == 0);
+		video_format.height /= 2;
 		assert(frame_length % 2 == 0);
 		frame_length /= 2;
 		num_fields = 2;
 		clock_gettime(CLOCK_MONOTONIC, &frame_upload_start);
 	}
-	userdata->last_interlaced = interlaced;
-	userdata->last_frame_rate_nom = frame_rate_nom;
-	userdata->last_frame_rate_den = frame_rate_den;
+	userdata->last_interlaced = video_format.interlaced;
+	userdata->last_frame_rate_nom = video_format.frame_rate_nom;
+	userdata->last_frame_rate_den = video_format.frame_rate_den;
 	RefCountedFrame new_frame(video_frame);
 
 	// Upload the textures.
-	size_t cbcr_width = width / 2;
+	size_t cbcr_width = video_format.width / 2;
 	size_t cbcr_offset = video_offset / 2;
 	size_t y_offset = video_frame.size / 2 + video_offset / 2;
 
 	for (unsigned field = 0; field < num_fields; ++field) {
-		unsigned field_start_line = (field == 1) ? second_field_start : extra_lines_top + field * (height + 22);
+		unsigned field_start_line = (field == 1) ? video_format.second_field_start : video_format.extra_lines_top + field * (video_format.height + 22);
 
 		if (userdata->tex_y[field] == 0 ||
 		    userdata->tex_cbcr[field] == 0 ||
-		    width != userdata->last_width[field] ||
-		    height != userdata->last_height[field]) {
+		    video_format.width != userdata->last_width[field] ||
+		    video_format.height != userdata->last_height[field]) {
 			// We changed resolution since last use of this texture, so we need to create
 			// a new object. Note that this each card has its own PBOFrameAllocator,
 			// we don't need to worry about these flip-flopping between resolutions.
 			glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr[field]);
 			check_error();
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, cbcr_width, height, 0, GL_RG, GL_UNSIGNED_BYTE, nullptr);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, cbcr_width, video_format.height, 0, GL_RG, GL_UNSIGNED_BYTE, nullptr);
 			check_error();
 			glBindTexture(GL_TEXTURE_2D, userdata->tex_y[field]);
 			check_error();
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, video_format.width, video_format.height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
 			check_error();
-			userdata->last_width[field] = width;
-			userdata->last_height[field] = height;
+			userdata->last_width[field] = video_format.width;
+			userdata->last_height[field] = video_format.height;
 		}
 
 		GLuint pbo = userdata->pbo;
@@ -443,11 +438,11 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 
 		glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr[field]);
 		check_error();
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cbcr_width, height, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(cbcr_offset + cbcr_width * field_start_line * sizeof(uint16_t)));
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cbcr_width, video_format.height, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(cbcr_offset + cbcr_width * field_start_line * sizeof(uint16_t)));
 		check_error();
 		glBindTexture(GL_TEXTURE_2D, userdata->tex_y[field]);
 		check_error();
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(y_offset + width * field_start_line));
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, video_format.width, video_format.height, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(y_offset + video_format.width * field_start_line));
 		check_error();
 		glBindTexture(GL_TEXTURE_2D, 0);
 		check_error();
@@ -482,7 +477,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 			card->new_frame = new_frame;
 			card->new_frame_length = frame_length;
 			card->new_frame_field = field;
-			card->new_frame_interlaced = interlaced;
+			card->new_frame_interlaced = video_format.interlaced;
 			card->new_data_ready_fence = fence;
 			card->dropped_frames = dropped_frames;
 			card->new_data_ready_changed.notify_all();
