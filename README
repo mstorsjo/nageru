@@ -40,7 +40,7 @@ Nageru is in beta stage. It currently needs:
    management) and bandwidth allocation issues with USB3.
 
  - Movit, my GPU-based video filter library (https://movit.sesse.net).
-   You will need at least version 1.3.0.
+   You will need at least version 1.3.1.
 
  - Qt 5.5 or newer for the GUI.
 
