@@ -242,6 +242,7 @@ public:
 	}
 
 private:
+	void configure_card(unsigned card_index, const QSurfaceFormat &format, CaptureInterface *capture);
 	void bm_frame(unsigned card_index, uint16_t timecode,
 		FrameAllocator::Frame video_frame, size_t video_offset, VideoFormat video_format,
 		FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format);

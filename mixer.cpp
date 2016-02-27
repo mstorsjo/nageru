@@ -136,27 +136,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	h264_encoder.reset(new H264Encoder(h264_encoder_surface, global_flags.va_display, WIDTH, HEIGHT, &httpd));
 
 	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
-		printf("Configuring card %d...\n", card_index);
-		CaptureCard *card = &cards[card_index];
-		card->capture = new BMUSBCapture(card_index);
-		card->capture->set_frame_callback(bind(&Mixer::bm_frame, this, card_index, _1, _2, _3, _4, _5, _6, _7));
-		card->frame_allocator.reset(new PBOFrameAllocator(8 << 20, WIDTH, HEIGHT));  // 8 MB.
-		card->capture->set_video_frame_allocator(card->frame_allocator.get());
-		card->surface = create_surface(format);
-		card->capture->set_dequeue_thread_callbacks(
-			[card]{
-				eglBindAPI(EGL_OPENGL_API);
-				card->context = create_context(card->surface);
-				if (!make_current(card->context, card->surface)) {
-					printf("failed to create bmusb context\n");
-					exit(1);
-				}
-			},
-			[this]{
-				resource_pool->clean_context();
-			});
-		card->resampling_queue.reset(new ResamplingQueue(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY, 2));
-		card->capture->configure_card();
+		configure_card(card_index, format, new BMUSBCapture(card_index));
 	}
 
 	BMUSBCapture::start_bm_thread();
@@ -237,6 +217,33 @@ Mixer::~Mixer()
 
 	h264_encoder.reset(nullptr);
 }
+
+void Mixer::configure_card(unsigned card_index, const QSurfaceFormat &format, CaptureInterface *capture)
+{
+	printf("Configuring card %d...\n", card_index);
+
+	CaptureCard *card = &cards[card_index];
+	card->capture = capture;
+	card->capture->set_frame_callback(bind(&Mixer::bm_frame, this, card_index, _1, _2, _3, _4, _5, _6, _7));
+	card->frame_allocator.reset(new PBOFrameAllocator(8 << 20, WIDTH, HEIGHT));  // 8 MB.
+	card->capture->set_video_frame_allocator(card->frame_allocator.get());
+	card->surface = create_surface(format);
+	card->capture->set_dequeue_thread_callbacks(
+		[card]{
+			eglBindAPI(EGL_OPENGL_API);
+			card->context = create_context(card->surface);
+			if (!make_current(card->context, card->surface)) {
+				printf("failed to create bmusb context\n");
+				exit(1);
+			}
+		},
+		[this]{
+			resource_pool->clean_context();
+		});
+	card->resampling_queue.reset(new ResamplingQueue(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY, 2));
+	card->capture->configure_card();
+}
+
 
 namespace {
 
