@@ -138,12 +138,12 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 		printf("Configuring card %d...\n", card_index);
 		CaptureCard *card = &cards[card_index];
-		card->usb = new BMUSBCapture(card_index);
-		card->usb->set_frame_callback(bind(&Mixer::bm_frame, this, card_index, _1, _2, _3, _4, _5, _6, _7));
+		card->capture = new BMUSBCapture(card_index);
+		card->capture->set_frame_callback(bind(&Mixer::bm_frame, this, card_index, _1, _2, _3, _4, _5, _6, _7));
 		card->frame_allocator.reset(new PBOFrameAllocator(8 << 20, WIDTH, HEIGHT));  // 8 MB.
-		card->usb->set_video_frame_allocator(card->frame_allocator.get());
+		card->capture->set_video_frame_allocator(card->frame_allocator.get());
 		card->surface = create_surface(format);
-		card->usb->set_dequeue_thread_callbacks(
+		card->capture->set_dequeue_thread_callbacks(
 			[card]{
 				eglBindAPI(EGL_OPENGL_API);
 				card->context = create_context(card->surface);
@@ -156,13 +156,13 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 				resource_pool->clean_context();
 			});
 		card->resampling_queue.reset(new ResamplingQueue(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY, 2));
-		card->usb->configure_card();
+		card->capture->configure_card();
 	}
 
 	BMUSBCapture::start_bm_thread();
 
 	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
-		cards[card_index].usb->start_bm_capture();
+		cards[card_index].capture->start_bm_capture();
 	}
 
 	// Set up stuff for NV12 conversion.
@@ -232,7 +232,7 @@ Mixer::~Mixer()
 			cards[card_index].should_quit = true;  // Unblock thread.
 			cards[card_index].new_data_ready_changed.notify_all();
 		}
-		cards[card_index].usb->stop_dequeue_thread();
+		cards[card_index].capture->stop_dequeue_thread();
 	}
 
 	h264_encoder.reset(nullptr);

@@ -238,7 +238,7 @@ public:
 
 	std::string get_card_description(unsigned card_index) const {
 		assert(card_index < num_cards);
-		return cards[card_index].usb->get_description();
+		return cards[card_index].capture->get_description();
 	}
 
 private:
@@ -273,7 +273,7 @@ private:
 
 	std::mutex bmusb_mutex;
 	struct CaptureCard {
-		BMUSBCapture *usb;
+		CaptureInterface *capture;
 		std::unique_ptr<PBOFrameAllocator> frame_allocator;
 
 		// Stuff for the OpenGL context (for texture uploading).
