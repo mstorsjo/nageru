@@ -310,7 +310,7 @@ void deinterleave_samples(const vector<float> &in, vector<float> *out_l, vector<
 
 void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
                      FrameAllocator::Frame video_frame, size_t video_offset, VideoFormat video_format,
-		     FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format)
+		     FrameAllocator::Frame audio_frame, size_t audio_offset, AudioFormat audio_format)
 {
 	CaptureCard *card = &cards[card_index];
 
@@ -339,7 +339,14 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	// Convert the audio to stereo fp32 and add it.
 	vector<float> audio;
 	audio.resize(num_samples * 2);
-	convert_fixed24_to_fp32(&audio[0], 2, audio_frame.data + audio_offset, 8, num_samples);
+	switch (audio_format.bits_per_sample) {
+	case 24:
+		convert_fixed24_to_fp32(&audio[0], 2, audio_frame.data + audio_offset, audio_format.num_channels, num_samples);
+		break;
+	default:
+		fprintf(stderr, "Cannot handle audio with %u bits per sample\n", audio_format.bits_per_sample);
+		assert(false);
+	}
 
 	// Add the audio.
 	{

@@ -245,7 +245,7 @@ private:
 	void configure_card(unsigned card_index, const QSurfaceFormat &format, CaptureInterface *capture);
 	void bm_frame(unsigned card_index, uint16_t timecode,
 		FrameAllocator::Frame video_frame, size_t video_offset, VideoFormat video_format,
-		FrameAllocator::Frame audio_frame, size_t audio_offset, uint16_t audio_format);
+		FrameAllocator::Frame audio_frame, size_t audio_offset, AudioFormat audio_format);
 	void place_rectangle(movit::Effect *resample_effect, movit::Effect *padding_effect, float x0, float y0, float x1, float y1);
 	void thread_func();
 	void audio_thread_func();

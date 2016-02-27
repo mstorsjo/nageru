@@ -149,6 +149,7 @@ HRESULT STDMETHODCALLTYPE DeckLinkCapture::VideoInputFrameArrived(
 
 	FrameAllocator::Frame current_video_frame, current_audio_frame;
 	VideoFormat video_format;
+	AudioFormat audio_format;
 
 	if (video_frame) {
 		video_format.has_signal = !(video_frame->GetFlags() & bmdFrameHasNoInputSource);
@@ -174,12 +175,27 @@ HRESULT STDMETHODCALLTYPE DeckLinkCapture::VideoInputFrameArrived(
 		}
 	}
 
+	if (audio_frame) {
+		int num_samples = audio_frame->GetSampleFrameCount();
+
+		current_audio_frame = audio_frame_allocator->alloc_frame();
+		if (current_audio_frame.data != nullptr) {
+			const uint8_t *frame_bytes;
+			audio_frame->GetBytes((void **)&frame_bytes);
+
+			memcpy(current_audio_frame.data, frame_bytes, sizeof(int32_t) * 2 * num_samples);
+
+			audio_format.bits_per_sample = 32;
+			audio_format.num_channels = 2;
+		}
+	}
+
 	if (current_video_frame.data != nullptr || current_audio_frame.data != nullptr) {
 		// TODO: Put into a queue and put into a dequeue thread, if the
 		// BlackMagic drivers don't already do that for us?
 		frame_callback(timecode,
 			current_video_frame, /*video_offset=*/0, video_format,
-			current_audio_frame, /*audio_offset=*/0, 0x0000);
+			current_audio_frame, /*audio_offset=*/0, audio_format);
 	}
 
 	timecode++;
