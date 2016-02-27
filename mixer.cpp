@@ -519,7 +519,6 @@ void Mixer::thread_func()
 
 			for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 				CaptureCard *card = &cards[card_index];
-				card_copy[card_index].usb = card->usb;
 				card_copy[card_index].new_data_ready = card->new_data_ready;
 				card_copy[card_index].new_frame = card->new_frame;
 				card_copy[card_index].new_frame_length = card->new_frame_length;
