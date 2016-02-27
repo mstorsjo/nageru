@@ -26,9 +26,11 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include <arpa/inet.h>
 
 #include "bmusb/bmusb.h"
 #include "context.h"
+#include "decklink_capture.h"
 #include "defs.h"
 #include "flags.h"
 #include "h264encode.h"
@@ -135,13 +137,36 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 
 	h264_encoder.reset(new H264Encoder(h264_encoder_surface, global_flags.va_display, WIDTH, HEIGHT, &httpd));
 
-	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
-		configure_card(card_index, format, new BMUSBCapture(card_index));
+	// First try initializing the PCI devices, then USB, until we have the desired number of cards.
+	unsigned num_pci_devices = 0, num_usb_devices = 0;
+	unsigned card_index = 0;
+
+	IDeckLinkIterator *decklink_iterator = CreateDeckLinkIteratorInstance();
+	if (decklink_iterator != nullptr) {
+		for ( ; card_index < num_cards; ++card_index) {
+			IDeckLink *decklink;
+			if (decklink_iterator->Next(&decklink) != S_OK) {
+				break;
+			}
+
+			configure_card(card_index, format, new DeckLinkCapture(decklink, card_index));
+			++num_pci_devices;
+		}
+		decklink_iterator->Release();
+		fprintf(stderr, "Found %d DeckLink PCI card(s).\n", num_pci_devices);
+	} else {
+		fprintf(stderr, "DeckLink drivers not found. Probing for USB cards only.\n");
+	}
+	for ( ; card_index < num_cards; ++card_index) {
+		configure_card(card_index, format, new BMUSBCapture(card_index - num_pci_devices));
+		++num_usb_devices;
 	}
 
-	BMUSBCapture::start_bm_thread();
+	if (num_usb_devices > 0) {
+		BMUSBCapture::start_bm_thread();
+	}
 
-	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
+	for (card_index = 0; card_index < num_cards; ++card_index) {
 		cards[card_index].capture->start_bm_capture();
 	}
 
