@@ -32,7 +32,7 @@ public:
 		// The second set is only used for the second field of interlaced inputs.
 		GLuint tex_y[2], tex_cbcr[2];
 		GLuint last_width[2], last_height[2];
-		bool last_interlaced;
+		bool last_interlaced, last_has_signal;
 		unsigned last_frame_rate_nom, last_frame_rate_den;
 	};
 

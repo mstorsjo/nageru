@@ -44,6 +44,7 @@ PBOFrameAllocator::PBOFrameAllocator(size_t frame_size, GLuint width, GLuint hei
 		userdata[i].last_width[1] = 0;
 		userdata[i].last_height[1] = 0;
 		userdata[i].last_interlaced = false;
+		userdata[i].last_has_signal = false;
 		for (unsigned field = 0; field < 2; ++field) {
 			glBindTexture(GL_TEXTURE_2D, userdata[i].tex_y[field]);
 			check_error();

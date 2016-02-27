@@ -151,11 +151,7 @@ HRESULT STDMETHODCALLTYPE DeckLinkCapture::VideoInputFrameArrived(
 	VideoFormat video_format;
 
 	if (video_frame) {
-		if (video_frame->GetFlags() & bmdFrameHasNoInputSource) {
-			// TODO: Make a way to propagate this flag down to the theme code,
-			// independent of the signal resolution.
-			fprintf(stderr, "Warning: No input signal detected\n");
-		}
+		video_format.has_signal = !(video_frame->GetFlags() & bmdFrameHasNoInputSource);
 
 		int width = video_frame->GetWidth();
 		int height = video_frame->GetHeight();

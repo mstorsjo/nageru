@@ -31,7 +31,7 @@ local STATIC_SIGNAL_NUM = 3
 -- to the next.
 local FADE_SIGNAL_NUM = 4
 
--- Last width/height/resolution for each channel, if we have it.
+-- Last width/height/frame rate for each channel, if we have it.
 -- Note that unlike the values we get from Nageru, the resolution is per
 -- frame and not per field, since we deinterlace.
 local last_resolution = {}
@@ -269,8 +269,7 @@ end
 -- Helper function to write e.g. “720p60”.
 function get_channel_resolution(signal_num)
 	if last_resolution[signal_num] then
-		if last_resolution[signal_num].height == 0 or
-		   last_resolution[signal_num].height == 525 then
+		if not last_resolution[signal_num].has_signal then
 			return "no signal"
 		elseif last_resolution[signal_num].interlaced then
 			return last_resolution[signal_num].height .. "i" .. get_frame_rate(signal_num)
@@ -496,6 +495,7 @@ function get_chain(num, t, width, height, signals)
 			width = signals:get_width(signal_num),
 			height = signals:get_height(signal_num),
 			interlaced = signals:get_interlaced(signal_num),
+			has_signal = signals:get_has_signal(signal_num),
 			frame_rate_nom = signals:get_frame_rate_nom(signal_num),
 			frame_rate_den = signals:get_frame_rate_den(signal_num)
 		}

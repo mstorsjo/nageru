@@ -44,7 +44,7 @@ struct InputStateInfo {
 	InputStateInfo(const InputState& input_state);
 
 	unsigned last_width[MAX_CARDS], last_height[MAX_CARDS];
-	bool last_interlaced[MAX_CARDS];
+	bool last_interlaced[MAX_CARDS], last_has_signal[MAX_CARDS];
 	unsigned last_frame_rate_nom[MAX_CARDS], last_frame_rate_den[MAX_CARDS];
 };
 
@@ -55,12 +55,14 @@ InputStateInfo::InputStateInfo(const InputState &input_state)
 		if (frame.frame == nullptr) {
 			last_width[signal_num] = last_height[signal_num] = 0;
 			last_interlaced[signal_num] = false;
+			last_has_signal[signal_num] = false;
 			continue;
 		}
 		const PBOFrameAllocator::Userdata *userdata = (const PBOFrameAllocator::Userdata *)frame.frame->userdata;
 		last_width[signal_num] = userdata->last_width[frame.field_number];
 		last_height[signal_num] = userdata->last_height[frame.field_number];
 		last_interlaced[signal_num] = userdata->last_interlaced;
+		last_has_signal[signal_num] = userdata->last_has_signal;
 		last_frame_rate_nom[signal_num] = userdata->last_frame_rate_nom;
 		last_frame_rate_den[signal_num] = userdata->last_frame_rate_den;
 	}
@@ -359,6 +361,16 @@ int InputStateInfo_get_interlaced(lua_State* L)
 	return 1;
 }
 
+int InputStateInfo_get_has_signal(lua_State* L)
+{
+	assert(lua_gettop(L) == 2);
+	InputStateInfo *input_state_info = get_input_state_info(L, 1);
+	Theme *theme = get_theme_updata(L);
+	int signal_num = theme->map_signal(luaL_checknumber(L, 2));
+	lua_pushboolean(L, input_state_info->last_has_signal[signal_num]);
+	return 1;
+}
+
 int InputStateInfo_get_frame_rate_nom(lua_State* L)
 {
 	assert(lua_gettop(L) == 2);
@@ -526,6 +538,7 @@ const luaL_Reg InputStateInfo_funcs[] = {
 	{ "get_width", InputStateInfo_get_width },
 	{ "get_height", InputStateInfo_get_height },
 	{ "get_interlaced", InputStateInfo_get_interlaced },
+	{ "get_has_signal", InputStateInfo_get_has_signal },
 	{ "get_frame_rate_nom", InputStateInfo_get_frame_rate_nom },
 	{ "get_frame_rate_den", InputStateInfo_get_frame_rate_den },
 	{ NULL, NULL }
