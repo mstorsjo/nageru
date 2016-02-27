@@ -71,7 +71,7 @@ public:
 		return description;
 	}
 
-	void configure_card() override {}
+	void configure_card() override;
 	void start_bm_capture() override;
 	void stop_dequeue_thread() override;
 

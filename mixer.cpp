@@ -50,6 +50,7 @@ namespace {
 
 void convert_fixed24_to_fp32(float *dst, size_t out_channels, const uint8_t *src, size_t in_channels, size_t num_samples)
 {
+	assert(in_channels >= out_channels);
 	for (size_t i = 0; i < num_samples; ++i) {
 		for (size_t j = 0; j < out_channels; ++j) {
 			uint32_t s1 = *src++;
@@ -59,6 +60,20 @@ void convert_fixed24_to_fp32(float *dst, size_t out_channels, const uint8_t *src
 			dst[i * out_channels + j] = int(s) * (1.0f / 4294967296.0f);
 		}
 		src += 3 * (in_channels - out_channels);
+	}
+}
+
+void convert_fixed32_to_fp32(float *dst, size_t out_channels, const uint8_t *src, size_t in_channels, size_t num_samples)
+{
+	assert(in_channels >= out_channels);
+	for (size_t i = 0; i < num_samples; ++i) {
+		for (size_t j = 0; j < out_channels; ++j) {
+			// Note: Assumes little-endian.
+			int32_t s = *(int32_t *)src;
+			dst[i * out_channels + j] = s * (1.0f / 4294967296.0f);
+			src += 4;
+		}
+		src += 4 * (in_channels - out_channels);
 	}
 }
 
@@ -316,7 +331,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 
 	int64_t frame_length = int64_t(TIMEBASE * video_format.frame_rate_den) / video_format.frame_rate_nom;
 
-	size_t num_samples = (audio_frame.len >= audio_offset) ? (audio_frame.len - audio_offset) / 8 / 3 : 0;
+	size_t num_samples = (audio_frame.len >= audio_offset) ? (audio_frame.len - audio_offset) / audio_format.num_channels / (audio_format.bits_per_sample / 8) : 0;
 	if (num_samples > OUTPUT_FREQUENCY / 10) {
 		printf("Card %d: Dropping frame with implausible audio length (len=%d, offset=%d) [timecode=0x%04x video_len=%d video_offset=%d video_format=%x)\n",
 			card_index, int(audio_frame.len), int(audio_offset),
@@ -342,6 +357,9 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	switch (audio_format.bits_per_sample) {
 	case 24:
 		convert_fixed24_to_fp32(&audio[0], 2, audio_frame.data + audio_offset, audio_format.num_channels, num_samples);
+		break;
+	case 32:
+		convert_fixed32_to_fp32(&audio[0], 2, audio_frame.data + audio_offset, audio_format.num_channels, num_samples);
 		break;
 	default:
 		fprintf(stderr, "Cannot handle audio with %u bits per sample\n", audio_format.bits_per_sample);

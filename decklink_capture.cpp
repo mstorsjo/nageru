@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <cstddef>
 
 #include <DeckLinkAPI.h>
@@ -11,6 +12,8 @@
 #include <DeckLinkAPIDiscovery.h>
 #include <DeckLinkAPIModes.h>
 #include "bmusb/bmusb.h"
+
+#define FRAME_SIZE (8 << 20)  // 8 MB.
 
 using namespace std;
 using namespace std::placeholders;
@@ -91,7 +94,7 @@ DeckLinkCapture::DeckLinkCapture(IDeckLink *card, int card_index)
 		exit(1);
 	}
 
-	if (input->EnableAudioInput(48000, bmdAudioSampleType16bitInteger, 2) != S_OK) {
+	if (input->EnableAudioInput(48000, bmdAudioSampleType32bitInteger, 2) != S_OK) {
 		fprintf(stderr, "Failed to enable audio input for card %d\n", card_index);
 		exit(1);
 	}
@@ -182,8 +185,9 @@ HRESULT STDMETHODCALLTYPE DeckLinkCapture::VideoInputFrameArrived(
 		if (current_audio_frame.data != nullptr) {
 			const uint8_t *frame_bytes;
 			audio_frame->GetBytes((void **)&frame_bytes);
+			current_audio_frame.len = sizeof(int32_t) * 2 * num_samples;
 
-			memcpy(current_audio_frame.data, frame_bytes, sizeof(int32_t) * 2 * num_samples);
+			memcpy(current_audio_frame.data, frame_bytes, current_audio_frame.len);
 
 			audio_format.bits_per_sample = 32;
 			audio_format.num_channels = 2;
@@ -200,6 +204,16 @@ HRESULT STDMETHODCALLTYPE DeckLinkCapture::VideoInputFrameArrived(
 
 	timecode++;
 	return S_OK;
+}
+
+void DeckLinkCapture::configure_card()
+{
+	if (video_frame_allocator == nullptr) {
+		set_video_frame_allocator(new MallocFrameAllocator(FRAME_SIZE, NUM_QUEUED_VIDEO_FRAMES));  // FIXME: leak.
+	}
+	if (audio_frame_allocator == nullptr) {
+		set_audio_frame_allocator(new MallocFrameAllocator(65536, NUM_QUEUED_AUDIO_FRAMES));  // FIXME: leak.
+	}
 }
 
 void DeckLinkCapture::start_bm_capture()
