@@ -306,6 +306,8 @@ end
 -- API ENTRY POINT
 -- Returns, given a channel number, which signal it corresponds to (starting from 0).
 -- Should return -1 if the channel does not correspond to a simple signal.
+-- (The information is used for whether right-click on the channel should bring up
+-- an input selector or not.)
 -- Called once for each channel, at the start of the program.
 -- Will never be called for live (0) or preview (1).
 function channel_signal(channel)
@@ -354,6 +356,7 @@ function get_transitions(t)
 	finish_transitions(t)
 
 	if live_signal_num == preview_signal_num then
+		-- No transitions possible.
 		return {}
 	end
 
@@ -383,6 +386,9 @@ function get_transitions(t)
 	return {"Cut"}
 end
 
+-- API ENTRY POINT
+-- Called when the user clicks a transition button. For our case,
+-- we only do cuts, so we ignore the parameters; just switch live and preview.
 function transition_clicked(num, t)
 	if num == 0 then
 		-- Cut.
