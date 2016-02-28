@@ -89,9 +89,9 @@ end
 -- The color is in linear light (not sRGB gamma).
 function set_wb(channel, red, green, blue)
 	if channel == 2 then
-		input_neutral_color[0] = { red, green, blue }
-	elseif channel == 3 then
 		input_neutral_color[1] = { red, green, blue }
+	elseif channel == 3 then
+		input_neutral_color[2] = { red, green, blue }
 	end
 end
 
