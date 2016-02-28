@@ -633,6 +633,9 @@ function place_rectangle(resample_effect, resize_effect, padding_effect, x0, y0,
 	local srcy0 = 0.0
 	local srcy1 = 1.0
 
+	padding_effect:set_int("width", screen_width)
+	padding_effect:set_int("height", screen_height)
+
 	-- Cull.
 	if x0 > screen_width or x1 < 0.0 or y0 > screen_height or y1 < 0.0 then
 		resample_effect:set_int("width", 1)
