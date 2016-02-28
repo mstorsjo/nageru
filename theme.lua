@@ -57,7 +57,6 @@ end
 function make_sbs_input(chain, signal, deint, hq)
 	local input = chain:add_live_input(not deint, deint)  -- Override bounce only if not deinterlacing.
 	input:connect_signal(signal)
-	local wb_effect = chain:add_effect(WhiteBalanceEffect.new())
 
 	local resample_effect = nil
 	local resize_effect = nil
@@ -66,6 +65,7 @@ function make_sbs_input(chain, signal, deint, hq)
 	else
 		resize_effect = chain:add_effect(ResizeEffect.new())
 	end
+	local wb_effect = chain:add_effect(WhiteBalanceEffect.new())
 
 	local padding_effect = chain:add_effect(IntegralPaddingEffect.new())
 
@@ -113,9 +113,8 @@ function make_fade_input(chain, signal, live, deint, scale)
 	local input, wb_effect, resample_effect, last
 	if live then
 		input = chain:add_live_input(false, deint)
-		wb_effect = chain:add_effect(WhiteBalanceEffect.new())
 		input:connect_signal(signal)
-		last = wb_effect
+		last = input
 	else
 		input = chain:add_effect(ImageInput.new("bg.jpeg"))
 		last = input
@@ -126,6 +125,12 @@ function make_fade_input(chain, signal, live, deint, scale)
 	if scale then
 		resample_effect = chain:add_effect(ResampleEffect.new())
 		last = resample_effect
+	end
+
+	-- Make sure to put the white balance after the scaling (usually more efficient).
+	if live then
+		wb_effect = chain:add_effect(WhiteBalanceEffect.new())
+		last = wb_effect
 	end
 
 	return {
@@ -177,8 +182,6 @@ function make_simple_chain(input_deint, input_scale, hq)
 
 	local input = chain:add_live_input(false, input_deint)
 	input:connect_signal(0)  -- First input card. Can be changed whenever you want.
-	local wb_effect = chain:add_effect(WhiteBalanceEffect.new())
-	chain:finalize(hq)
 
 	local resample_effect, resize_effect
 	if scale then
@@ -188,6 +191,9 @@ function make_simple_chain(input_deint, input_scale, hq)
 			resize_effect = chain:add_effect(ResizeEffect.new())
 		end
 	end
+
+	local wb_effect = chain:add_effect(WhiteBalanceEffect.new())
+	chain:finalize(hq)
 
 	return {
 		chain = chain,
