@@ -251,6 +251,9 @@ HRESULT STDMETHODCALLTYPE DeckLinkCapture::VideoInputFrameArrived(
 	VideoFormat video_format;
 	AudioFormat audio_format;
 
+	video_format.frame_rate_nom = time_scale;
+	video_format.frame_rate_den = frame_duration;
+
 	if (video_frame) {
 		video_format.has_signal = !(video_frame->GetFlags() & bmdFrameHasNoInputSource);
 
@@ -286,8 +289,6 @@ HRESULT STDMETHODCALLTYPE DeckLinkCapture::VideoInputFrameArrived(
 
 			video_format.width = width;
 			video_format.height = height;
-			video_format.frame_rate_nom = time_scale;
-			video_format.frame_rate_den = frame_duration;
 		}
 	}
 
