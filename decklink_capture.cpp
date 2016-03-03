@@ -134,6 +134,7 @@ size_t memcpy_interleaved_fastpath(uint8_t *dest1, uint8_t *dest2, const uint8_t
 }  // namespace
 
 DeckLinkCapture::DeckLinkCapture(IDeckLink *card, int card_index)
+	: card_index(card_index)
 {
 	{
 		const char *model_name;
@@ -168,28 +169,43 @@ DeckLinkCapture::DeckLinkCapture(IDeckLink *card, int card_index)
 		exit(1);
 	}
 
+	IDeckLinkDisplayModeIterator *mode_it;
+	if (input->GetDisplayModeIterator(&mode_it) != S_OK) {
+		fprintf(stderr, "Failed to enumerate display modes for card %d\n", card_index);
+		exit(1);
+	}
+
+	for (IDeckLinkDisplayMode *mode_ptr; mode_it->Next(&mode_ptr) == S_OK; mode_ptr->Release()) {
+		VideoMode mode;
+		mode.id = mode_ptr->GetDisplayMode();
+
+		const char *mode_name;
+		if (mode_ptr->GetName(&mode_name) != S_OK) {
+			mode.name = "Unknown mode";
+		} else {
+			mode.name = mode_name;
+		}
+
+		mode.autodetect = false;
+
+		mode.width = mode_ptr->GetWidth();
+		mode.height = mode_ptr->GetHeight();
+
+		BMDTimeScale frame_rate_num;
+		BMDTimeValue frame_rate_den;
+		if (mode_ptr->GetFrameRate(&frame_rate_den, &frame_rate_num) != S_OK) {
+			fprintf(stderr, "Could not get frame rate for mode '%s' on card %d\n", mode.name.c_str(), card_index);
+			exit(1);
+		}
+		mode.frame_rate_num = frame_rate_num;
+		mode.frame_rate_den = frame_rate_den;
+
+		// TODO: Respect the TFF/BFF flag.
+		mode.interlaced = (mode_ptr->GetFieldDominance() == bmdLowerFieldFirst || mode_ptr->GetFieldDominance() == bmdUpperFieldFirst);
+	}
+
 	// TODO: Make the user mode selectable.
-	BMDDisplayModeSupport support;
-	IDeckLinkDisplayMode *display_mode;
-	if (input->DoesSupportVideoMode(bmdModeHD720p5994, bmdFormat8BitYUV, /*flags=*/0, &support, &display_mode)) {
-		fprintf(stderr, "Failed to query display mode for card %d\n", card_index);
-		exit(1);
-	}
-
-	if (support == bmdDisplayModeNotSupported) {
-		fprintf(stderr, "Card %d does not support display mode\n", card_index);
-		exit(1);
-	}
-
-	if (display_mode->GetFrameRate(&frame_duration, &time_scale) != S_OK) {
-		fprintf(stderr, "Could not get frame rate for card %d\n", card_index);
-		exit(1);
-	}
-
-	if (input->EnableVideoInput(bmdModeHD720p5994, bmdFormat8BitYUV, 0) != S_OK) {
-		fprintf(stderr, "Failed to set 720p59.94 connection for card %d\n", card_index);
-		exit(1);
-	}
+	set_video_mode(bmdModeHD720p5994);
 
 	if (input->EnableAudioInput(48000, bmdAudioSampleType32bitInteger, 2) != S_OK) {
 		fprintf(stderr, "Failed to enable audio input for card %d\n", card_index);
@@ -346,3 +362,29 @@ void DeckLinkCapture::stop_dequeue_thread()
 	}
 }
 
+void DeckLinkCapture::set_video_mode(uint32_t video_mode_id)
+{
+	BMDDisplayModeSupport support;
+	IDeckLinkDisplayMode *display_mode;
+	if (input->DoesSupportVideoMode(video_mode_id, bmdFormat8BitYUV, /*flags=*/0, &support, &display_mode)) {
+		fprintf(stderr, "Failed to query display mode for card %d\n", card_index);
+		exit(1);
+	}
+
+	if (support == bmdDisplayModeNotSupported) {
+		fprintf(stderr, "Card %d does not support display mode\n", card_index);
+		exit(1);
+	}
+
+	if (display_mode->GetFrameRate(&frame_duration, &time_scale) != S_OK) {
+		fprintf(stderr, "Could not get frame rate for card %d\n", card_index);
+		exit(1);
+	}
+
+	if (input->EnableVideoInput(video_mode_id, bmdFormat8BitYUV, 0) != S_OK) {
+		fprintf(stderr, "Failed to set 720p59.94 connection for card %d\n", card_index);
+		exit(1);
+	}
+
+	current_video_mode = video_mode_id;
+}

@@ -75,11 +75,15 @@ public:
 	void start_bm_capture() override;
 	void stop_dequeue_thread() override;
 
+	std::vector<VideoMode> get_available_video_modes() const override { return video_modes; }
+	void set_video_mode(uint32_t video_mode_id) override;
+
 private:
 	std::atomic<int> refcount{1};
 	bool done_init = false;
 	std::string description;
 	uint16_t timecode = 0;
+	int card_index;
 
 	bool has_dequeue_callbacks = false;
 	std::function<void()> dequeue_init_callback = nullptr;
@@ -92,6 +96,9 @@ private:
 	IDeckLinkInput *input = nullptr;
 	BMDTimeValue frame_duration;
 	BMDTimeScale time_scale;
+
+	std::vector<VideoMode> video_modes;
+	BMDDisplayMode current_video_mode;
 };
 
 #endif  // !defined(_DECKLINK_CAPTURE_H)
