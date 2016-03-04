@@ -261,10 +261,29 @@ function num_channels()
 	return 4
 end
 
+-- Helper function to write e.g. “720p60”. The difference between this
+-- and get_channel_resolution_raw() is that this one also can say that
+-- there's no signal.
+function get_channel_resolution(signal_num)
+	res = last_resolution[signal_num]
+	if (not res) or res.height <= 0 then
+		return "no signal"
+	end
+	if not res.has_signal then
+		if res.height == 525 then
+			-- Special mode for the USB3 cards.
+			return "no signal"
+		end
+		return get_channel_resolution_raw(res) .. ", no signal"
+	else
+		return get_channel_resolution_raw(res)
+	end
+end
+
 -- Helper function to write e.g. “60” or “59.94”.
-function get_frame_rate(signal_num)
-	local nom = last_resolution[signal_num].frame_rate_nom
-	local den = last_resolution[signal_num].frame_rate_den
+function get_frame_rate(res)
+	local nom = res.frame_rate_nom
+	local den = res.frame_rate_den
 	if nom % den == 0 then
 		return nom / den
 	else
@@ -273,17 +292,11 @@ function get_frame_rate(signal_num)
 end
 
 -- Helper function to write e.g. “720p60”.
-function get_channel_resolution(signal_num)
-	if last_resolution[signal_num] then
-		if not last_resolution[signal_num].has_signal then
-			return "no signal"
-		elseif last_resolution[signal_num].interlaced then
-			return last_resolution[signal_num].height .. "i" .. get_frame_rate(signal_num)
-		else
-			return last_resolution[signal_num].height .. "p" .. get_frame_rate(signal_num)
-		end
+function get_channel_resolution_raw(res)
+	if res.interlaced then
+		return res.height .. "i" .. get_frame_rate(res)
 	else
-		return "no signal"
+		return res.height .. "p" .. get_frame_rate(res)
 	end
 end
 
