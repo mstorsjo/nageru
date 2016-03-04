@@ -329,6 +329,26 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 {
 	CaptureCard *card = &cards[card_index];
 
+	if (is_mode_scanning[card_index]) {
+		if (video_format.has_signal) {
+			// Found a stable signal, so stop scanning.
+			is_mode_scanning[card_index] = false;
+		} else {
+			static constexpr double switch_time_s = 0.5;  // Should be enough time for the signal to stabilize.
+			timespec now;
+			clock_gettime(CLOCK_MONOTONIC, &now);
+			double sec_since_last_switch = (now.tv_sec - last_mode_scan_change[card_index].tv_sec) +
+				1e-9 * (now.tv_nsec - last_mode_scan_change[card_index].tv_nsec);
+			if (sec_since_last_switch > switch_time_s) {
+				// It isn't this mode; try the next one.
+				mode_scanlist_index[card_index]++;
+				mode_scanlist_index[card_index] %= mode_scanlist[card_index].size();
+				cards[card_index].capture->set_video_mode(mode_scanlist[card_index][mode_scanlist_index[card_index]]);
+				last_mode_scan_change[card_index] = now;
+			}
+		}
+	}
+
 	int64_t frame_length = int64_t(TIMEBASE * video_format.frame_rate_den) / video_format.frame_rate_nom;
 
 	size_t num_samples = (audio_frame.len >= audio_offset) ? (audio_frame.len - audio_offset) / audio_format.num_channels / (audio_format.bits_per_sample / 8) : 0;
@@ -1035,6 +1055,23 @@ void Mixer::reset_meters()
 	r128.reset();
 	r128.integr_start();
 	correlation.reset();
+}
+
+void Mixer::start_mode_scanning(unsigned card_index)
+{
+	assert(card_index < num_cards);
+	if (is_mode_scanning[card_index]) {
+		return;
+	}
+	is_mode_scanning[card_index] = true;
+	mode_scanlist[card_index].clear();
+	for (const auto &mode : cards[card_index].capture->get_available_video_modes()) {
+		mode_scanlist[card_index].push_back(mode.first);
+	}
+	assert(!mode_scanlist[card_index].empty());
+	mode_scanlist_index[card_index] = 0;
+	cards[card_index].capture->set_video_mode(mode_scanlist[card_index][0]);
+	clock_gettime(CLOCK_MONOTONIC, &last_mode_scan_change[card_index]);
 }
 
 Mixer::OutputChannel::~OutputChannel()

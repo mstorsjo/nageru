@@ -144,6 +144,7 @@ void GLWidget::show_context_menu(unsigned signal_num, const QPoint &pos)
 	QActionGroup mode_group(&mode_submenu);
 	std::map<uint32_t, VideoMode> video_modes = global_mixer->get_available_video_modes(current_card);
 	uint32_t current_video_mode = global_mixer->get_current_video_mode(current_card);
+	bool has_auto_mode = false;
 	for (const auto &mode : video_modes) {
 		QString description(QString::fromStdString(mode.second.name));
 		QAction *action = new QAction(description, &mode_group);
@@ -152,6 +153,19 @@ void GLWidget::show_context_menu(unsigned signal_num, const QPoint &pos)
 			action->setChecked(true);
 		}
 		action->setData(QList<QVariant>{"video_mode", mode.first});
+		mode_submenu.addAction(action);
+
+		// TODO: Relying on the 0 value here (from bmusb.h) is ugly, it should be a named constant.
+		if (mode.first == 0) {
+			has_auto_mode = true;
+		}
+	}
+
+	// Add a “scan” menu if there's no “auto” mode.
+	if (!has_auto_mode) {
+		QAction *action = new QAction("Scan", &mode_group);
+		action->setData(QList<QVariant>{"video_mode", 0});
+		mode_submenu.addSeparator();
 		mode_submenu.addAction(action);
 	}
 
@@ -175,7 +189,11 @@ void GLWidget::show_context_menu(unsigned signal_num, const QPoint &pos)
 		QList<QVariant> selected = selected_item->data().toList();
 		if (selected[0].toString() == "video_mode") {
 			uint32_t mode = selected[1].toUInt(nullptr);
-			global_mixer->set_video_mode(current_card, mode);
+			if (mode == 0 && !has_auto_mode) {
+				global_mixer->start_mode_scanning(current_card);
+			} else {
+				global_mixer->set_video_mode(current_card, mode);
+			}
 		} else if (selected[0].toString() == "card") {
 			unsigned card_index = selected[1].toUInt(nullptr);
 			global_mixer->set_signal_mapping(signal_num, card_index);

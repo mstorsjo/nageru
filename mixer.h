@@ -256,6 +256,8 @@ public:
 		cards[card_index].capture->set_video_mode(mode);
 	}
 
+	void start_mode_scanning(unsigned card_index);
+
 private:
 	void configure_card(unsigned card_index, const QSurfaceFormat &format, CaptureInterface *capture);
 	void bm_frame(unsigned card_index, uint16_t timecode,
@@ -382,6 +384,12 @@ private:
 	std::mutex audio_mutex;
 	std::condition_variable audio_task_queue_changed;
 	std::queue<AudioTask> audio_task_queue;  // Under audio_mutex.
+
+	// For mode scanning.
+	bool is_mode_scanning[MAX_CARDS]{ false };
+	std::vector<uint32_t> mode_scanlist[MAX_CARDS];
+	unsigned mode_scanlist_index[MAX_CARDS]{ 0 };
+	timespec last_mode_scan_change[MAX_CARDS];
 };
 
 extern Mixer *global_mixer;
