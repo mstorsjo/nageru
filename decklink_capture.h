@@ -77,6 +77,7 @@ public:
 
 	std::map<uint32_t, VideoMode> get_available_video_modes() const override { return video_modes; }
 	void set_video_mode(uint32_t video_mode_id) override;
+	uint32_t get_current_video_mode() const override { return current_video_mode; }
 
 private:
 	std::atomic<int> refcount{1};
