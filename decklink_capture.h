@@ -75,7 +75,7 @@ public:
 	void start_bm_capture() override;
 	void stop_dequeue_thread() override;
 
-	std::vector<VideoMode> get_available_video_modes() const override { return video_modes; }
+	std::map<uint32_t, VideoMode> get_available_video_modes() const override { return video_modes; }
 	void set_video_mode(uint32_t video_mode_id) override;
 
 private:
@@ -97,7 +97,7 @@ private:
 	BMDTimeValue frame_duration;
 	BMDTimeScale time_scale;
 
-	std::vector<VideoMode> video_modes;
+	std::map<uint32_t, VideoMode> video_modes;
 	BMDDisplayMode current_video_mode;
 };
 

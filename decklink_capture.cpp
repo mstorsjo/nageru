@@ -177,7 +177,6 @@ DeckLinkCapture::DeckLinkCapture(IDeckLink *card, int card_index)
 
 	for (IDeckLinkDisplayMode *mode_ptr; mode_it->Next(&mode_ptr) == S_OK; mode_ptr->Release()) {
 		VideoMode mode;
-		mode.id = mode_ptr->GetDisplayMode();
 
 		const char *mode_name;
 		if (mode_ptr->GetName(&mode_name) != S_OK) {
@@ -203,7 +202,8 @@ DeckLinkCapture::DeckLinkCapture(IDeckLink *card, int card_index)
 		// TODO: Respect the TFF/BFF flag.
 		mode.interlaced = (mode_ptr->GetFieldDominance() == bmdLowerFieldFirst || mode_ptr->GetFieldDominance() == bmdUpperFieldFirst);
 
-		video_modes.push_back(mode);
+		uint32_t id = mode_ptr->GetDisplayMode();
+		video_modes.insert(make_pair(id, mode));
 	}
 
 	// TODO: Make the user mode selectable.
