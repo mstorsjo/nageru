@@ -241,6 +241,21 @@ public:
 		return cards[card_index].capture->get_description();
 	}
 
+	std::map<uint32_t, VideoMode> get_available_video_modes(unsigned card_index) const {
+		assert(card_index < num_cards);
+		return cards[card_index].capture->get_available_video_modes();
+	}
+
+	uint32_t get_current_video_mode(unsigned card_index) const {
+		assert(card_index < num_cards);
+		return cards[card_index].capture->get_current_video_mode();
+	}
+
+	void set_video_mode(unsigned card_index, uint32_t mode) {
+		assert(card_index < num_cards);
+		cards[card_index].capture->set_video_mode(mode);
+	}
+
 private:
 	void configure_card(unsigned card_index, const QSurfaceFormat &format, CaptureInterface *capture);
 	void bm_frame(unsigned card_index, uint16_t timecode,

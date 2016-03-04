@@ -80,6 +80,8 @@ public:
 	uint32_t get_current_video_mode() const override { return current_video_mode; }
 
 private:
+	void set_video_mode_no_restart(uint32_t video_mode_id);
+
 	std::atomic<int> refcount{1};
 	bool done_init = false;
 	std::string description;

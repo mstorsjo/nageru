@@ -118,23 +118,45 @@ void GLWidget::show_context_menu(unsigned signal_num, const QPoint &pos)
 
 	QMenu menu;
 
-	// Add an action for each card.
-	QActionGroup group(&menu);
+	// Add a submenu for selecting input card, with an action for each card.
+	QMenu card_submenu;
+	QActionGroup card_group(&card_submenu);
 
 	unsigned num_cards = global_mixer->get_num_cards();
 	unsigned current_card = global_mixer->map_signal(signal_num);
 	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 		QString description(QString::fromStdString(global_mixer->get_card_description(card_index)));
-		QAction *action = new QAction(description, &group);
+		QAction *action = new QAction(description, &card_group);
 		action->setCheckable(true);
 		if (current_card == card_index) {
 			action->setChecked(true);
 		}
-		action->setData(card_index);
-		menu.addAction(action);
+		action->setData(QList<QVariant>{"card", card_index});
+		card_submenu.addAction(action);
 	}
 
-	menu.addSeparator();
+	card_submenu.setTitle("Input source");
+	menu.addMenu(&card_submenu);
+
+	// Add a submenu for selecting resolution, with an action for each resolution.
+	// Note that the choice depends a lot on which card is active.
+	QMenu mode_submenu;
+	QActionGroup mode_group(&mode_submenu);
+	std::map<uint32_t, VideoMode> video_modes = global_mixer->get_available_video_modes(current_card);
+	uint32_t current_video_mode = global_mixer->get_current_video_mode(current_card);
+	for (const auto &mode : video_modes) {
+		QString description(QString::fromStdString(mode.second.name));
+		QAction *action = new QAction(description, &mode_group);
+		action->setCheckable(true);
+		if (mode.first == current_video_mode) {
+			action->setChecked(true);
+		}
+		action->setData(QList<QVariant>{"video_mode", mode.first});
+		mode_submenu.addAction(action);
+	}
+
+	mode_submenu.setTitle("Input mode");
+	menu.addMenu(&mode_submenu);
 
 	// Add an audio source selector.
 	QAction *audio_source_action = new QAction("Use as audio source", &menu);
@@ -145,11 +167,20 @@ void GLWidget::show_context_menu(unsigned signal_num, const QPoint &pos)
 	}
 	menu.addAction(audio_source_action);
 
+	// Show the menu and look at the result.
 	QAction *selected_item = menu.exec(global_pos);
 	if (selected_item == audio_source_action) {
 		global_mixer->set_audio_source(signal_num);
 	} else if (selected_item != nullptr) {
-		unsigned card_index = selected_item->data().toInt(nullptr);
-		global_mixer->set_signal_mapping(signal_num, card_index);
+		QList<QVariant> selected = selected_item->data().toList();
+		if (selected[0].toString() == "video_mode") {
+			uint32_t mode = selected[1].toUInt(nullptr);
+			global_mixer->set_video_mode(current_card, mode);
+		} else if (selected[0].toString() == "card") {
+			unsigned card_index = selected[1].toUInt(nullptr);
+			global_mixer->set_signal_mapping(signal_num, card_index);
+		} else {
+			assert(false);
+		}
 	}
 }

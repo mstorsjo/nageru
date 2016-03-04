@@ -206,8 +206,7 @@ DeckLinkCapture::DeckLinkCapture(IDeckLink *card, int card_index)
 		video_modes.insert(make_pair(id, mode));
 	}
 
-	// TODO: Make the user mode selectable.
-	set_video_mode(bmdModeHD720p5994);
+	set_video_mode_no_restart(bmdModeHD720p5994);
 
 	if (input->EnableAudioInput(48000, bmdAudioSampleType32bitInteger, 2) != S_OK) {
 		fprintf(stderr, "Failed to enable audio input for card %d\n", card_index);
@@ -366,6 +365,21 @@ void DeckLinkCapture::stop_dequeue_thread()
 
 void DeckLinkCapture::set_video_mode(uint32_t video_mode_id)
 {
+	if (input->StopStreams() != S_OK) {
+		fprintf(stderr, "StopStreams failed\n");
+		exit(1);
+	}
+
+	set_video_mode_no_restart(video_mode_id);
+
+	if (input->StartStreams() != S_OK) {
+		fprintf(stderr, "StartStreams failed\n");
+		exit(1);
+	}
+}
+
+void DeckLinkCapture::set_video_mode_no_restart(uint32_t video_mode_id)
+{
 	BMDDisplayModeSupport support;
 	IDeckLinkDisplayMode *display_mode;
 	if (input->DoesSupportVideoMode(video_mode_id, bmdFormat8BitYUV, /*flags=*/0, &support, &display_mode)) {
@@ -384,7 +398,7 @@ void DeckLinkCapture::set_video_mode(uint32_t video_mode_id)
 	}
 
 	if (input->EnableVideoInput(video_mode_id, bmdFormat8BitYUV, 0) != S_OK) {
-		fprintf(stderr, "Failed to set 720p59.94 connection for card %d\n", card_index);
+		fprintf(stderr, "Failed to set video mode 0x%04x for card %d\n", video_mode_id, card_index);
 		exit(1);
 	}
 
