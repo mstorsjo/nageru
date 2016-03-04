@@ -202,6 +202,8 @@ DeckLinkCapture::DeckLinkCapture(IDeckLink *card, int card_index)
 
 		// TODO: Respect the TFF/BFF flag.
 		mode.interlaced = (mode_ptr->GetFieldDominance() == bmdLowerFieldFirst || mode_ptr->GetFieldDominance() == bmdUpperFieldFirst);
+
+		video_modes.push_back(mode);
 	}
 
 	// TODO: Make the user mode selectable.
