@@ -1538,7 +1538,7 @@ void H264EncoderImpl::save_codeddata(storage_task task)
              pending_audio_frames.erase(it); 
         }
 
-        AVFrame *frame = avcodec_alloc_frame();
+        AVFrame *frame = av_frame_alloc();
         frame->nb_samples = audio.size() / 2;
         frame->format = AV_SAMPLE_FMT_S32;
         frame->channel_layout = AV_CH_LAYOUT_STEREO;
@@ -1570,7 +1570,7 @@ void H264EncoderImpl::save_codeddata(storage_task task)
             httpd->add_packet(pkt, audio_pts + global_delay, audio_pts + global_delay);
         }
         // TODO: Delayed frames.
-        avcodec_free_frame(&frame);
+        av_frame_unref(frame);
         av_free_packet(&pkt);
         if (audio_pts == task.pts) break;
     }

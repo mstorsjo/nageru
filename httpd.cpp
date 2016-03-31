@@ -115,6 +115,8 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height)
 		exit(1);
 	}
 	avstream_video->time_base = AVRational{1, TIMEBASE};
+	avstream_video->codec->codec_type = AVMEDIA_TYPE_VIDEO;
+	avstream_video->codec->codec_id = AV_CODEC_ID_H264;
 	avstream_video->codec->width = width;
 	avstream_video->codec->height = height;
 	avstream_video->codec->time_base = AVRational{1, TIMEBASE};

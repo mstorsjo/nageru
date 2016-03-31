@@ -85,10 +85,10 @@ const uint8_t *ImageInput::load_image(const string &filename)
 
 	// TODO: Scale down if needed!
 	AVPicture pic;
-	avpicture_alloc(&pic, PIX_FMT_RGBA, frame->width, frame->height);
+	avpicture_alloc(&pic, AV_PIX_FMT_RGBA, frame->width, frame->height);
 	SwsContext *sws_ctx = sws_getContext(frame->width, frame->height,
-		(PixelFormat)frame->format, frame->width, frame->height,
-		PIX_FMT_RGBA, SWS_BICUBIC, nullptr, nullptr, nullptr);
+		(AVPixelFormat)frame->format, frame->width, frame->height,
+		AV_PIX_FMT_RGBA, SWS_BICUBIC, nullptr, nullptr, nullptr);
 	if (sws_ctx == nullptr) {
 		fprintf(stderr, "%s: Could not create scaler context\n", filename.c_str());
 		exit(1);
@@ -98,7 +98,7 @@ const uint8_t *ImageInput::load_image(const string &filename)
 
 	size_t len = frame->width * frame->height * 4;
 	unique_ptr<uint8_t[]> image_data(new uint8_t[len]);
-	av_image_copy_to_buffer(image_data.get(), len, pic.data, pic.linesize, PIX_FMT_RGBA, frame->width, frame->height, 1);
+	av_image_copy_to_buffer(image_data.get(), len, pic.data, pic.linesize, AV_PIX_FMT_RGBA, frame->width, frame->height, 1);
 
 	avpicture_free(&pic);
 	av_frame_free(&frame);
