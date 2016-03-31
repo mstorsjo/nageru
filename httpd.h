@@ -16,8 +16,8 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
-#include <vector>
 
 struct MHD_Connection;
 
@@ -50,6 +50,10 @@ private:
 
 	static void free_stream(void *cls);
 
+	static void request_completed_thunk(void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe);
+
+	void request_completed(struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe);
+
 	class Mux {
 	public:
 		Mux(AVFormatContext *avctx, int width, int height);  // Takes ownership of avctx.
@@ -74,15 +78,16 @@ private:
 		static int write_packet_thunk(void *opaque, uint8_t *buf, int buf_size);
 		int write_packet(uint8_t *buf, int buf_size);
 
-		std::unique_ptr<Mux> mux;
-
 		std::mutex buffer_mutex;
 		std::condition_variable has_buffered_data;
 		std::deque<std::string> buffered_data;  // Protected by <mutex>.
 		size_t used_of_buffered_data = 0;  // How many bytes of the first element of <buffered_data> that is already used. Protected by <mutex>.
+
+		std::unique_ptr<Mux> mux;  // Must come last to be destroyed before buffered_data, since the destructor can write bytes.
 	};
 
-	std::vector<Stream *> streams;  // Not owned.
+	std::mutex streams_mutex;
+	std::set<Stream *> streams;  // Not owned.
 
 	int width, height;
 	std::unique_ptr<Mux> file_mux;  // To local disk.

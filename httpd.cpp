@@ -14,6 +14,8 @@ extern "C" {
 #include <libavutil/samplefmt.h>
 }
 
+#include <vector>
+
 #include "httpd.h"
 
 #include "defs.h"
@@ -34,11 +36,14 @@ void HTTPD::start(int port)
 	MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION | MHD_USE_POLL_INTERNALLY | MHD_USE_DUAL_STACK,
 	                 port,
 			 nullptr, nullptr,
-			 &answer_to_connection_thunk, this, MHD_OPTION_END);
+			 &answer_to_connection_thunk, this,
+	                 MHD_OPTION_NOTIFY_COMPLETED, &request_completed_thunk, this, 
+	                 MHD_OPTION_END);
 }
 
 void HTTPD::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 {
+	unique_lock<mutex> lock(streams_mutex);
 	for (Stream *stream : streams) {
 		stream->add_packet(pkt, pts, dts);
 	}
@@ -84,11 +89,14 @@ int HTTPD::answer_to_connection(MHD_Connection *connection,
 				const char *version, const char *upload_data,
 				size_t *upload_data_size, void **con_cls)
 {
-	printf("url %s\n", url);
 	AVOutputFormat *oformat = av_guess_format(STREAM_MUX_NAME, nullptr, nullptr);
 	assert(oformat != nullptr);
 	HTTPD::Stream *stream = new HTTPD::Stream(oformat, width, height);
-	streams.push_back(stream);
+	{
+		unique_lock<mutex> lock(streams_mutex);
+		streams.insert(stream);
+	}
+	*con_cls = stream;
 
 	// Does not strictly have to be equal to MUX_BUFFER_SIZE.
 	MHD_Response *response = MHD_create_response_from_callback(
@@ -101,8 +109,30 @@ int HTTPD::answer_to_connection(MHD_Connection *connection,
 
 void HTTPD::free_stream(void *cls)
 {
+	// FIXME: When is this actually called, if ever?
+	// Also, shouldn't we remove it from streams?
 	HTTPD::Stream *stream = (HTTPD::Stream *)cls;
 	delete stream;
+}
+
+void HTTPD::request_completed_thunk(void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe)
+{
+	HTTPD *httpd = (HTTPD *)cls;
+	return httpd->request_completed(connection, con_cls, toe);
+}
+
+void HTTPD::request_completed(struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe)
+{
+	if (con_cls == nullptr) {
+		// Request was never set up.
+		return;
+	}
+	HTTPD::Stream *stream = (HTTPD::Stream *)*con_cls;
+	{
+		unique_lock<mutex> lock(streams_mutex);
+		delete stream;
+		streams.erase(stream);
+	}
 }
 
 HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height)
