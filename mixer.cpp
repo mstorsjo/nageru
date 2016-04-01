@@ -351,7 +351,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 
 	int64_t frame_length = int64_t(TIMEBASE * video_format.frame_rate_den) / video_format.frame_rate_nom;
 
-	size_t num_samples = (audio_frame.len >= audio_offset) ? (audio_frame.len - audio_offset) / audio_format.num_channels / (audio_format.bits_per_sample / 8) : 0;
+	size_t num_samples = (audio_frame.len > audio_offset) ? (audio_frame.len - audio_offset) / audio_format.num_channels / (audio_format.bits_per_sample / 8) : 0;
 	if (num_samples > OUTPUT_FREQUENCY / 10) {
 		printf("Card %d: Dropping frame with implausible audio length (len=%d, offset=%d) [timecode=0x%04x video_len=%d video_offset=%d video_format=%x)\n",
 			card_index, int(audio_frame.len), int(audio_offset),
@@ -375,6 +375,9 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	vector<float> audio;
 	audio.resize(num_samples * 2);
 	switch (audio_format.bits_per_sample) {
+	case 0:
+		assert(num_samples == 0);
+		break;
 	case 24:
 		convert_fixed24_to_fp32(&audio[0], 2, audio_frame.data + audio_offset, audio_format.num_channels, num_samples);
 		break;
