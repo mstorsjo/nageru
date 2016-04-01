@@ -79,6 +79,14 @@ public:
 	void set_video_mode(uint32_t video_mode_id) override;
 	uint32_t get_current_video_mode() const override { return current_video_mode; }
 
+	std::map<uint32_t, std::string> get_available_video_inputs() const override { return video_inputs; }
+	void set_video_input(uint32_t video_input_id) override;
+	uint32_t get_current_video_input() const override { return current_video_input; }
+
+	std::map<uint32_t, std::string> get_available_audio_inputs() const override { return audio_inputs; }
+	void set_audio_input(uint32_t audio_input_id) override;
+	uint32_t get_current_audio_input() const override { return current_audio_input; }
+
 private:
 	void set_video_mode_no_restart(uint32_t video_mode_id);
 
@@ -96,12 +104,20 @@ private:
 	FrameAllocator *audio_frame_allocator = nullptr;
 	frame_callback_t frame_callback = nullptr;
 
+	IDeckLinkConfiguration *config = nullptr;
+
 	IDeckLinkInput *input = nullptr;
 	BMDTimeValue frame_duration;
 	BMDTimeScale time_scale;
 
 	std::map<uint32_t, VideoMode> video_modes;
 	BMDDisplayMode current_video_mode;
+
+	std::map<uint32_t, std::string> video_inputs;
+	BMDVideoConnection current_video_input;
+
+	std::map<uint32_t, std::string> audio_inputs;
+	BMDAudioConnection current_audio_input;
 };
 
 #endif  // !defined(_DECKLINK_CAPTURE_H)

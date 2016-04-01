@@ -152,22 +152,63 @@ DeckLinkCapture::DeckLinkCapture(IDeckLink *card, int card_index)
 		exit(1);
 	}
 
+	IDeckLinkAttributes *attr;
+	if (card->QueryInterface(IID_IDeckLinkAttributes, (void**)&attr) != S_OK) {
+		fprintf(stderr, "Card %d has no attributes\n", card_index);
+		exit(1);
+	}
+
+	// Get the list of available video inputs.
+	int64_t video_input_mask;
+	if (attr->GetInt(BMDDeckLinkVideoInputConnections, &video_input_mask) != S_OK) {
+		fprintf(stderr, "Failed to enumerate video inputs for card %d\n", card_index);
+		exit(1);
+	}
+	const vector<pair<BMDVideoConnection, string>> video_input_types = {
+		{ bmdVideoConnectionSDI, "SDI" },
+		{ bmdVideoConnectionHDMI, "HDMI" },
+		{ bmdVideoConnectionOpticalSDI, "Optical SDI" },
+		{ bmdVideoConnectionComponent, "Component" },
+		{ bmdVideoConnectionComposite, "Composite" },
+		{ bmdVideoConnectionSVideo, "S-Video" }
+	};
+	for (const auto &video_input : video_input_types) {
+		if (video_input_mask & video_input.first) {
+			video_inputs.emplace(video_input.first, video_input.second);
+		}
+	}
+
+	// And then the available audio inputs.
+	int64_t audio_input_mask;
+	if (attr->GetInt(BMDDeckLinkAudioInputConnections, &audio_input_mask) != S_OK) {
+		fprintf(stderr, "Failed to enumerate audio inputs for card %d\n", card_index);
+		exit(1);
+	}
+	const vector<pair<BMDAudioConnection, string>> audio_input_types = {
+		{ bmdAudioConnectionEmbedded, "Embedded" },
+		{ bmdAudioConnectionAESEBU, "AES/EBU" },
+		{ bmdAudioConnectionAnalog, "Analog" },
+		{ bmdAudioConnectionAnalogXLR, "Analog XLR" },
+		{ bmdAudioConnectionAnalogRCA, "Analog RCA" },
+		{ bmdAudioConnectionMicrophone, "Microphone" },
+		{ bmdAudioConnectionHeadphones, "Headphones" }
+	};
+	for (const auto &audio_input : audio_input_types) {
+		if (audio_input_mask & audio_input.first) {
+			audio_inputs.emplace(audio_input.first, audio_input.second);
+		}
+	}
+
+	attr->Release();
+
 	/* Set up the video and audio sources. */
-	IDeckLinkConfiguration *config;
 	if (card->QueryInterface(IID_IDeckLinkConfiguration, (void**)&config) != S_OK) {
 		fprintf(stderr, "Failed to get configuration interface for card %d\n", card_index);
 		exit(1);
 	}
 
-	if (config->SetInt(bmdDeckLinkConfigVideoInputConnection, bmdVideoConnectionHDMI) != S_OK) {
-		fprintf(stderr, "Failed to set video input connection for card %d\n", card_index);
-		exit(1);
-	}
-
-	if (config->SetInt(bmdDeckLinkConfigAudioInputConnection, bmdAudioConnectionEmbedded) != S_OK) {
-		fprintf(stderr, "Failed to set video input connection for card %d\n", card_index);
-		exit(1);
-	}
+	set_video_input(bmdVideoConnectionHDMI);
+	set_audio_input(bmdAudioConnectionEmbedded);
 
 	IDeckLinkDisplayModeIterator *mode_it;
 	if (input->GetDisplayModeIterator(&mode_it) != S_OK) {
@@ -403,4 +444,24 @@ void DeckLinkCapture::set_video_mode_no_restart(uint32_t video_mode_id)
 	}
 
 	current_video_mode = video_mode_id;
+}
+
+void DeckLinkCapture::set_video_input(uint32_t video_input_id)
+{
+	if (config->SetInt(bmdDeckLinkConfigVideoInputConnection, video_input_id) != S_OK) {
+		fprintf(stderr, "Failed to set video input connection for card %d\n", card_index);
+		exit(1);
+	}
+
+	current_video_input = video_input_id;
+}
+
+void DeckLinkCapture::set_audio_input(uint32_t audio_input_id)
+{
+	if (config->SetInt(bmdDeckLinkConfigAudioInputConnection, audio_input_id) != S_OK) {
+		fprintf(stderr, "Failed to set audio input connection for card %d\n", card_index);
+		exit(1);
+	}
+
+	current_audio_input = audio_input_id;
 }
