@@ -196,6 +196,12 @@ HTTPD::Mux::~Mux()
 
 void HTTPD::Mux::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 {
+	if (!seen_keyframe && !(pkt.stream_index == 0 && (pkt.flags & AV_PKT_FLAG_KEY))) {
+		// Wait until we see the first (video) key frame.
+		return;
+	}
+	seen_keyframe = true;
+
 	AVPacket pkt_copy;
 	av_copy_packet(&pkt_copy, &pkt);
 	if (pkt.stream_index == 0) {

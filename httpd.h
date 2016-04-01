@@ -61,6 +61,7 @@ private:
 		void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts);
 
 	private:
+		bool seen_keyframe = false;
 		AVFormatContext *avctx;
 		AVStream *avstream_video, *avstream_audio;
 	};
