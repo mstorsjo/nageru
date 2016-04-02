@@ -123,7 +123,7 @@ void QueueLengthPolicy::update_policy(int queue_length)
 		return;
 	}
 	if (queue_length > 0) {
-		if (++frames_with_at_least_one >= 50) {
+		if (++frames_with_at_least_one >= 50 && safe_queue_length > 0) {
 			--safe_queue_length;
 			fprintf(stderr, "Card %u: Spare frames for more than 50 frames, reducing safe limit to %u frames\n",
 				card_index, safe_queue_length);
