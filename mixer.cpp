@@ -605,42 +605,10 @@ void Mixer::thread_func()
 		bool has_new_frame[MAX_CARDS] = { false };
 		int num_samples[MAX_CARDS] = { 0 };
 
-		// The first card is the master timer, so wait for it to have a new frame.
 		// TODO: Make configurable, and with a timeout.
 		unsigned master_card_index = 0;
 
-		{
-			unique_lock<mutex> lock(bmusb_mutex);
-
-			cards[master_card_index].new_frames_changed.wait(lock, [this, master_card_index]{ return !cards[master_card_index].new_frames.empty(); });
-
-			for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
-				CaptureCard *card = &cards[card_index];
-				if (card->new_frames.empty()) {
-					assert(card_index != master_card_index);
-					card->queue_length_policy.update_policy(-1);
-					continue;
-				}
-				new_frames[card_index] = move(card->new_frames.front());
-				has_new_frame[card_index] = true;
-				card->new_frames.pop();
-				card->new_frames_changed.notify_all();
-
-				int num_samples_times_timebase = OUTPUT_FREQUENCY * new_frames[card_index].length + card->fractional_samples;
-				num_samples[card_index] = num_samples_times_timebase / TIMEBASE;
-				card->fractional_samples = num_samples_times_timebase % TIMEBASE;
-				assert(num_samples[card_index] >= 0);
-
-				if (card_index != master_card_index) {
-					// If we have excess frames compared to the policy for this card,
-					// drop frames from the head.
-					card->queue_length_policy.update_policy(card->new_frames.size());
-					while (card->new_frames.size() > card->queue_length_policy.get_safe_queue_length()) {
-						card->new_frames.pop();
-					}
-				}
-			}
-		}
+		get_one_frame_from_each_card(master_card_index, new_frames, has_new_frame, num_samples);
 
 		// Resample the audio as needed, including from previously dropped frames.
 		assert(num_cards > 0);
@@ -660,18 +628,7 @@ void Mixer::thread_func()
 			}
 		}
 
-		if (audio_level_callback != nullptr) {
-			unique_lock<mutex> lock(compressor_mutex);
-			double loudness_s = r128.loudness_S();
-			double loudness_i = r128.integrated();
-			double loudness_range_low = r128.range_min();
-			double loudness_range_high = r128.range_max();
-
-			audio_level_callback(loudness_s, 20.0 * log10(peak),
-			                     loudness_i, loudness_range_low, loudness_range_high,
-			                     gain_staging_db, 20.0 * log10(final_makeup_gain),
-			                     correlation.get_correlation());
-		}
+		send_audio_level_callback();
 
 		for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 			if (card_index == master_card_index || !has_new_frame[card_index]) {
@@ -752,6 +709,40 @@ void Mixer::thread_func()
 	resource_pool->clean_context();
 }
 
+void Mixer::get_one_frame_from_each_card(unsigned master_card_index, CaptureCard::NewFrame new_frames[MAX_CARDS], bool has_new_frame[MAX_CARDS], int num_samples[MAX_CARDS])
+{
+	// The first card is the master timer, so wait for it to have a new frame.
+	unique_lock<mutex> lock(bmusb_mutex);
+	cards[master_card_index].new_frames_changed.wait(lock, [this, master_card_index]{ return !cards[master_card_index].new_frames.empty(); });
+
+	for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
+		CaptureCard *card = &cards[card_index];
+		if (card->new_frames.empty()) {
+			assert(card_index != master_card_index);
+			card->queue_length_policy.update_policy(-1);
+			continue;
+		}
+		new_frames[card_index] = move(card->new_frames.front());
+		has_new_frame[card_index] = true;
+		card->new_frames.pop();
+		card->new_frames_changed.notify_all();
+
+		int num_samples_times_timebase = OUTPUT_FREQUENCY * new_frames[card_index].length + card->fractional_samples;
+		num_samples[card_index] = num_samples_times_timebase / TIMEBASE;
+		card->fractional_samples = num_samples_times_timebase % TIMEBASE;
+		assert(num_samples[card_index] >= 0);
+
+		if (card_index != master_card_index) {
+			// If we have excess frames compared to the policy for this card,
+			// drop frames from the head.
+			card->queue_length_policy.update_policy(card->new_frames.size());
+			while (card->new_frames.size() > card->queue_length_policy.get_safe_queue_length()) {
+				card->new_frames.pop();
+			}
+		}
+	}
+}
+
 void Mixer::render_one_frame()
 {
 	// Get the main chain from the theme, and set its state immediately.
@@ -811,6 +802,24 @@ void Mixer::render_one_frame()
 		display_frame.temp_textures = {};
 		output_channel[i].output_frame(display_frame);
 	}
+}
+
+void Mixer::send_audio_level_callback()
+{
+	if (audio_level_callback == nullptr) {
+		return;
+	}
+
+	unique_lock<mutex> lock(compressor_mutex);
+	double loudness_s = r128.loudness_S();
+	double loudness_i = r128.integrated();
+	double loudness_range_low = r128.range_min();
+	double loudness_range_high = r128.range_max();
+
+	audio_level_callback(loudness_s, 20.0 * log10(peak),
+		loudness_i, loudness_range_low, loudness_range_high,
+		gain_staging_db, 20.0 * log10(final_makeup_gain),
+		correlation.get_correlation());
 }
 
 void Mixer::audio_thread_func()
