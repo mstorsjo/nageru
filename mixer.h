@@ -52,6 +52,47 @@ class YCbCrInput;
 class QOpenGLContext;
 class QSurfaceFormat;
 
+// For any card that's not the master (where we pick out the frames as they
+// come, as fast as we can process), there's going to be a queue. The question
+// is when we should drop frames from that queue (apart from the obvious
+// dropping if the 16-frame queue should become full), especially given that
+// the frame rate could be lower or higher than the master (either subtly or
+// dramatically). We have two (conflicting) demands:
+//
+//   1. We want to avoid starving the queue.
+//   2. We don't want to add more delay than is needed.
+//
+// Our general strategy is to drop as many frames as we can (helping for #2)
+// that we think is safe for #1 given jitter. To this end, we set a lower floor N,
+// where we assume that if we have N frames in the queue, we're always safe from
+// starvation. (Typically, N will be 0 or 1. It starts off at 0.) If we have
+// more than N frames in the queue after reading out the one we need, we head-drop
+// them to reduce the queue.
+//
+// N is reduced as follows: If the queue has had at least one spare frame for
+// at least 50 (master) frames (ie., it's been too conservative for a second),
+// we reduce N by 1 and reset the timers.
+//
+// Whenever the queue is starved (we needed a frame but there was none), N was
+// obviously too low, so we increment N. We will never set N above 5, though.
+class QueueLengthPolicy {
+public:
+	QueueLengthPolicy() {}
+	void reset(unsigned card_index) {
+		this->card_index = card_index;
+		safe_queue_length = 0;
+		frames_with_at_least_one = 0;
+	}
+
+	void update_policy(int queue_length);  // Give in -1 for starvation.
+	unsigned get_safe_queue_length() const { return safe_queue_length; }
+
+private:
+	unsigned card_index;  // For debugging only.
+	unsigned safe_queue_length = 0;  // Called N in the comments.
+	unsigned frames_with_at_least_one = 0;
+};
+
 class Mixer {
 public:
 	// The surface format is used for offscreen destinations for OpenGL contexts we need.
@@ -339,6 +380,8 @@ private:
 		std::queue<NewFrame> new_frames;
 		bool should_quit = false;
 		std::condition_variable new_frames_changed;  // Set whenever new_frames (or should_quit) is changed.
+
+		QueueLengthPolicy queue_length_policy;  // Refers to the "new_frames" queue.
 
 		// Accumulated errors in number of 1/TIMEBASE samples. If OUTPUT_FREQUENCY divided by
 		// frame rate is integer, will always stay zero.
