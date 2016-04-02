@@ -114,15 +114,19 @@ string generate_local_dump_filename(int frame)
 void QueueLengthPolicy::update_policy(int queue_length)
 {
 	if (queue_length < 0) {  // Starvation.
-		if (safe_queue_length < 5) {
+		if (been_at_safe_point_since_last_starvation && safe_queue_length < 5) {
 			++safe_queue_length;
 			fprintf(stderr, "Card %u: Starvation, increasing safe limit to %u frames\n",
 				card_index, safe_queue_length);
 		}
 		frames_with_at_least_one = 0;
+		been_at_safe_point_since_last_starvation = false;
 		return;
 	}
 	if (queue_length > 0) {
+		if (queue_length >= int(safe_queue_length)) {
+			been_at_safe_point_since_last_starvation = true;
+		}
 		if (++frames_with_at_least_one >= 50 && safe_queue_length > 0) {
 			--safe_queue_length;
 			fprintf(stderr, "Card %u: Spare frames for more than 50 frames, reducing safe limit to %u frames\n",

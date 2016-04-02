@@ -71,10 +71,12 @@ class QSurfaceFormat;
 //
 // N is reduced as follows: If the queue has had at least one spare frame for
 // at least 50 (master) frames (ie., it's been too conservative for a second),
-// we reduce N by 1 and reset the timers.
+// we reduce N by 1 and reset the timers. TODO: Only do this if N ever actually
+// touched the limit.
 //
-// Whenever the queue is starved (we needed a frame but there was none), N was
-// obviously too low, so we increment N. We will never set N above 5, though.
+// Whenever the queue is starved (we needed a frame but there was none),
+// and we've been at N since the last starvation, N was obviously too low,
+// so we increment it. We will never set N above 5, though.
 class QueueLengthPolicy {
 public:
 	QueueLengthPolicy() {}
@@ -82,6 +84,7 @@ public:
 		this->card_index = card_index;
 		safe_queue_length = 0;
 		frames_with_at_least_one = 0;
+		been_at_safe_point_since_last_starvation = false;
 	}
 
 	void update_policy(int queue_length);  // Give in -1 for starvation.
@@ -91,6 +94,7 @@ private:
 	unsigned card_index;  // For debugging only.
 	unsigned safe_queue_length = 0;  // Called N in the comments.
 	unsigned frames_with_at_least_one = 0;
+	bool been_at_safe_point_since_last_starvation = false;
 };
 
 class Mixer {
