@@ -581,12 +581,14 @@ void Mixer::thread_func()
 		bool has_new_frame[MAX_CARDS] = { false };
 		int num_samples[MAX_CARDS] = { 0 };
 
+		// The first card is the master timer, so wait for it to have a new frame.
+		// TODO: Make configurable, and with a timeout.
+		unsigned master_card_index = 0;
+
 		{
 			unique_lock<mutex> lock(bmusb_mutex);
 
-			// The first card is the master timer, so wait for it to have a new frame.
-			// TODO: Make configurable, and with a timeout.
-			cards[0].new_frames_changed.wait(lock, [this]{ return !cards[0].new_frames.empty(); });
+			cards[master_card_index].new_frames_changed.wait(lock, [this, master_card_index]{ return !cards[master_card_index].new_frames.empty(); });
 
 			for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 				CaptureCard *card = &cards[card_index];
@@ -607,19 +609,19 @@ void Mixer::thread_func()
 
 		// Resample the audio as needed, including from previously dropped frames.
 		assert(num_cards > 0);
-		for (unsigned frame_num = 0; frame_num < new_frames[0].dropped_frames + 1; ++frame_num) {
+		for (unsigned frame_num = 0; frame_num < new_frames[master_card_index].dropped_frames + 1; ++frame_num) {
 			{
 				// Signal to the audio thread to process this frame.
 				unique_lock<mutex> lock(audio_mutex);
-				audio_task_queue.push(AudioTask{pts_int, num_samples[0]});
+				audio_task_queue.push(AudioTask{pts_int, num_samples[master_card_index]});
 				audio_task_queue_changed.notify_one();
 			}
-			if (frame_num != new_frames[0].dropped_frames) {
+			if (frame_num != new_frames[master_card_index].dropped_frames) {
 				// For dropped frames, increase the pts. Note that if the format changed
 				// in the meantime, we have no way of detecting that; we just have to
 				// assume the frame length is always the same.
 				++stats_dropped_frames;
-				pts_int += new_frames[0].length;
+				pts_int += new_frames[master_card_index].length;
 			}
 		}
 
@@ -636,8 +638,8 @@ void Mixer::thread_func()
 			                     correlation.get_correlation());
 		}
 
-		for (unsigned card_index = 1; card_index < num_cards; ++card_index) {
-			if (!has_new_frame[card_index]) {
+		for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
+			if (card_index == master_card_index || !has_new_frame[card_index]) {
 				continue;
 			}
 			if (new_frames[card_index].frame->len == 0) {
@@ -651,9 +653,9 @@ void Mixer::thread_func()
 
 		// If the first card is reporting a corrupted or otherwise dropped frame,
 		// just increase the pts (skipping over this frame) and don't try to compute anything new.
-		if (new_frames[0].frame->len == 0) {
+		if (new_frames[master_card_index].frame->len == 0) {
 			++stats_dropped_frames;
-			pts_int += new_frames[0].length;
+			pts_int += new_frames[master_card_index].length;
 			continue;
 		}
 
@@ -710,7 +712,7 @@ void Mixer::thread_func()
 		const int64_t av_delay = TIMEBASE / 10;  // Corresponds to the fixed delay in resampling_queue.h. TODO: Make less hard-coded.
 		h264_encoder->end_frame(fence, pts_int + av_delay, theme_main_chain.input_frames);
 		++frame;
-		pts_int += new_frames[0].length;
+		pts_int += new_frames[master_card_index].length;
 
 		// The live frame just shows the RGBA texture we just rendered.
 		// It owns rgba_tex now.
