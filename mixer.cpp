@@ -533,7 +533,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 
 		GLuint pbo = userdata->pbo;
 		check_error();
-		glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, pbo);
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
 		check_error();
 		glFlushMappedBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, video_frame.size);
 		check_error();
@@ -548,7 +548,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		check_error();
 		glBindTexture(GL_TEXTURE_2D, 0);
 		check_error();
-		glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, 0);
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 		check_error();
 		RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
 		check_error();
