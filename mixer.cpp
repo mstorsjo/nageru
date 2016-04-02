@@ -250,7 +250,7 @@ Mixer::~Mixer()
 		{
 			unique_lock<mutex> lock(bmusb_mutex);
 			cards[card_index].should_quit = true;  // Unblock thread.
-			cards[card_index].new_data_ready_changed.notify_all();
+			cards[card_index].new_frames_changed.notify_all();
 		}
 		cards[card_index].capture->stop_dequeue_thread();
 	}
@@ -430,13 +430,6 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		audio_frame.owner->release_frame(audio_frame);
 	}
 
-	{
-		// Wait until the previous frame was consumed.
-		unique_lock<mutex> lock(bmusb_mutex);
-		card->new_data_ready_changed.wait(lock, [card]{ return !card->new_data_ready || card->should_quit; });
-		if (card->should_quit) return;
-	}
-
 	size_t expected_length = video_format.width * (video_format.height + video_format.extra_lines_top + video_format.extra_lines_bottom) * 2;
 	if (video_frame.len - video_offset == 0 ||
 	    video_frame.len - video_offset != expected_length) {
@@ -452,13 +445,14 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		// so that pts can go up accordingly.
 		{
 			unique_lock<mutex> lock(bmusb_mutex);
-			card->new_data_ready = true;
-			card->new_frame = RefCountedFrame(FrameAllocator::Frame());
-			card->new_frame_length = frame_length;
-			card->new_frame_interlaced = false;
-			card->new_data_ready_fence = nullptr;
-			card->dropped_frames = dropped_frames;
-			card->new_data_ready_changed.notify_all();
+			CaptureCard::NewFrame new_frame;
+			new_frame.frame = RefCountedFrame(FrameAllocator::Frame());
+			new_frame.length = frame_length;
+			new_frame.interlaced = false;
+			new_frame.ready_fence = nullptr;
+			new_frame.dropped_frames = dropped_frames;
+			card->new_frames.push(move(new_frame));
+			card->new_frames_changed.notify_all();
 		}
 		return;
 	}
@@ -481,7 +475,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 	userdata->last_has_signal = video_format.has_signal;
 	userdata->last_frame_rate_nom = video_format.frame_rate_nom;
 	userdata->last_frame_rate_den = video_format.frame_rate_den;
-	RefCountedFrame new_frame(video_frame);
+	RefCountedFrame frame(video_frame);
 
 	// Upload the textures.
 	size_t cbcr_width = video_format.width / 2;
@@ -554,20 +548,15 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 
 		{
 			unique_lock<mutex> lock(bmusb_mutex);
-			card->new_data_ready = true;
-			card->new_frame = new_frame;
-			card->new_frame_length = frame_length;
-			card->new_frame_field = field;
-			card->new_frame_interlaced = video_format.interlaced;
-			card->new_data_ready_fence = fence;
-			card->dropped_frames = dropped_frames;
-			card->new_data_ready_changed.notify_all();
-
-			if (field != num_fields - 1) {
-				// Wait until the previous frame was consumed.
-				card->new_data_ready_changed.wait(lock, [card]{ return !card->new_data_ready || card->should_quit; });
-				if (card->should_quit) return;
-			}
+			CaptureCard::NewFrame new_frame;
+			new_frame.frame = frame;
+			new_frame.length = frame_length;
+			new_frame.field = field;
+			new_frame.interlaced = video_format.interlaced;
+			new_frame.ready_fence = fence;
+			new_frame.dropped_frames = dropped_frames;
+			card->new_frames.push(move(new_frame));
+			card->new_frames_changed.notify_all();
 		}
 	}
 }
@@ -588,29 +577,28 @@ void Mixer::thread_func()
 	int stats_dropped_frames = 0;
 
 	while (!should_quit) {
-		CaptureCard card_copy[MAX_CARDS];
-		int num_samples[MAX_CARDS];
+		CaptureCard::NewFrame new_frames[MAX_CARDS];
+		bool has_new_frame[MAX_CARDS] = { false };
+		int num_samples[MAX_CARDS] = { 0 };
 
 		{
 			unique_lock<mutex> lock(bmusb_mutex);
 
 			// The first card is the master timer, so wait for it to have a new frame.
 			// TODO: Make configurable, and with a timeout.
-			cards[0].new_data_ready_changed.wait(lock, [this]{ return cards[0].new_data_ready; });
+			cards[0].new_frames_changed.wait(lock, [this]{ return !cards[0].new_frames.empty(); });
 
 			for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
 				CaptureCard *card = &cards[card_index];
-				card_copy[card_index].new_data_ready = card->new_data_ready;
-				card_copy[card_index].new_frame = card->new_frame;
-				card_copy[card_index].new_frame_length = card->new_frame_length;
-				card_copy[card_index].new_frame_field = card->new_frame_field;
-				card_copy[card_index].new_frame_interlaced = card->new_frame_interlaced;
-				card_copy[card_index].new_data_ready_fence = card->new_data_ready_fence;
-				card_copy[card_index].dropped_frames = card->dropped_frames;
-				card->new_data_ready = false;
-				card->new_data_ready_changed.notify_all();
+				if (card->new_frames.empty()) {
+					continue;
+				}
+				new_frames[card_index] = move(card->new_frames.front());
+				has_new_frame[card_index] = true;
+				card->new_frames.pop();
+				card->new_frames_changed.notify_all();
 
-				int num_samples_times_timebase = OUTPUT_FREQUENCY * card->new_frame_length + card->fractional_samples;
+				int num_samples_times_timebase = OUTPUT_FREQUENCY * new_frames[card_index].length + card->fractional_samples;
 				num_samples[card_index] = num_samples_times_timebase / TIMEBASE;
 				card->fractional_samples = num_samples_times_timebase % TIMEBASE;
 				assert(num_samples[card_index] >= 0);
@@ -619,19 +607,19 @@ void Mixer::thread_func()
 
 		// Resample the audio as needed, including from previously dropped frames.
 		assert(num_cards > 0);
-		for (unsigned frame_num = 0; frame_num < card_copy[0].dropped_frames + 1; ++frame_num) {
+		for (unsigned frame_num = 0; frame_num < new_frames[0].dropped_frames + 1; ++frame_num) {
 			{
 				// Signal to the audio thread to process this frame.
 				unique_lock<mutex> lock(audio_mutex);
 				audio_task_queue.push(AudioTask{pts_int, num_samples[0]});
 				audio_task_queue_changed.notify_one();
 			}
-			if (frame_num != card_copy[0].dropped_frames) {
+			if (frame_num != new_frames[0].dropped_frames) {
 				// For dropped frames, increase the pts. Note that if the format changed
 				// in the meantime, we have no way of detecting that; we just have to
 				// assume the frame length is always the same.
 				++stats_dropped_frames;
-				pts_int += card_copy[0].new_frame_length;
+				pts_int += new_frames[0].length;
 			}
 		}
 
@@ -649,38 +637,41 @@ void Mixer::thread_func()
 		}
 
 		for (unsigned card_index = 1; card_index < num_cards; ++card_index) {
-			if (card_copy[card_index].new_data_ready && card_copy[card_index].new_frame->len == 0) {
-				++card_copy[card_index].dropped_frames;
+			if (!has_new_frame[card_index]) {
+				continue;
 			}
-			if (card_copy[card_index].dropped_frames > 0) {
+			if (new_frames[card_index].frame->len == 0) {
+				++new_frames[card_index].dropped_frames;
+			}
+			if (new_frames[card_index].dropped_frames > 0) {
 				printf("Card %u dropped %d frames before this\n",
-					card_index, int(card_copy[card_index].dropped_frames));
+					card_index, int(new_frames[card_index].dropped_frames));
 			}
 		}
 
 		// If the first card is reporting a corrupted or otherwise dropped frame,
 		// just increase the pts (skipping over this frame) and don't try to compute anything new.
-		if (card_copy[0].new_frame->len == 0) {
+		if (new_frames[0].frame->len == 0) {
 			++stats_dropped_frames;
-			pts_int += card_copy[0].new_frame_length;
+			pts_int += new_frames[0].length;
 			continue;
 		}
 
 		for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
-			CaptureCard *card = &card_copy[card_index];
-			if (!card->new_data_ready || card->new_frame->len == 0)
+			if (!has_new_frame[card_index] || new_frames[card_index].frame->len == 0)
 				continue;
 
-			assert(card->new_frame != nullptr);
-			insert_new_frame(card->new_frame, card->new_frame_field, card->new_frame_interlaced, card_index, &input_state);
+			CaptureCard::NewFrame *new_frame = &new_frames[card_index];
+			assert(new_frame->frame != nullptr);
+			insert_new_frame(new_frame->frame, new_frame->field, new_frame->interlaced, card_index, &input_state);
 			check_error();
 
 			// The new texture might still be uploaded,
 			// tell the GPU to wait until it's there.
-			if (card->new_data_ready_fence) {
-				glWaitSync(card->new_data_ready_fence, /*flags=*/0, GL_TIMEOUT_IGNORED);
+			if (new_frame->ready_fence) {
+				glWaitSync(new_frame->ready_fence, /*flags=*/0, GL_TIMEOUT_IGNORED);
 				check_error();
-				glDeleteSync(card->new_data_ready_fence);
+				glDeleteSync(new_frame->ready_fence);
 				check_error();
 			}
 		}
@@ -719,7 +710,7 @@ void Mixer::thread_func()
 		const int64_t av_delay = TIMEBASE / 10;  // Corresponds to the fixed delay in resampling_queue.h. TODO: Make less hard-coded.
 		h264_encoder->end_frame(fence, pts_int + av_delay, theme_main_chain.input_frames);
 		++frame;
-		pts_int += card_copy[0].new_frame_length;
+		pts_int += new_frames[0].length;
 
 		// The live frame just shows the RGBA texture we just rendered.
 		// It owns rgba_tex now.

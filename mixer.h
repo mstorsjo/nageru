@@ -328,15 +328,17 @@ private:
 		QSurface *surface;
 		QOpenGLContext *context;
 
-		bool new_data_ready = false;  // Whether new_frame contains anything.
+		struct NewFrame {
+			RefCountedFrame frame;
+			int64_t length;  // In TIMEBASE units.
+			bool interlaced;
+			unsigned field;  // Which field (0 or 1) of the frame to use. Always 0 for progressive.
+			GLsync ready_fence;  // Whether frame is ready for rendering.
+			unsigned dropped_frames = 0;  // Number of dropped frames before this one.
+		};
+		std::queue<NewFrame> new_frames;
 		bool should_quit = false;
-		RefCountedFrame new_frame;
-		int64_t new_frame_length;  // In TIMEBASE units.
-		bool new_frame_interlaced;
-		unsigned new_frame_field;  // Which field (0 or 1) of the frame to use. Always 0 for progressive.
-		GLsync new_data_ready_fence;  // Whether new_frame is ready for rendering.
-		std::condition_variable new_data_ready_changed;  // Set whenever new_data_ready is changed.
-		unsigned dropped_frames = 0;  // Before new_frame.
+		std::condition_variable new_frames_changed;  // Set whenever new_frames (or should_quit) is changed.
 
 		// Accumulated errors in number of 1/TIMEBASE samples. If OUTPUT_FREQUENCY divided by
 		// frame rate is integer, will always stay zero.
