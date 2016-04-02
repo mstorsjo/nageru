@@ -400,8 +400,7 @@ function get_transitions(t)
 end
 
 -- API ENTRY POINT
--- Called when the user clicks a transition button. For our case,
--- we only do cuts, so we ignore the parameters; just switch live and preview.
+-- Called when the user clicks a transition button.
 function transition_clicked(num, t)
 	if num == 0 then
 		-- Cut.
