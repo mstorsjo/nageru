@@ -473,7 +473,6 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 			new_frame.frame = RefCountedFrame(FrameAllocator::Frame());
 			new_frame.length = frame_length;
 			new_frame.interlaced = false;
-			new_frame.ready_fence = nullptr;
 			new_frame.dropped_frames = dropped_frames;
 			card->new_frames.push(move(new_frame));
 			card->new_frames_changed.notify_all();
@@ -547,9 +546,9 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		check_error();
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, 0);
 		check_error();
-		GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
+		RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
 		check_error();
-		assert(fence != nullptr);
+		assert(fence.get() != nullptr);
 
 		if (field == 1) {
 			// Don't upload the second field as fast as we can; wait until
@@ -647,9 +646,9 @@ void Mixer::thread_func()
 			// The new texture might still be uploaded,
 			// tell the GPU to wait until it's there.
 			if (new_frame->ready_fence) {
-				glWaitSync(new_frame->ready_fence, /*flags=*/0, GL_TIMEOUT_IGNORED);
+				glWaitSync(new_frame->ready_fence.get(), /*flags=*/0, GL_TIMEOUT_IGNORED);
 				check_error();
-				glDeleteSync(new_frame->ready_fence);
+				new_frame->ready_fence.reset();
 				check_error();
 			}
 		}

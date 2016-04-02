@@ -388,7 +388,7 @@ private:
 			int64_t length;  // In TIMEBASE units.
 			bool interlaced;
 			unsigned field;  // Which field (0 or 1) of the frame to use. Always 0 for progressive.
-			GLsync ready_fence;  // Whether frame is ready for rendering.
+			RefCountedGLsync ready_fence;  // Whether frame is ready for rendering.
 			unsigned dropped_frames = 0;  // Number of dropped frames before this one.
 		};
 		std::queue<NewFrame> new_frames;
