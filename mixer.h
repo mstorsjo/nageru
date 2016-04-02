@@ -187,6 +187,16 @@ public:
 		audio_source_channel = channel;
 	}
 
+	unsigned get_master_clock() const
+	{
+		return master_clock_channel;
+	}
+
+	void set_master_clock(unsigned channel)
+	{
+		master_clock_channel = channel;
+	}
+
 	void set_signal_mapping(int signal, int card)
 	{
 		return theme->set_signal_mapping(signal, card);
@@ -352,6 +362,7 @@ private:
 	std::unique_ptr<movit::ResourcePool> resource_pool;
 	std::unique_ptr<Theme> theme;
 	std::atomic<unsigned> audio_source_channel{0};
+	std::atomic<unsigned> master_clock_channel{0};
 	std::unique_ptr<movit::EffectChain> display_chain;
 	GLuint cbcr_program_num;  // Owned by <resource_pool>.
 	GLuint cbcr_vbo;  // Holds position and texcoord data.

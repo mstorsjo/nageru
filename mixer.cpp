@@ -605,8 +605,9 @@ void Mixer::thread_func()
 		bool has_new_frame[MAX_CARDS] = { false };
 		int num_samples[MAX_CARDS] = { 0 };
 
-		// TODO: Make configurable, and with a timeout.
-		unsigned master_card_index = 0;
+		// TODO: Add a timeout.
+		unsigned master_card_index = theme->map_signal(master_clock_channel);
+		assert(master_card_index < num_cards);
 
 		get_one_frame_from_each_card(master_card_index, new_frames, has_new_frame, num_samples);
 		schedule_audio_resampling_tasks(new_frames[master_card_index].dropped_frames, num_samples[master_card_index], new_frames[master_card_index].length);
@@ -715,7 +716,12 @@ void Mixer::get_one_frame_from_each_card(unsigned master_card_index, CaptureCard
 		card->fractional_samples = num_samples_times_timebase % TIMEBASE;
 		assert(num_samples[card_index] >= 0);
 
-		if (card_index != master_card_index) {
+		if (card_index == master_card_index) {
+			// We don't use the queue length policy for the master card,
+			// but we will if it stops being the master. Thus, clear out
+			// the policy in case we switch in the future.
+			card->queue_length_policy.reset(card_index);
+		} else {
 			// If we have excess frames compared to the policy for this card,
 			// drop frames from the head.
 			card->queue_length_policy.update_policy(card->new_frames.size());

@@ -211,6 +211,7 @@ void GLWidget::show_context_menu(unsigned signal_num, const QPoint &pos)
 	mode_submenu.setTitle("Input mode");
 	menu.addMenu(&mode_submenu);
 
+	// --- End of card-dependent choices ---
 
 	// Add an audio source selector.
 	QAction *audio_source_action = new QAction("Use as audio source", &menu);
@@ -221,10 +222,21 @@ void GLWidget::show_context_menu(unsigned signal_num, const QPoint &pos)
 	}
 	menu.addAction(audio_source_action);
 
+	// And a master clock selector.
+	QAction *master_clock_action = new QAction("Use as master clock", &menu);
+	master_clock_action->setCheckable(true);
+	if (global_mixer->get_master_clock() == signal_num) {
+		master_clock_action->setChecked(true);
+		master_clock_action->setEnabled(false);
+	}
+	menu.addAction(master_clock_action);
+
 	// Show the menu and look at the result.
 	QAction *selected_item = menu.exec(global_pos);
 	if (selected_item == audio_source_action) {
 		global_mixer->set_audio_source(signal_num);
+	} else if (selected_item == master_clock_action) {
+		global_mixer->set_master_clock(signal_num);
 	} else if (selected_item != nullptr) {
 		QList<QVariant> selected = selected_item->data().toList();
 		if (selected[0].toString() == "video_mode") {
