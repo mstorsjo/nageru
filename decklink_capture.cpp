@@ -140,9 +140,9 @@ DeckLinkCapture::DeckLinkCapture(IDeckLink *card, int card_index)
 		const char *model_name;
 		char buf[256];
 		if (card->GetModelName(&model_name) == S_OK) {
-			snprintf(buf, sizeof(buf), "Card %d: %s", card_index, model_name);
+			snprintf(buf, sizeof(buf), "PCI card %d: %s", card_index, model_name);
 		} else {
-			snprintf(buf, sizeof(buf), "Card %d: Unknown DeckLink card", card_index);
+			snprintf(buf, sizeof(buf), "PCI card %d: Unknown DeckLink card", card_index);
 		}
 		description = buf;
 	}
