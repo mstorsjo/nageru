@@ -713,65 +713,9 @@ void Mixer::thread_func()
 			}
 		}
 
-		// Get the main chain from the theme, and set its state immediately.
-		Theme::Chain theme_main_chain = theme->get_chain(0, pts(), WIDTH, HEIGHT, input_state);
-		EffectChain *chain = theme_main_chain.chain;
-		theme_main_chain.setup_chain();
-		//theme_main_chain.chain->enable_phase_timing(true);
-
-		GLuint y_tex, cbcr_tex;
-		bool got_frame = h264_encoder->begin_frame(&y_tex, &cbcr_tex);
-		assert(got_frame);
-
-		// Render main chain.
-		GLuint cbcr_full_tex = resource_pool->create_2d_texture(GL_RG8, WIDTH, HEIGHT);
-		GLuint rgba_tex = resource_pool->create_2d_texture(GL_RGB565, WIDTH, HEIGHT);  // Saves texture bandwidth, although dithering gets messed up.
-		GLuint fbo = resource_pool->create_fbo(y_tex, cbcr_full_tex, rgba_tex);
-		check_error();
-		chain->render_to_fbo(fbo, WIDTH, HEIGHT);
-		resource_pool->release_fbo(fbo);
-
-		subsample_chroma(cbcr_full_tex, cbcr_tex);
-		resource_pool->release_2d_texture(cbcr_full_tex);
-
-		// Set the right state for rgba_tex.
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glBindTexture(GL_TEXTURE_2D, rgba_tex);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-		RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
-		check_error();
-
-		const int64_t av_delay = TIMEBASE / 10;  // Corresponds to the fixed delay in resampling_queue.h. TODO: Make less hard-coded.
-		h264_encoder->end_frame(fence, pts_int + av_delay, theme_main_chain.input_frames);
+		render_one_frame();
 		++frame;
 		pts_int += new_frames[master_card_index].length;
-
-		// The live frame just shows the RGBA texture we just rendered.
-		// It owns rgba_tex now.
-		DisplayFrame live_frame;
-		live_frame.chain = display_chain.get();
-		live_frame.setup_chain = [this, rgba_tex]{
-			display_input->set_texture_num(rgba_tex);
-		};
-		live_frame.ready_fence = fence;
-		live_frame.input_frames = {};
-		live_frame.temp_textures = { rgba_tex };
-		output_channel[OUTPUT_LIVE].output_frame(live_frame);
-
-		// Set up preview and any additional channels.
-		for (int i = 1; i < theme->get_num_channels() + 2; ++i) {
-			DisplayFrame display_frame;
-			Theme::Chain chain = theme->get_chain(i, pts(), WIDTH, HEIGHT, input_state);  // FIXME: dimensions
-			display_frame.chain = chain.chain;
-			display_frame.setup_chain = chain.setup_chain;
-			display_frame.ready_fence = fence;
-			display_frame.input_frames = chain.input_frames;
-			display_frame.temp_textures = {};
-			output_channel[i].output_frame(display_frame);
-		}
 
 		clock_gettime(CLOCK_MONOTONIC, &now);
 		double elapsed = now.tv_sec - start.tv_sec +
@@ -806,6 +750,67 @@ void Mixer::thread_func()
 	}
 
 	resource_pool->clean_context();
+}
+
+void Mixer::render_one_frame()
+{
+	// Get the main chain from the theme, and set its state immediately.
+	Theme::Chain theme_main_chain = theme->get_chain(0, pts(), WIDTH, HEIGHT, input_state);
+	EffectChain *chain = theme_main_chain.chain;
+	theme_main_chain.setup_chain();
+	//theme_main_chain.chain->enable_phase_timing(true);
+
+	GLuint y_tex, cbcr_tex;
+	bool got_frame = h264_encoder->begin_frame(&y_tex, &cbcr_tex);
+	assert(got_frame);
+
+	// Render main chain.
+	GLuint cbcr_full_tex = resource_pool->create_2d_texture(GL_RG8, WIDTH, HEIGHT);
+	GLuint rgba_tex = resource_pool->create_2d_texture(GL_RGB565, WIDTH, HEIGHT);  // Saves texture bandwidth, although dithering gets messed up.
+	GLuint fbo = resource_pool->create_fbo(y_tex, cbcr_full_tex, rgba_tex);
+	check_error();
+	chain->render_to_fbo(fbo, WIDTH, HEIGHT);
+	resource_pool->release_fbo(fbo);
+
+	subsample_chroma(cbcr_full_tex, cbcr_tex);
+	resource_pool->release_2d_texture(cbcr_full_tex);
+
+	// Set the right state for rgba_tex.
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, rgba_tex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
+	check_error();
+
+	const int64_t av_delay = TIMEBASE / 10;  // Corresponds to the fixed delay in resampling_queue.h. TODO: Make less hard-coded.
+	h264_encoder->end_frame(fence, pts_int + av_delay, theme_main_chain.input_frames);
+
+	// The live frame just shows the RGBA texture we just rendered.
+	// It owns rgba_tex now.
+	DisplayFrame live_frame;
+	live_frame.chain = display_chain.get();
+	live_frame.setup_chain = [this, rgba_tex]{
+		display_input->set_texture_num(rgba_tex);
+	};
+	live_frame.ready_fence = fence;
+	live_frame.input_frames = {};
+	live_frame.temp_textures = { rgba_tex };
+	output_channel[OUTPUT_LIVE].output_frame(live_frame);
+
+	// Set up preview and any additional channels.
+	for (int i = 1; i < theme->get_num_channels() + 2; ++i) {
+		DisplayFrame display_frame;
+		Theme::Chain chain = theme->get_chain(i, pts(), WIDTH, HEIGHT, input_state);  // FIXME: dimensions
+		display_frame.chain = chain.chain;
+		display_frame.setup_chain = chain.setup_chain;
+		display_frame.ready_fence = fence;
+		display_frame.input_frames = chain.input_frames;
+		display_frame.temp_textures = {};
+		output_channel[i].output_frame(display_frame);
+	}
 }
 
 void Mixer::audio_thread_func()

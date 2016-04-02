@@ -336,6 +336,7 @@ private:
 		FrameAllocator::Frame audio_frame, size_t audio_offset, AudioFormat audio_format);
 	void place_rectangle(movit::Effect *resample_effect, movit::Effect *padding_effect, float x0, float y0, float x1, float y1);
 	void thread_func();
+	void render_one_frame();
 	void audio_thread_func();
 	void process_audio_one_frame(int64_t frame_pts_int, int num_samples);
 	void subsample_chroma(GLuint src_tex, GLuint dst_dst);
