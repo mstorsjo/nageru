@@ -609,25 +609,8 @@ void Mixer::thread_func()
 		unsigned master_card_index = 0;
 
 		get_one_frame_from_each_card(master_card_index, new_frames, has_new_frame, num_samples);
-
-		// Resample the audio as needed, including from previously dropped frames.
-		assert(num_cards > 0);
-		for (unsigned frame_num = 0; frame_num < new_frames[master_card_index].dropped_frames + 1; ++frame_num) {
-			{
-				// Signal to the audio thread to process this frame.
-				unique_lock<mutex> lock(audio_mutex);
-				audio_task_queue.push(AudioTask{pts_int, num_samples[master_card_index]});
-				audio_task_queue_changed.notify_one();
-			}
-			if (frame_num != new_frames[master_card_index].dropped_frames) {
-				// For dropped frames, increase the pts. Note that if the format changed
-				// in the meantime, we have no way of detecting that; we just have to
-				// assume the frame length is always the same.
-				++stats_dropped_frames;
-				pts_int += new_frames[master_card_index].length;
-			}
-		}
-
+		schedule_audio_resampling_tasks(new_frames[master_card_index].dropped_frames, num_samples[master_card_index], new_frames[master_card_index].length);
+		stats_dropped_frames += new_frames[master_card_index].dropped_frames;
 		send_audio_level_callback();
 
 		for (unsigned card_index = 0; card_index < num_cards; ++card_index) {
@@ -739,6 +722,26 @@ void Mixer::get_one_frame_from_each_card(unsigned master_card_index, CaptureCard
 			while (card->new_frames.size() > card->queue_length_policy.get_safe_queue_length()) {
 				card->new_frames.pop();
 			}
+		}
+	}
+}
+
+void Mixer::schedule_audio_resampling_tasks(unsigned dropped_frames, int num_samples_per_frame, int length_per_frame)
+{
+	// Resample the audio as needed, including from previously dropped frames.
+	assert(num_cards > 0);
+	for (unsigned frame_num = 0; frame_num < dropped_frames + 1; ++frame_num) {
+		{
+			// Signal to the audio thread to process this frame.
+			unique_lock<mutex> lock(audio_mutex);
+			audio_task_queue.push(AudioTask{pts_int, num_samples_per_frame});
+			audio_task_queue_changed.notify_one();
+		}
+		if (frame_num != dropped_frames) {
+			// For dropped frames, increase the pts. Note that if the format changed
+			// in the meantime, we have no way of detecting that; we just have to
+			// assume the frame length is always the same.
+			pts_int += length_per_frame;
 		}
 	}
 }
