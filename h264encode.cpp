@@ -1725,6 +1725,10 @@ bool H264EncoderImpl::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 	{
 		// Wait until this frame slot is done encoding.
 		unique_lock<mutex> lock(storage_task_queue_mutex);
+		if (srcsurface_status[current_storage_frame % SURFACE_NUM] != SRC_SURFACE_FREE) {
+			fprintf(stderr, "Warning: Slot %d (for frame %d) is still encoding, rendering has to wait for H.264 encoder\n",
+				current_storage_frame % SURFACE_NUM, current_storage_frame);
+		}
 		storage_task_queue_changed.wait(lock, [this]{ return storage_thread_should_quit || (srcsurface_status[current_storage_frame % SURFACE_NUM] == SRC_SURFACE_FREE); });
 		if (storage_thread_should_quit) return false;
 	}
