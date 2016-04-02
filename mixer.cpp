@@ -532,7 +532,7 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		check_error();
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, pbo);
 		check_error();
-		glMemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
+		glFlushMappedBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, video_frame.size);
 		check_error();
 
 		glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr[field]);
