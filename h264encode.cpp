@@ -84,6 +84,8 @@ class QSurface;
    
 #define BITSTREAM_ALLOCATE_STEPPING     4096
 #define SURFACE_NUM 16 /* 16 surfaces for source YUV */
+#define MAX_NUM_REF1 16 // Seemingly a hardware-fixed value, not related to SURFACE_NUM
+#define MAX_NUM_REF2 32 // Seemingly a hardware-fixed value, not related to SURFACE_NUM
 
 static constexpr unsigned int MaxFrameNum = (2<<16);
 static constexpr unsigned int MaxPicOrderCntLsb = (2<<8);
@@ -217,7 +219,7 @@ private:
 	VAEncPictureParameterBufferH264 pic_param;
 	VAEncSliceParameterBufferH264 slice_param;
 	VAPictureH264 CurrentCurrPic;
-	VAPictureH264 ReferenceFrames[16], RefPicList0_P[32], RefPicList0_B[32], RefPicList1_B[32];
+	VAPictureH264 ReferenceFrames[MAX_NUM_REF1], RefPicList0_P[MAX_NUM_REF2], RefPicList0_B[MAX_NUM_REF2], RefPicList1_B[MAX_NUM_REF2];
 
 	// Static quality settings.
 	static constexpr unsigned int frame_bitrate = 15000000 / 60;  // Doesn't really matter; only initial_qp does.
@@ -1298,7 +1300,7 @@ int H264EncoderImpl::render_picture(int frame_type, int display_frame_num, int g
     CurrentCurrPic = pic_param.CurrPic;
 
     memcpy(pic_param.ReferenceFrames, ReferenceFrames, numShortTerm*sizeof(VAPictureH264));
-    for (i = numShortTerm; i < SURFACE_NUM; i++) {
+    for (i = numShortTerm; i < MAX_NUM_REF1; i++) {
         pic_param.ReferenceFrames[i].picture_id = VA_INVALID_SURFACE;
         pic_param.ReferenceFrames[i].flags = VA_PICTURE_H264_INVALID;
     }
@@ -1448,7 +1450,7 @@ int H264EncoderImpl::render_slice(int encoding_frame_num, int display_frame_num,
         int refpiclist0_max = h264_maxref & 0xffff;
         memcpy(slice_param.RefPicList0, RefPicList0_P, refpiclist0_max*sizeof(VAPictureH264));
 
-        for (i = refpiclist0_max; i < 32; i++) {
+        for (i = refpiclist0_max; i < MAX_NUM_REF2; i++) {
             slice_param.RefPicList0[i].picture_id = VA_INVALID_SURFACE;
             slice_param.RefPicList0[i].flags = VA_PICTURE_H264_INVALID;
         }
@@ -1457,13 +1459,13 @@ int H264EncoderImpl::render_slice(int encoding_frame_num, int display_frame_num,
         int refpiclist1_max = (h264_maxref >> 16) & 0xffff;
 
         memcpy(slice_param.RefPicList0, RefPicList0_B, refpiclist0_max*sizeof(VAPictureH264));
-        for (i = refpiclist0_max; i < 32; i++) {
+        for (i = refpiclist0_max; i < MAX_NUM_REF2; i++) {
             slice_param.RefPicList0[i].picture_id = VA_INVALID_SURFACE;
             slice_param.RefPicList0[i].flags = VA_PICTURE_H264_INVALID;
         }
 
         memcpy(slice_param.RefPicList1, RefPicList1_B, refpiclist1_max*sizeof(VAPictureH264));
-        for (i = refpiclist1_max; i < 32; i++) {
+        for (i = refpiclist1_max; i < MAX_NUM_REF2; i++) {
             slice_param.RefPicList1[i].picture_id = VA_INVALID_SURFACE;
             slice_param.RefPicList1[i].flags = VA_PICTURE_H264_INVALID;
         }
