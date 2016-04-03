@@ -197,6 +197,7 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height)
 HTTPD::Mux::~Mux()
 {
 	av_write_trailer(avctx);
+	av_free(avctx->pb->buffer);
 	av_free(avctx->pb);
 	avformat_free_context(avctx);
 }
