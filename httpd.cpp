@@ -162,6 +162,9 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height)
 	avstream_video->codec->color_range = AVCOL_RANGE_MPEG;  // Full vs. limited range (output_ycbcr_format.full_range).
 	avstream_video->codec->chroma_sample_location = AVCHROMA_LOC_LEFT;  // Chroma sample location. See chroma_offset_0[] in Mixer::subsample_chroma().
 	avstream_video->codec->field_order = AV_FIELD_PROGRESSIVE;
+	if (avctx->oformat->flags & AVFMT_GLOBALHEADER) {
+		avstream_video->codec->flags = AV_CODEC_FLAG_GLOBAL_HEADER;
+	}
 
 	AVCodec *codec_audio = avcodec_find_encoder(AUDIO_OUTPUT_CODEC);
 	avstream_audio = avformat_new_stream(avctx, codec_audio);
@@ -176,6 +179,9 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height)
 	avstream_audio->codec->channels = 2;
 	avstream_audio->codec->channel_layout = AV_CH_LAYOUT_STEREO;
 	avstream_audio->codec->time_base = AVRational{1, TIMEBASE};
+	if (avctx->oformat->flags & AVFMT_GLOBALHEADER) {
+		avstream_audio->codec->flags = AV_CODEC_FLAG_GLOBAL_HEADER;
+	}
 
 	AVDictionary *options = NULL;
 	vector<pair<string, string>> opts = MUX_OPTS;
