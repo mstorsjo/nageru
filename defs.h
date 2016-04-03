@@ -15,8 +15,8 @@
 #define AUDIO_OUTPUT_BIT_RATE 0
 
 #define LOCAL_DUMP_PREFIX "record-"
-#define LOCAL_DUMP_SUFFIX ".mov"
-#define STREAM_MUX_NAME "mov"
+#define LOCAL_DUMP_SUFFIX ".nut"
+#define STREAM_MUX_NAME "nut"
 #define MUX_OPTS {{ "movflags", "empty_moov+frag_keyframe+default_base_moof" }}
 
 // In bytes. Beware, if too small, stream clients will start dropping data.
