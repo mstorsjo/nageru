@@ -1603,7 +1603,6 @@ void H264EncoderImpl::storage_task_enqueue(storage_task task)
 {
 	unique_lock<mutex> lock(storage_task_queue_mutex);
 	storage_task_queue.push(move(task));
-	srcsurface_status[task.display_order % SURFACE_NUM] = SRC_SURFACE_IN_ENCODING;
 	storage_task_queue_changed.notify_all();
 }
 
@@ -1732,6 +1731,7 @@ bool H264EncoderImpl::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 				current_storage_frame % SURFACE_NUM, current_storage_frame);
 		}
 		storage_task_queue_changed.wait(lock, [this]{ return storage_thread_should_quit || (srcsurface_status[current_storage_frame % SURFACE_NUM] == SRC_SURFACE_FREE); });
+		srcsurface_status[current_storage_frame % SURFACE_NUM] = SRC_SURFACE_IN_ENCODING;
 		if (storage_thread_should_quit) return false;
 	}
 
