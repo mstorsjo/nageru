@@ -26,6 +26,9 @@
 }
 
 // In bytes. Beware, if too small, stream clients will start dropping data.
-#define MUX_BUFFER_SIZE 10485760
+// For mov, you want this at 10MB or so (for the reason mentioned above),
+// but for nut, there's no flushing, so such a large mux buffer would cause
+// the output to be very uneven.
+#define MUX_BUFFER_SIZE 65536
 
 #endif  // !defined(_DEFS_H)
