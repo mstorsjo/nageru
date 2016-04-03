@@ -126,6 +126,35 @@ void PBOFrameAllocator::release_frame(Frame frame)
 		printf("%d bytes overflow after last (PBO) frame\n", int(frame.overflow));
 	}
 
+#if 0
+	// Poison the page. (Note that this might be bogus if you don't have an OpenGL context.)
+	memset(frame.data, 0, frame.size);
+	Userdata *userdata = (Userdata *)frame.userdata;
+	for (unsigned field = 0; field < 2; ++field) {
+		glBindTexture(GL_TEXTURE_2D, userdata->tex_y[field]);
+		check_error();
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		check_error();
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		check_error();
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		check_error();
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, userdata->last_width[field], userdata->last_height[field], 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		check_error();
+
+		glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr[field]);
+		check_error();
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		check_error();
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		check_error();
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		check_error();
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, userdata->last_width[field] / 2, userdata->last_height[field], 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		check_error();
+	}
+#endif
+
 	unique_lock<mutex> lock(freelist_mutex);
 	freelist.push(frame);
 	//--sumsum;
