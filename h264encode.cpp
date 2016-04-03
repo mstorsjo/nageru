@@ -1576,25 +1576,6 @@ void H264EncoderImpl::save_codeddata(storage_task task)
         av_free_packet(&pkt);
         if (audio_pts == task.pts) break;
     }
-
-#if 0
-    printf("\r      "); /* return back to startpoint */
-    switch (encode_order % 4) {
-        case 0:
-            printf("|");
-            break;
-        case 1:
-            printf("/");
-            break;
-        case 2:
-            printf("-");
-            break;
-        case 3:
-            printf("\\");
-            break;
-    }
-    printf("%08lld", encode_order);
-#endif
 }
 
 
