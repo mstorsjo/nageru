@@ -186,6 +186,7 @@ private:
 	QSurface *surface;
 
 	AVCodecContext *context_audio;
+	AVFrame *audio_frame = nullptr;
 	HTTPD *httpd;
 
 	Display *x11_display = nullptr;
@@ -1540,18 +1541,17 @@ void H264EncoderImpl::save_codeddata(storage_task task)
              pending_audio_frames.erase(it); 
         }
 
-        AVFrame *frame = av_frame_alloc();
-        frame->nb_samples = audio.size() / 2;
-        frame->format = AV_SAMPLE_FMT_S32;
-        frame->channel_layout = AV_CH_LAYOUT_STEREO;
+        audio_frame->nb_samples = audio.size() / 2;
+        audio_frame->format = AV_SAMPLE_FMT_S32;
+        audio_frame->channel_layout = AV_CH_LAYOUT_STEREO;
 
         unique_ptr<int32_t[]> int_samples(new int32_t[audio.size()]);
-        int ret = avcodec_fill_audio_frame(frame, 2, AV_SAMPLE_FMT_S32, (const uint8_t*)int_samples.get(), audio.size() * sizeof(int32_t), 1);
+        int ret = avcodec_fill_audio_frame(audio_frame, 2, AV_SAMPLE_FMT_S32, (const uint8_t*)int_samples.get(), audio.size() * sizeof(int32_t), 1);
         if (ret < 0) {
             fprintf(stderr, "avcodec_fill_audio_frame() failed with %d\n", ret);
             exit(1);
         }
-        for (int i = 0; i < frame->nb_samples * 2; ++i) {
+        for (int i = 0; i < audio_frame->nb_samples * 2; ++i) {
             if (audio[i] >= 1.0f) {
                 int_samples[i] = 2147483647;
             } else if (audio[i] <= -1.0f) {
@@ -1566,13 +1566,13 @@ void H264EncoderImpl::save_codeddata(storage_task task)
         pkt.data = nullptr;
         pkt.size = 0;
         int got_output;
-        avcodec_encode_audio2(context_audio, &pkt, frame, &got_output);
+        avcodec_encode_audio2(context_audio, &pkt, audio_frame, &got_output);
         if (got_output) {
             pkt.stream_index = 1;
             httpd->add_packet(pkt, audio_pts + global_delay, audio_pts + global_delay);
         }
         // TODO: Delayed frames.
-        av_frame_unref(frame);
+        av_frame_unref(audio_frame);
         av_free_packet(&pkt);
         if (audio_pts == task.pts) break;
     }
@@ -1682,6 +1682,7 @@ H264EncoderImpl::H264EncoderImpl(QSurface *surface, const string &va_display, in
 		fprintf(stderr, "Could not open codec\n");
 		exit(1);
 	}
+	audio_frame = av_frame_alloc();
 
 	frame_width = width;
 	frame_height = height;
@@ -1718,6 +1719,9 @@ H264EncoderImpl::H264EncoderImpl(QSurface *surface, const string &va_display, in
 H264EncoderImpl::~H264EncoderImpl()
 {
 	shutdown();
+	av_frame_free(&audio_frame);
+
+	// TODO: Destroy context.
 }
 
 bool H264EncoderImpl::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
