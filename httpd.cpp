@@ -224,6 +224,8 @@ void HTTPD::Mux::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 		fprintf(stderr, "av_interleaved_write_frame() failed\n");
 		exit(1);
 	}
+
+	av_packet_unref(&pkt_copy);
 }
 
 HTTPD::Stream::Stream(AVOutputFormat *oformat, int width, int height)
