@@ -261,6 +261,14 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 
 	locut.init(FILTER_HPF, 2);
 
+	// If --flat-audio is given, turn off everything that messes with the sound,
+	// except the final makeup gain.
+	if (global_flags.flat_audio) {
+		set_locut_enabled(false);
+		set_limiter_enabled(false);
+		set_compressor_enabled(false);
+	}
+
 	// hlen=16 is pretty low quality, but we use quite a bit of CPU otherwise,
 	// and there's a limit to how important the peak meter is.
 	peak_resampler.setup(OUTPUT_FREQUENCY, OUTPUT_FREQUENCY * 4, /*num_channels=*/2, /*hlen=*/16, /*frel=*/1.0);

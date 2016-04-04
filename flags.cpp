@@ -13,6 +13,7 @@ void parse_flags(int argc, char * const argv[])
 		{ "theme", required_argument, 0, 't' },
 		{ "va-display", required_argument, 0, 1000 },
 		{ "http-uncompressed-video", no_argument, 0, 1001 },
+		{ "flat-audio", no_argument, 0, 1002 },
 		{ 0, 0, 0, 0 }
 	};
 	for ( ;; ) {
@@ -34,6 +35,9 @@ void parse_flags(int argc, char * const argv[])
 			break;
 		case 1001:
 			global_flags.uncompressed_video_to_http = true;
+			break;
+		case 1002:
+			global_flags.flat_audio = true;
 			break;
 		default:
 			fprintf(stderr, "Unknown option '%s'\n", argv[option_index]);
