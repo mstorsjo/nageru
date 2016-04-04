@@ -159,7 +159,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	movit_texel_subpixel_precision /= 2.0;
 
 	resource_pool.reset(new ResourcePool);
-	theme.reset(new Theme("theme.lua", resource_pool.get(), num_cards));
+	theme.reset(new Theme(global_flags.theme_filename.c_str(), resource_pool.get(), num_cards));
 	for (unsigned i = 0; i < NUM_OUTPUTS; ++i) {
 		output_channel[i].parent = this;
 	}
