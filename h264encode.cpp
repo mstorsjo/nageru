@@ -38,6 +38,7 @@ extern "C" {
 
 #include "context.h"
 #include "defs.h"
+#include "flags.h"
 #include "httpd.h"
 #include "timebase.h"
 
@@ -113,6 +114,82 @@ typedef struct __bitstream bitstream;
 
 using namespace std;
 
+// H.264 video comes out in encoding order (e.g. with two B-frames:
+// 0, 3, 1, 2, 6, 4, 5, etc.), but uncompressed video needs to
+// come in the right order. Since we do everything, including waiting
+// for the frames to come out of OpenGL, in encoding order, we need
+// a reordering buffer for uncompressed frames so that they come out
+// correctly. We go the super-lazy way of not making it understand
+// anything about the true order (which introduces some extra latency,
+// though); we know that for N B-frames we need at most (N-1) frames
+// in the reorder buffer, and can just sort on that.
+//
+// The class also deals with keeping a freelist as needed.
+class FrameReorderer {
+public:
+	FrameReorderer(unsigned queue_length, int width, int height);
+
+	// Returns the next frame to insert with its pts, if any. Otherwise -1 and nullptr.
+	// Does _not_ take ownership of data; a copy is taken if needed.
+	// The returned pointer is valid until the next call to reorder_frame, or destruction.
+	// As a special case, if queue_length == 0, will just return pts and data (no reordering needed).
+	pair<int64_t, const uint8_t *> reorder_frame(int64_t pts, const uint8_t *data);
+
+	// The same as reorder_frame, but without inserting anything. Used to empty the queue.
+	pair<int64_t, const uint8_t *> get_first_frame();
+
+	bool empty() const { return frames.empty(); }
+
+private:
+	unsigned queue_length;
+	int width, height;
+
+	priority_queue<pair<int64_t, uint8_t *>> frames;
+	stack<uint8_t *> freelist;  // Includes the last value returned from reorder_frame.
+
+	// Owns all the pointers. Normally, freelist and frames could do this themselves,
+	// except priority_queue doesn't work well with movable-only types.
+	vector<unique_ptr<uint8_t[]>> owner;
+};
+
+FrameReorderer::FrameReorderer(unsigned queue_length, int width, int height)
+    : queue_length(queue_length), width(width), height(height)
+{
+	for (unsigned i = 0; i < queue_length; ++i) {
+		owner.emplace_back(new uint8_t[width * height * 2]);
+		freelist.push(owner.back().get());
+	}
+}
+
+pair<int64_t, const uint8_t *> FrameReorderer::reorder_frame(int64_t pts, const uint8_t *data)
+{
+	if (queue_length == 0) {
+		return make_pair(pts, data);
+	}
+
+	assert(!freelist.empty());
+	uint8_t *storage = freelist.top();
+	freelist.pop();
+	memcpy(storage, data, width * height * 2);
+	frames.emplace(-pts, storage);  // Invert pts to get smallest first.
+
+	if (frames.size() >= queue_length) {
+		return get_first_frame();
+	} else {
+		return make_pair(-1, nullptr);
+	}
+}
+
+pair<int64_t, const uint8_t *> FrameReorderer::get_first_frame()
+{
+	assert(!frames.empty());
+	pair<int64_t, uint8_t *> storage = frames.top();
+	frames.pop();
+	int64_t pts = storage.first;
+	freelist.push(storage.second);
+	return make_pair(-pts, storage.second);  // Re-invert pts (see reorder_frame()).
+}
+
 class H264EncoderImpl {
 public:
 	H264EncoderImpl(QSurface *surface, const string &va_display, int width, int height, HTTPD *httpd);
@@ -137,6 +214,7 @@ private:
 
 	void encode_thread_func();
 	void encode_remaining_frames_as_p(int encoding_frame_num, int gop_start_display_frame_num, int64_t last_dts);
+	void add_packet_for_uncompressed_frame(int64_t pts, const uint8_t *data);
 	void encode_frame(PendingFrame frame, int encoding_frame_num, int display_frame_num, int gop_start_display_frame_num,
 	                  int frame_type, int64_t pts, int64_t dts);
 	void storage_task_thread();
@@ -188,6 +266,7 @@ private:
 	AVCodecContext *context_audio;
 	AVFrame *audio_frame = nullptr;
 	HTTPD *httpd;
+	unique_ptr<FrameReorderer> reorderer;
 
 	Display *x11_display = nullptr;
 
@@ -856,6 +935,10 @@ VADisplay H264EncoderImpl::va_open_display(const string &va_display)
 			return NULL;
 		}
 		use_zerocopy = true;
+		if (global_flags.uncompressed_video_to_http) {
+			fprintf(stderr, "Disabling zerocopy H.264 encoding due to --uncompressed_video_to_http.\n");
+			use_zerocopy = false;
+		}
 		return vaGetDisplay(x11_display);
 	} else if (va_display[0] != '/') {
 		x11_display = XOpenDisplay(va_display.c_str());
@@ -864,6 +947,10 @@ VADisplay H264EncoderImpl::va_open_display(const string &va_display)
 			return NULL;
 		}
 		use_zerocopy = true;
+		if (global_flags.uncompressed_video_to_http) {
+			fprintf(stderr, "Disabling zerocopy H.264 encoding due to --uncompressed_video_to_http.\n");
+			use_zerocopy = false;
+		}
 		return vaGetDisplay(x11_display);
 	} else {
 		drm_fd = open(va_display.c_str(), O_RDWR);
@@ -1524,7 +1611,8 @@ void H264EncoderImpl::save_codeddata(storage_task task)
             pkt.flags = 0;
         }
         //pkt.duration = 1;
-        httpd->add_packet(pkt, task.pts + global_delay, task.dts + global_delay);
+        httpd->add_packet(pkt, task.pts + global_delay, task.dts + global_delay,
+		global_flags.uncompressed_video_to_http ? HTTPD::DESTINATION_FILE_ONLY : HTTPD::DESTINATION_FILE_AND_HTTP);
     }
     // Encode and add all audio frames up to and including the pts of this video frame.
     for ( ;; ) {
@@ -1569,7 +1657,7 @@ void H264EncoderImpl::save_codeddata(storage_task task)
         avcodec_encode_audio2(context_audio, &pkt, audio_frame, &got_output);
         if (got_output) {
             pkt.stream_index = 1;
-            httpd->add_packet(pkt, audio_pts + global_delay, audio_pts + global_delay);
+            httpd->add_packet(pkt, audio_pts + global_delay, audio_pts + global_delay, HTTPD::DESTINATION_FILE_AND_HTTP);
         }
         // TODO: Delayed frames.
         av_frame_unref(audio_frame);
@@ -1671,6 +1759,10 @@ H264EncoderImpl::H264EncoderImpl(QSurface *surface, const string &va_display, in
 	frame_height_mbaligned = (frame_height + 15) & (~15);
 
 	//print_input();
+
+	if (global_flags.uncompressed_video_to_http) {
+		reorderer.reset(new FrameReorderer(ip_period - 1, frame_width, frame_height));
+	}
 
 	init_va(va_display);
 	setup_encode();
@@ -1917,6 +2009,26 @@ void H264EncoderImpl::encode_remaining_frames_as_p(int encoding_frame_num, int g
 		encode_frame(frame, encoding_frame_num++, display_frame_num, gop_start_display_frame_num, FRAME_P, frame.pts, dts);
 		last_dts = dts;
 	}
+
+	if (global_flags.uncompressed_video_to_http) {
+		// Add frames left in reorderer.
+		while (!reorderer->empty()) {
+			pair<int64_t, const uint8_t *> output_frame = reorderer->get_first_frame();
+			add_packet_for_uncompressed_frame(output_frame.first, output_frame.second);
+		}
+	}
+}
+
+void H264EncoderImpl::add_packet_for_uncompressed_frame(int64_t pts, const uint8_t *data)
+{
+	AVPacket pkt;
+	memset(&pkt, 0, sizeof(pkt));
+	pkt.buf = nullptr;
+	pkt.data = const_cast<uint8_t *>(data);
+	pkt.size = frame_width * frame_height * 2;
+	pkt.stream_index = 0;
+	pkt.flags = AV_PKT_FLAG_KEY;
+	httpd->add_packet(pkt, pts, pts, HTTPD::DESTINATION_HTTP_ONLY);
 }
 
 namespace {
@@ -1970,6 +2082,15 @@ void H264EncoderImpl::encode_frame(H264EncoderImpl::PendingFrame frame, int enco
 
 		va_status = vaUnmapBuffer(va_dpy, surf->surface_image.buf);
 		CHECK_VASTATUS(va_status, "vaUnmapBuffer");
+
+		if (global_flags.uncompressed_video_to_http) {
+			// Add uncompressed video. (Note that pts == dts here.)
+			const int64_t global_delay = int64_t(ip_period - 1) * (TIMEBASE / MAX_FPS);  // Needs to match audio.
+			pair<int64_t, const uint8_t *> output_frame = reorderer->reorder_frame(pts + global_delay, reinterpret_cast<uint8_t *>(surf->y_ptr));
+			if (output_frame.second != nullptr) {
+				add_packet_for_uncompressed_frame(output_frame.first, output_frame.second);
+			}
+		}
 	}
 
 	va_status = vaDestroyImage(va_dpy, surf->surface_image.image_id);

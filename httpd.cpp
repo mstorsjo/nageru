@@ -19,6 +19,7 @@ extern "C" {
 #include "httpd.h"
 
 #include "defs.h"
+#include "flags.h"
 #include "timebase.h"
 
 struct MHD_Connection;
@@ -41,13 +42,15 @@ void HTTPD::start(int port)
 	                 MHD_OPTION_END);
 }
 
-void HTTPD::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
+void HTTPD::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts, PacketDestination destination)
 {
 	unique_lock<mutex> lock(streams_mutex);
-	for (Stream *stream : streams) {
-		stream->add_packet(pkt, pts, dts);
+	if (destination != DESTINATION_FILE_ONLY) {
+		for (Stream *stream : streams) {
+			stream->add_packet(pkt, pts, dts);
+		}
 	}
-	if (file_mux) {
+	if (file_mux && destination != DESTINATION_HTTP_ONLY) {
 		file_mux->add_packet(pkt, pts, dts);
 	}
 }
@@ -67,7 +70,7 @@ void HTTPD::open_output_file(const string &filename)
 		exit(1);
 	}
 
-	file_mux.reset(new Mux(avctx, width, height));
+	file_mux.reset(new Mux(avctx, width, height, Mux::CODEC_NV12));
 }
 
 void HTTPD::close_output_file()
@@ -135,10 +138,10 @@ void HTTPD::request_completed(struct MHD_Connection *connection, void **con_cls,
 	}
 }
 
-HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height)
+HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height, Codec codec)
 	: avctx(avctx)
 {
-	AVCodec *codec_video = avcodec_find_encoder(AV_CODEC_ID_H264);
+	AVCodec *codec_video = avcodec_find_encoder((codec == CODEC_H264) ? AV_CODEC_ID_H264 : AV_CODEC_ID_RAWVIDEO);
 	avstream_video = avformat_new_stream(avctx, codec_video);
 	if (avstream_video == nullptr) {
 		fprintf(stderr, "avformat_new_stream() failed\n");
@@ -146,7 +149,13 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height)
 	}
 	avstream_video->time_base = AVRational{1, TIMEBASE};
 	avstream_video->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-	avstream_video->codec->codec_id = AV_CODEC_ID_H264;
+	if (codec == CODEC_H264) {
+		avstream_video->codec->codec_id = AV_CODEC_ID_H264;
+	} else {
+		assert(codec == CODEC_NV12);
+		avstream_video->codec->codec_id = AV_CODEC_ID_RAWVIDEO;
+		avstream_video->codec->codec_tag = avcodec_pix_fmt_to_codec_tag(AV_PIX_FMT_NV12);
+	}
 	avstream_video->codec->width = width;
 	avstream_video->codec->height = height;
 	avstream_video->codec->time_base = AVRational{1, TIMEBASE};
@@ -236,9 +245,17 @@ HTTPD::Stream::Stream(AVOutputFormat *oformat, int width, int height)
 	avctx->oformat = oformat;
 	uint8_t *buf = (uint8_t *)av_malloc(MUX_BUFFER_SIZE);
 	avctx->pb = avio_alloc_context(buf, MUX_BUFFER_SIZE, 1, this, nullptr, &HTTPD::Stream::write_packet_thunk, nullptr);
+
+	Mux::Codec codec;
+	if (global_flags.uncompressed_video_to_http) {
+		codec = Mux::CODEC_NV12;
+	} else {
+		codec = Mux::CODEC_H264;
+	}
+
 	avctx->flags = AVFMT_FLAG_CUSTOM_IO;
 
-	mux.reset(new Mux(avctx, width, height));
+	mux.reset(new Mux(avctx, width, height, codec));
 }
 
 ssize_t HTTPD::Stream::reader_callback_thunk(void *cls, uint64_t pos, char *buf, size_t max)

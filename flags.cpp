@@ -11,6 +11,7 @@ void parse_flags(int argc, char * const argv[])
 	static const option long_options[] = {
 		{ "num-cards", required_argument, 0, 'c' },
 		{ "va-display", required_argument, 0, 1000 },
+		{ "http-uncompressed-video", no_argument, 0, 1001 },
 		{ 0, 0, 0, 0 }
 	};
 	for ( ;; ) {
@@ -26,6 +27,9 @@ void parse_flags(int argc, char * const argv[])
 			break;
 		case 1000:
 			global_flags.va_display = optarg;
+			break;
+		case 1001:
+			global_flags.uncompressed_video_to_http = true;
 			break;
 		default:
 			fprintf(stderr, "Unknown option '%s'\n", argv[option_index]);

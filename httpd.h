@@ -29,9 +29,15 @@ extern "C" {
 
 class HTTPD {
 public:
+	enum PacketDestination {
+		DESTINATION_FILE_ONLY,
+		DESTINATION_HTTP_ONLY,
+		DESTINATION_FILE_AND_HTTP
+	};
+
 	HTTPD(int width, int height);
 	void start(int port);
-	void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts);
+	void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts, PacketDestination destination);
 
 	// You can only have one going at the same time.
 	void open_output_file(const std::string &filename);
@@ -56,7 +62,12 @@ private:
 
 	class Mux {
 	public:
-		Mux(AVFormatContext *avctx, int width, int height);  // Takes ownership of avctx.
+		enum Codec {
+			CODEC_H264,
+			CODEC_NV12,  // Uncompressed 4:2:0.
+		};
+
+		Mux(AVFormatContext *avctx, int width, int height, Codec codec);  // Takes ownership of avctx.
 		~Mux();
 		void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts);
 

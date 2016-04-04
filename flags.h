@@ -6,6 +6,7 @@
 struct Flags {
 	int num_cards = 2;
 	std::string va_display;
+	bool uncompressed_video_to_http = false;
 };
 extern Flags global_flags;
 
