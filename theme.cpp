@@ -810,6 +810,22 @@ int Theme::get_channel_signal(unsigned channel)
 	return ret;
 }
 
+std::string Theme::get_channel_color(unsigned channel)
+{
+	unique_lock<mutex> lock(m);
+	lua_getglobal(L, "channel_color");
+	lua_pushnumber(L, channel);
+	if (lua_pcall(L, 1, 1, 0) != 0) {
+		fprintf(stderr, "error running function `channel_color': %s\n", lua_tostring(L, -1));
+		exit(1);
+	}
+
+	std::string ret = checkstdstring(L, -1);
+	lua_pop(L, 1);
+	assert(lua_gettop(L) == 0);
+	return ret;
+}
+
 bool Theme::get_supports_set_wb(unsigned channel)
 {
 	unique_lock<mutex> lock(m);

@@ -78,6 +78,15 @@ function channel_signal(channel)
 end
 
 -- API ENTRY POINT
+-- Called every frame. Returns the color (if any) to paint around the given
+-- channel. Returns a CSS color (typically to mark live and preview signals);
+-- "transparent" is allowed.
+-- Will never be called for live (0) or preview (1).
+function channel_color(channel)
+	return "transparent"
+end
+
+-- API ENTRY POINT
 -- Returns if a given channel supports setting white balance (starting from 2).
 -- Called only once for each channel, at the start of the program.
 function supports_set_wb(channel)

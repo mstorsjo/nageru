@@ -334,6 +334,41 @@ function channel_signal(channel)
 end
 
 -- API ENTRY POINT
+-- Called every frame. Returns the color (if any) to paint around the given
+-- channel. Returns a CSS color (typically to mark live and preview signals);
+-- "transparent" is allowed.
+-- Will never be called for live (0) or preview (1).
+function channel_color(channel)
+	if channel_involved_in(channel, live_signal_num) then
+		return "#f00"
+	end
+	if channel_involved_in(channel, preview_signal_num) then
+		return "#0f0"
+	end
+	return "transparent"
+end
+
+function channel_involved_in(channel, signal_num)
+	if signal_num == INPUT0_SIGNAL_NUM then
+		return channel == 2
+	end
+	if signal_num == INPUT1_SIGNAL_NUM then
+		return channel == 3
+	end
+	if signal_num == SBS_SIGNAL_NUM then
+		return (channel == 2 or channel == 3)
+	end
+	if signal_num == STATIC_SIGNAL_NUM then
+		return (channel == 5)
+	end
+	if signal_num == FADE_SIGNAL_NUM then
+		return (channel_involved_in(channel, fade_src_signal) or
+		        channel_involved_in(channel, fade_dst_signal))
+	end
+	return false
+end
+
+-- API ENTRY POINT
 -- Returns if a given channel supports setting white balance (starting from 2).
 -- Called only once for each channel, at the start of the program.
 function supports_set_wb(channel)

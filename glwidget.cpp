@@ -60,6 +60,7 @@ void GLWidget::initializeGL()
 		QMetaObject::invokeMethod(this, "update", Qt::AutoConnection);
 		emit transition_names_updated(global_mixer->get_transition_names());
 		emit resolution_updated(output);
+		emit color_updated(output);
 	});
 
 	if (output >= Mixer::OUTPUT_INPUT0) {

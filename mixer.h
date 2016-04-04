@@ -171,6 +171,11 @@ public:
 		return theme->get_channel_name(channel);
 	}
 
+	std::string get_channel_color(unsigned channel) const
+	{
+		return theme->get_channel_color(channel);
+	}
+
 	int get_channel_signal(unsigned channel) const
 	{
 		return theme->get_channel_signal(channel);

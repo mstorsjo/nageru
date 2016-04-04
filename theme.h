@@ -58,6 +58,7 @@ public:
 	int get_channel_signal(unsigned channel);
 	bool get_supports_set_wb(unsigned channel);
 	void set_wb(unsigned channel, double r, double g, double b);
+	std::string get_channel_color(unsigned channel);
 
 	std::vector<std::string> get_transition_names(float t);
 

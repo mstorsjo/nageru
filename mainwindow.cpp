@@ -90,8 +90,9 @@ void MainWindow::mixer_created(Mixer *mixer)
 		// Hook up the click.
 		connect(ui_display->display, &GLWidget::clicked, bind(&MainWindow::channel_clicked, this, i));
 
-		// Let the theme update the text whenever the resolution changed.
+		// Let the theme update the text whenever the resolution or color changed.
 		connect(ui_display->display, &GLWidget::resolution_updated, this, &MainWindow::update_channel_name);
+		connect(ui_display->display, &GLWidget::color_updated, this, &MainWindow::update_channel_color);
 
 		// Hook up the keyboard key.
 		QShortcut *shortcut = new QShortcut(QKeySequence(Qt::Key_1 + i), this);
@@ -326,6 +327,15 @@ void MainWindow::update_channel_name(Mixer::Output output)
 	if (output >= Mixer::OUTPUT_INPUT0) {
 		unsigned channel = output - Mixer::OUTPUT_INPUT0;
 		previews[channel]->label->setText(global_mixer->get_channel_name(output).c_str());
+	}
+}
+
+void MainWindow::update_channel_color(Mixer::Output output)
+{
+	if (output >= Mixer::OUTPUT_INPUT0) {
+		unsigned channel = output - Mixer::OUTPUT_INPUT0;
+		string color = global_mixer->get_channel_color(output);
+		previews[channel]->frame->setStyleSheet(QString::fromStdString("background-color:" + color));
 	}
 }
 
