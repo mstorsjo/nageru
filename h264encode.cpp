@@ -1605,7 +1605,7 @@ void H264EncoderImpl::save_codeddata(storage_task task)
         pkt.data = reinterpret_cast<uint8_t *>(&data[0]);
         pkt.size = data.size();
         pkt.stream_index = 0;
-        if (task.frame_type == FRAME_IDR || task.frame_type == FRAME_I) {
+        if (task.frame_type == FRAME_IDR) {
             pkt.flags = AV_PKT_FLAG_KEY;
         } else {
             pkt.flags = 0;
@@ -1657,6 +1657,7 @@ void H264EncoderImpl::save_codeddata(storage_task task)
         avcodec_encode_audio2(context_audio, &pkt, audio_frame, &got_output);
         if (got_output) {
             pkt.stream_index = 1;
+            pkt.flags = AV_PKT_FLAG_KEY;
             httpd->add_packet(pkt, audio_pts + global_delay, audio_pts + global_delay, HTTPD::DESTINATION_FILE_AND_HTTP);
         }
         // TODO: Delayed frames.
