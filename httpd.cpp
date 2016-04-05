@@ -70,7 +70,7 @@ void HTTPD::open_output_file(const string &filename)
 		exit(1);
 	}
 
-	file_mux.reset(new Mux(avctx, width, height, Mux::CODEC_NV12));
+	file_mux.reset(new Mux(avctx, width, height, Mux::CODEC_H264));
 }
 
 void HTTPD::close_output_file()
