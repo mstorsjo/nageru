@@ -47,7 +47,7 @@ MainWindow::MainWindow()
 	connect(ui->exit_action, &QAction::triggered, this, &MainWindow::exit_triggered);
 	connect(ui->about_action, &QAction::triggered, this, &MainWindow::about_triggered),
 
-	// Hook up the transition buttons.
+	// Hook up the transition buttons. (Keyboard shortcuts are set in set_transition_names().)
 	// TODO: Make them dynamic.
 	connect(ui->transition_btn1, &QPushButton::clicked, bind(&MainWindow::transition_clicked, this, 0));
 	connect(ui->transition_btn2, &QPushButton::clicked, bind(&MainWindow::transition_clicked, this, 1));
@@ -305,20 +305,23 @@ void MainWindow::relayout()
 
 void MainWindow::set_transition_names(vector<string> transition_names)
 {
-	if (transition_names.size() < 1) {
+	if (transition_names.size() < 1 || transition_names[0].empty()) {
 		transition_btn1->setText(QString(""));
 	} else {
-		transition_btn1->setText(QString::fromStdString(transition_names[0]));
+		transition_btn1->setText(QString::fromStdString(transition_names[0] + " (J)"));
+		ui->transition_btn1->setShortcut(QKeySequence("J"));
 	}
-	if (transition_names.size() < 2) {
+	if (transition_names.size() < 2 || transition_names[1].empty()) {
 		transition_btn2->setText(QString(""));
 	} else {
-		transition_btn2->setText(QString::fromStdString(transition_names[1]));
+		transition_btn2->setText(QString::fromStdString(transition_names[1] + " (K)"));
+		ui->transition_btn2->setShortcut(QKeySequence("K"));
 	}
-	if (transition_names.size() < 3) {
+	if (transition_names.size() < 3 || transition_names[2].empty()) {
 		transition_btn3->setText(QString(""));
 	} else {
-		transition_btn3->setText(QString::fromStdString(transition_names[2]));
+		transition_btn3->setText(QString::fromStdString(transition_names[2] + " (L)"));
+		ui->transition_btn3->setShortcut(QKeySequence("L"));
 	}
 }
 
