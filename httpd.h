@@ -67,7 +67,7 @@ private:
 			CODEC_NV12,  // Uncompressed 4:2:0.
 		};
 
-		Mux(AVFormatContext *avctx, int width, int height, Codec codec);  // Takes ownership of avctx.
+		Mux(AVFormatContext *avctx, int width, int height, Codec video_codec);  // Takes ownership of avctx.
 		~Mux();
 		void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts);
 
