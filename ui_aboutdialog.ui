@@ -17,7 +17,7 @@
    <item>
     <widget class="QLabel" name="label">
      <property name="text">
-      <string>&lt;p&gt;&lt;b&gt;Nageru 1.1.0&lt;/b&gt;&lt;/p&gt;
+      <string>&lt;p&gt;&lt;b&gt;Nageru 1.2.0&lt;/b&gt;&lt;/p&gt;
 
 &lt;p&gt;Realtime video mixer&lt;/p&gt;</string>
      </property>

@@ -1,3 +1,38 @@
+Nageru 1.2.0, April 6th, 2016
+
+ - Support for Blackmagic's PCI and Thunderbolt cards, using the official
+   (closed-source) Blackmagic drivers. (You do not need the SDK installed, though.)
+   You can use PCI and USB cards pretty much interchangeably.
+
+ - Much more stable handling of frame queues on non-master cards. In particular,
+   you can have a master card on 50 Hz and another card on 60 Hz without getting
+   lots of warning messages and a 10+ frame latency on the second card.
+
+ - Many new options in the right click menu on cards: Adjustable video inputs,
+   adjustable audio inputs, adjustable resolutions, ability to select card for
+   master clock.
+
+ - Add support for starting with almost all audio processing turned off
+   (--flat-audio).
+
+ - The UI now marks inputs with red or green to mark them as participating in
+   the live or preview signal, respectively. Red takes priority. (Actually,
+   it merely asks the theme for a color for each input; the theme contains
+   the logic.)
+
+ - Add support for uncompressed video instead of H.264 on the HTTP server,
+   while still storing H.264 to files (--http-uncompressed-video). Note that
+   depending on your client, this might not actually be more CPU efficient
+   even on localhost, so be sure to check.
+
+ - Add a simpler, less featureful theme (simple.lua) that should be easier to
+   understand for beginners. Themes are now also choosable with -t on the command
+   line.
+
+ - Too many bugfixes and small tweaks to list. In particular, many memory leaks
+   in the streaming part have been identified and fixed.
+
+
 Nageru 1.1.0, February 24th, 2016
 
  - Support doing the H.264 encoding on a different graphics device from the one
