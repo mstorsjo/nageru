@@ -86,7 +86,7 @@ are running a desktop compositor, it will steal significant amounts of GPU
 performance. The same goes for PulseAudio.
 
 Nageru will open a HTTP server at port 9095, where you can extract a live
-H264+PCM signal in QuickTime mux (e.g. http://127.0.0.1:9095/stream.mov).
+H264+PCM signal in nut mux (e.g. http://127.0.0.1:9095/stream.nut).
 It is probably too high bitrate (~25 Mbit/sec depending on content) to send to
 users, but you can easily send it around in your internal network and then
 transcode it in e.g. VLC. A copy of the stream (separately muxed) will also
