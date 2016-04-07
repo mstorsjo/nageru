@@ -277,6 +277,7 @@ ssize_t HTTPD::Stream::reader_callback(uint64_t pos, char *buf, size_t max)
 		if (max >= len) {
 			// Consume the entire (rest of the) string.
 			memcpy(buf, s.data() + used_of_buffered_data, len);
+			buf += len;
 			ret += len;
 			max -= len;
 			buffered_data.pop_front();
@@ -284,6 +285,7 @@ ssize_t HTTPD::Stream::reader_callback(uint64_t pos, char *buf, size_t max)
 		} else {
 			// We don't need the entire string; just use the first part of it.
 			memcpy(buf, s.data() + used_of_buffered_data, max);
+			buf += max;
 			used_of_buffered_data += max;
 			ret += max;
 			max = 0;
