@@ -761,7 +761,12 @@ Theme::Chain Theme::get_chain(unsigned num, float t, unsigned width, unsigned he
 		exit(1);
 	}
 
-	chain.chain = (EffectChain *)luaL_checkudata(L, -2, "EffectChain");
+	chain.chain = (EffectChain *)luaL_testudata(L, -2, "EffectChain");
+	if (chain.chain == nullptr) {
+		fprintf(stderr, "get_chain() for chain number %d did not return an EffectChain\n",
+			num);
+		exit(1);
+	}
 	if (!lua_isfunction(L, -1)) {
 		fprintf(stderr, "Argument #-1 should be a function\n");
 		exit(1);
