@@ -10,18 +10,59 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <mutex>
+#include <thread>
+
 using namespace std;
 
 ImageInput::ImageInput(const string &filename)
 	: movit::FlatInput({movit::COLORSPACE_sRGB, movit::GAMMA_sRGB}, movit::FORMAT_RGBA_POSTMULTIPLIED_ALPHA,
-	                   GL_UNSIGNED_BYTE, 1280, 720)  // FIXME
+	                   GL_UNSIGNED_BYTE, 1280, 720),  // FIXME
+	  filename(filename),
+	  current_image(load_image(filename))
 {
-	const uint8_t *pixel_data = load_image(filename);
-	if (pixel_data == nullptr) {
+	if (current_image == nullptr) {
 		fprintf(stderr, "Couldn't load image, exiting.\n");
 		exit(1);
 	}
-	set_pixel_data(pixel_data);
+	set_pixel_data(current_image->pixels.get());
+}
+
+void ImageInput::set_gl_state(GLuint glsl_program_num, const string& prefix, unsigned *sampler_num)
+{
+	// See if the background thread has given us a new version of our image.
+	// Note: The old version might still be lying around in other ImageInputs
+	// (in fact, it's likely), but at least the total amount of memory used
+	// is bounded. Currently we don't even share textures between them,
+	// so there's a fair amount of OpenGL memory waste anyway (the cache
+	// is mostly there to save startup time, not RAM).
+	{
+		unique_lock<mutex> lock(all_images_lock);
+		if (all_images[filename] != current_image) {
+			current_image = all_images[filename];
+			set_pixel_data(current_image->pixels.get());
+		}
+	}
+	movit::FlatInput::set_gl_state(glsl_program_num, prefix, sampler_num);
+}
+
+shared_ptr<const ImageInput::Image> ImageInput::load_image(const string &filename)
+{
+	unique_lock<mutex> lock(all_images_lock);  // Held also during loading.
+	if (all_images.count(filename)) {
+		return all_images[filename];
+	}
+
+	all_images[filename] = load_image_raw(filename);
+	timespec first_modified = all_images[filename]->last_modified;
+	update_threads[filename] =
+		thread(bind(update_thread_func, filename, first_modified));
+
+	return all_images[filename];
 }
 
 // Some helpers to make RAII versions of FFmpeg objects.
@@ -63,11 +104,17 @@ av_frame_alloc_unique()
 
 }  // namespace
 
-const uint8_t *ImageInput::load_image(const string &filename)
+shared_ptr<const ImageInput::Image> ImageInput::load_image_raw(const string &filename)
 {
-	if (all_images.count(filename)) {
-		return all_images[filename].get();
+	// Note: Call before open, not after; otherwise, there's a race.
+	// (There is now, too, but it tips the correct way. We could use fstat()
+	// if we had the file descriptor.)
+	struct stat buf;
+	if (stat(filename.c_str(), &buf) != 0) {
+		fprintf(stderr, "%s: Error stat-ing file\n", filename.c_str());
+		return nullptr;
 	}
+	timespec last_modified = buf.st_mtim;
 
 	auto format_ctx = avformat_open_input_unique(filename.c_str(), nullptr, nullptr);
 	if (format_ctx == nullptr) {
@@ -153,8 +200,41 @@ const uint8_t *ImageInput::load_image(const string &filename)
 	unique_ptr<uint8_t[]> image_data(new uint8_t[len]);
 	av_image_copy_to_buffer(image_data.get(), len, pic_data, linesizes, AV_PIX_FMT_RGBA, frame->width, frame->height, 1);
 
-	all_images[filename] = move(image_data);
-	return all_images[filename].get();
+	shared_ptr<Image> image(new Image{move(image_data), last_modified});
+	return image;
 }
 
-map<string, unique_ptr<uint8_t[]>> ImageInput::all_images;
+// Fire up a thread to update the image every second.
+// We could do inotify, but this is good enough for now.
+// TODO: These don't really quit, ever. Should they?
+void ImageInput::update_thread_func(const std::string &filename, const timespec &first_modified)
+{
+	timespec last_modified = first_modified;
+	struct stat buf;
+	for ( ;; ) {
+		sleep(1);
+
+		if (stat(filename.c_str(), &buf) != 0) {
+			fprintf(stderr, "%s: Couldn't check for new version, leaving the old in place.\n", filename.c_str());
+			continue;
+		}
+		if (buf.st_mtim.tv_sec == last_modified.tv_sec &&
+		    buf.st_mtim.tv_nsec == last_modified.tv_nsec) {
+			// Not changed.
+			continue;
+		}
+		shared_ptr<const Image> image = load_image_raw(filename);
+		if (image == nullptr) {
+			fprintf(stderr, "Couldn't load image, leaving the old in place.\n");
+			continue;
+		}
+		fprintf(stderr, "Loaded new version of %s from disk.\n", filename.c_str());
+		unique_lock<mutex> lock(all_images_lock);
+		all_images[filename] = image;
+		last_modified = image->last_modified;
+	}
+}
+
+mutex ImageInput::all_images_lock;
+map<string, shared_ptr<const ImageInput::Image>> ImageInput::all_images;
+map<string, thread> ImageInput::update_threads;
