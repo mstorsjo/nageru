@@ -11,6 +11,7 @@
 #include <movit/padding_effect.h>
 #include <movit/resample_effect.h>
 #include <movit/resize_effect.h>
+#include <movit/multiply_effect.h>
 #include <movit/util.h>
 #include <movit/white_balance_effect.h>
 #include <movit/ycbcr.h>
@@ -135,6 +136,7 @@ Effect *get_effect(lua_State *L, int idx)
 	    luaL_testudata(L, idx, "IntegralPaddingEffect") ||
 	    luaL_testudata(L, idx, "OverlayEffect") ||
 	    luaL_testudata(L, idx, "ResizeEffect") ||
+	    luaL_testudata(L, idx, "MultiplyEffect") ||
 	    luaL_testudata(L, idx, "MixEffect") ||
 	    luaL_testudata(L, idx, "ImageInput")) {
 		return *(Effect **)lua_touserdata(L, idx);
@@ -323,6 +325,12 @@ int ResizeEffect_new(lua_State* L)
 {
 	assert(lua_gettop(L) == 0);
 	return wrap_lua_object_nonowned<ResizeEffect>(L, "ResizeEffect");
+}
+
+int MultiplyEffect_new(lua_State* L)
+{
+	assert(lua_gettop(L) == 0);
+	return wrap_lua_object_nonowned<MultiplyEffect>(L, "MultiplyEffect");
 }
 
 int MixEffect_new(lua_State* L)
@@ -525,6 +533,15 @@ const luaL_Reg ResizeEffect_funcs[] = {
 	{ NULL, NULL }
 };
 
+const luaL_Reg MultiplyEffect_funcs[] = {
+	{ "new", MultiplyEffect_new },
+	{ "set_float", Effect_set_float },
+	{ "set_int", Effect_set_int },
+	{ "set_vec3", Effect_set_vec3 },
+	{ "set_vec4", Effect_set_vec4 },
+	{ NULL, NULL }
+};
+
 const luaL_Reg MixEffect_funcs[] = {
 	{ "new", MixEffect_new },
 	{ "set_float", Effect_set_float },
@@ -692,6 +709,7 @@ Theme::Theme(const char *filename, ResourcePool *resource_pool, unsigned num_car
 	register_class("IntegralPaddingEffect", IntegralPaddingEffect_funcs);
 	register_class("OverlayEffect", OverlayEffect_funcs);
 	register_class("ResizeEffect", ResizeEffect_funcs);
+	register_class("MultiplyEffect", MultiplyEffect_funcs);
 	register_class("MixEffect", MixEffect_funcs);
 	register_class("InputStateInfo", InputStateInfo_funcs);
 
