@@ -152,7 +152,7 @@ shared_ptr<const ImageInput::Image> ImageInput::load_image_raw(const string &fil
 	unique_ptr<AVCodecContext, decltype(avcodec_close)*> codec_ctx_cleanup(
 		codec_ctx, avcodec_close);
 
-	// Read packets until we have a frame.
+	// Read packets until we have a frame or there are none left.
 	int frame_finished = 0;
 	auto frame = av_frame_alloc_unique();
 	do {
@@ -163,8 +163,7 @@ shared_ptr<const ImageInput::Image> ImageInput::load_image_raw(const string &fil
 		pkt.data = nullptr;
 		pkt.size = 0;
 		if (av_read_frame(format_ctx.get(), &pkt) < 0) {
-			fprintf(stderr, "%s: Cannot read frame\n", filename.c_str());
-			return nullptr;
+			break;
 		}
 		if (pkt.stream_index != stream_index) {
 			continue;
@@ -175,6 +174,21 @@ shared_ptr<const ImageInput::Image> ImageInput::load_image_raw(const string &fil
 			return nullptr;
 		}
 	} while (!frame_finished);
+
+	// See if there's a cached frame for us.
+	if (!frame_finished) {
+		AVPacket pkt;
+		pkt.data = nullptr;
+		pkt.size = 0;
+		if (avcodec_decode_video2(codec_ctx, frame.get(), &frame_finished, &pkt) < 0) {
+			fprintf(stderr, "%s: Cannot decode frame\n", filename.c_str());
+			return nullptr;
+		}
+	}
+	if (!frame_finished) {
+		fprintf(stderr, "%s: Decoder did not output frame.\n", filename.c_str());
+		return nullptr;
+	}
 
 	// TODO: Scale down if needed!
 	uint8_t *pic_data[4] = {nullptr};
