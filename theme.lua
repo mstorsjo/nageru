@@ -854,9 +854,9 @@ end
 function calc_fade_progress(t, transition_start, transition_end)
 	local tt = (t - transition_start) / (transition_end - transition_start)
 	if tt < 0.0 then
-		tt = 0.0
+		return 0.0
 	elseif tt > 1.0 then
-		tt = 1.0
+		return 1.0
 	end
 
 	-- Make the fade look maybe a tad more natural, by pumping it
