@@ -543,8 +543,10 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		check_error();
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
 		check_error();
-		glFlushMappedBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, video_frame.size);
-		check_error();
+		if (global_flags.flush_pbos) {
+			glFlushMappedBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, video_frame.size);
+			check_error();
+		}
 
 		glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr[field]);
 		check_error();

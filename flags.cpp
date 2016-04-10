@@ -17,6 +17,9 @@ void usage()
 	fprintf(stderr, "                                    ($DISPLAY spec or /dev/dri/render* path)\n");
 	fprintf(stderr, "      --http-uncompressed-video   send uncompressed NV12 video to HTTP clients\n");
 	fprintf(stderr, "      --flat-audio                start with most audio processing turned off\n");
+	fprintf(stderr, "      --no-flush-pbos             do not explicitly signal texture data uploads\n");
+	fprintf(stderr, "                                    (will give display corruption, but makes it\n");
+	fprintf(stderr, "                                    possible to run with apitrace in real time)\n");
 }
 
 void parse_flags(int argc, char * const argv[])
@@ -28,6 +31,7 @@ void parse_flags(int argc, char * const argv[])
 		{ "va-display", required_argument, 0, 1000 },
 		{ "http-uncompressed-video", no_argument, 0, 1001 },
 		{ "flat-audio", no_argument, 0, 1002 },
+		{ "no-flush-pbos", no_argument, 0, 1003 },
 		{ 0, 0, 0, 0 }
 	};
 	for ( ;; ) {
@@ -52,6 +56,9 @@ void parse_flags(int argc, char * const argv[])
 			break;
 		case 1002:
 			global_flags.flat_audio = true;
+			break;
+		case 1003:
+			global_flags.flush_pbos = false;
 			break;
 		case 'h':
 			usage();
