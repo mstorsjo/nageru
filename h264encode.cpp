@@ -196,7 +196,7 @@ public:
 	~H264EncoderImpl();
 	void add_audio(int64_t pts, vector<float> audio);
 	bool begin_frame(GLuint *y_tex, GLuint *cbcr_tex);
-	void end_frame(RefCountedGLsync fence, int64_t pts, const vector<RefCountedFrame> &input_frames);
+	RefCountedGLsync end_frame(int64_t pts, const vector<RefCountedFrame> &input_frames);
 	void shutdown();
 
 private:
@@ -1879,7 +1879,7 @@ void H264EncoderImpl::add_audio(int64_t pts, vector<float> audio)
 	frame_queue_nonempty.notify_all();
 }
 
-void H264EncoderImpl::end_frame(RefCountedGLsync fence, int64_t pts, const vector<RefCountedFrame> &input_frames)
+RefCountedGLsync H264EncoderImpl::end_frame(int64_t pts, const vector<RefCountedFrame> &input_frames)
 {
 	assert(!is_shutdown);
 
@@ -1909,9 +1909,10 @@ void H264EncoderImpl::end_frame(RefCountedGLsync fence, int64_t pts, const vecto
 
 		glMemoryBarrier(GL_TEXTURE_UPDATE_BARRIER_BIT | GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
 		check_error();
-		fence = RefCountedGLsync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
-		check_error();
 	}
+
+	RefCountedGLsync fence = RefCountedGLsync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
+	check_error();
 
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
@@ -1919,6 +1920,7 @@ void H264EncoderImpl::end_frame(RefCountedGLsync fence, int64_t pts, const vecto
 		++current_storage_frame;
 	}
 	frame_queue_nonempty.notify_all();
+	return fence;
 }
 
 void H264EncoderImpl::shutdown()
@@ -2147,9 +2149,9 @@ bool H264Encoder::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
 	return impl->begin_frame(y_tex, cbcr_tex);
 }
 
-void H264Encoder::end_frame(RefCountedGLsync fence, int64_t pts, const vector<RefCountedFrame> &input_frames)
+RefCountedGLsync H264Encoder::end_frame(int64_t pts, const vector<RefCountedFrame> &input_frames)
 {
-	impl->end_frame(fence, pts, input_frames);
+	return impl->end_frame(pts, input_frames);
 }
 
 void H264Encoder::shutdown()

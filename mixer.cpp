@@ -795,11 +795,8 @@ void Mixer::render_one_frame()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-	RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
-	check_error();
-
 	const int64_t av_delay = TIMEBASE / 10;  // Corresponds to the fixed delay in resampling_queue.h. TODO: Make less hard-coded.
-	h264_encoder->end_frame(fence, pts_int + av_delay, theme_main_chain.input_frames);
+	RefCountedGLsync fence = h264_encoder->end_frame(pts_int + av_delay, theme_main_chain.input_frames);
 
 	// The live frame just shows the RGBA texture we just rendered.
 	// It owns rgba_tex now.
