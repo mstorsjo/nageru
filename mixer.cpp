@@ -563,6 +563,8 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		RefCountedGLsync fence(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
 		check_error();
 		assert(fence.get() != nullptr);
+		glFlush();  // Make sure the main thread doesn't have to wait until we push out enough frames to make a new command buffer.
+		check_error();
 
 		if (field == 1) {
 			// Don't upload the second field as fast as we can; wait until

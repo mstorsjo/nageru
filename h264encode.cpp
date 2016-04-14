@@ -1913,6 +1913,8 @@ RefCountedGLsync H264EncoderImpl::end_frame(int64_t pts, const vector<RefCounted
 
 	RefCountedGLsync fence = RefCountedGLsync(GL_SYNC_GPU_COMMANDS_COMPLETE, /*flags=*/0);
 	check_error();
+	glFlush();  // Make the H.264 thread see the fence as soon as possible.
+	check_error();
 
 	{
 		unique_lock<mutex> lock(frame_queue_mutex);
