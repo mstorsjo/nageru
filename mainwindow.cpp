@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <signal.h>
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -30,6 +31,15 @@ using namespace std;
 using namespace std::placeholders;
 
 Q_DECLARE_METATYPE(std::vector<std::string>);
+
+namespace {
+
+void schedule_cut_signal(int ignored)
+{
+	global_mixer->schedule_cut();
+}
+
+}  // namespace
 
 MainWindow *global_mainwindow = nullptr;
 
@@ -135,6 +145,11 @@ void MainWindow::mixer_created(Mixer *mixer)
 	});
 	connect(ui->reset_meters_button, &QPushButton::clicked, this, &MainWindow::reset_meters_button_clicked);
 	mixer->set_audio_level_callback(bind(&MainWindow::audio_level_callback, this, _1, _2, _3, _4, _5, _6, _7, _8));
+
+	struct sigaction act;
+	act.sa_handler = schedule_cut_signal;
+	act.sa_flags = SA_RESTART;
+	sigaction(SIGHUP, &act, nullptr);
 }
 
 void MainWindow::mixer_shutting_down()
