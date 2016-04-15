@@ -543,18 +543,24 @@ void Mixer::bm_frame(unsigned card_index, uint16_t timecode,
 		check_error();
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
 		check_error();
+
+		size_t field_y_start = y_offset + video_format.width * field_start_line;
+		size_t field_cbcr_start = cbcr_offset + cbcr_width * field_start_line * sizeof(uint16_t);
+
 		if (global_flags.flush_pbos) {
-			glFlushMappedBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, video_frame.size);
+			glFlushMappedBufferRange(GL_PIXEL_UNPACK_BUFFER, field_y_start, video_format.width * video_format.height);
+			check_error();
+			glFlushMappedBufferRange(GL_PIXEL_UNPACK_BUFFER, field_cbcr_start, cbcr_width * video_format.height * sizeof(uint16_t));
 			check_error();
 		}
 
 		glBindTexture(GL_TEXTURE_2D, userdata->tex_cbcr[field]);
 		check_error();
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cbcr_width, video_format.height, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(cbcr_offset + cbcr_width * field_start_line * sizeof(uint16_t)));
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cbcr_width, video_format.height, GL_RG, GL_UNSIGNED_BYTE, BUFFER_OFFSET(field_cbcr_start));
 		check_error();
 		glBindTexture(GL_TEXTURE_2D, userdata->tex_y[field]);
 		check_error();
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, video_format.width, video_format.height, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(y_offset + video_format.width * field_start_line));
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, video_format.width, video_format.height, GL_RED, GL_UNSIGNED_BYTE, BUFFER_OFFSET(field_y_start));
 		check_error();
 		glBindTexture(GL_TEXTURE_2D, 0);
 		check_error();
