@@ -1,3 +1,17 @@
+Nageru 1.2.1, April 15th, 2016
+
+ - Images are now updated from disk about every second, so that it is possible
+   to update e.g. overlays during streaming, although somewhat slowly.
+
+ - Fix support for PNG images.
+
+ - You can now send SIGHUP to start a new cut instead of using the menu.
+
+ - Added a --help option.
+
+ - Various tweaks to OpenGL fence handling.
+
+
 Nageru 1.2.0, April 6th, 2016
 
  - Support for Blackmagic's PCI and Thunderbolt cards, using the official
