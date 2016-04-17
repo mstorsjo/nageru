@@ -1585,89 +1585,89 @@ int H264EncoderImpl::render_slice(int encoding_frame_num, int display_frame_num,
 
 void H264EncoderImpl::save_codeddata(storage_task task)
 {    
-    VACodedBufferSegment *buf_list = NULL;
-    VAStatus va_status;
+	VACodedBufferSegment *buf_list = NULL;
+	VAStatus va_status;
 
-    string data;
+	string data;
 
-    const int64_t global_delay = int64_t(ip_period - 1) * (TIMEBASE / MAX_FPS);  // So we never get negative dts.
+	const int64_t global_delay = int64_t(ip_period - 1) * (TIMEBASE / MAX_FPS);  // So we never get negative dts.
 
-    va_status = vaMapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf, (void **)(&buf_list));
-    CHECK_VASTATUS(va_status, "vaMapBuffer");
-    while (buf_list != NULL) {
-        data.append(reinterpret_cast<const char *>(buf_list->buf), buf_list->size);
-        buf_list = (VACodedBufferSegment *) buf_list->next;
-    }
-    vaUnmapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf);
+	va_status = vaMapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf, (void **)(&buf_list));
+	CHECK_VASTATUS(va_status, "vaMapBuffer");
+	while (buf_list != NULL) {
+		data.append(reinterpret_cast<const char *>(buf_list->buf), buf_list->size);
+		buf_list = (VACodedBufferSegment *) buf_list->next;
+	}
+	vaUnmapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf);
 
-    {
-        // Add video.
-        AVPacket pkt;
-        memset(&pkt, 0, sizeof(pkt));
-        pkt.buf = nullptr;
-        pkt.data = reinterpret_cast<uint8_t *>(&data[0]);
-        pkt.size = data.size();
-        pkt.stream_index = 0;
-        if (task.frame_type == FRAME_IDR) {
-            pkt.flags = AV_PKT_FLAG_KEY;
-        } else {
-            pkt.flags = 0;
-        }
-        //pkt.duration = 1;
-        httpd->add_packet(pkt, task.pts + global_delay, task.dts + global_delay,
-		global_flags.uncompressed_video_to_http ? HTTPD::DESTINATION_FILE_ONLY : HTTPD::DESTINATION_FILE_AND_HTTP);
-    }
-    // Encode and add all audio frames up to and including the pts of this video frame.
-    for ( ;; ) {
-        int64_t audio_pts;
-        vector<float> audio;
-        {
-             unique_lock<mutex> lock(frame_queue_mutex);
-             frame_queue_nonempty.wait(lock, [this]{ return storage_thread_should_quit || !pending_audio_frames.empty(); });
-             if (storage_thread_should_quit && pending_audio_frames.empty()) return;
-             auto it = pending_audio_frames.begin();
-             if (it->first > task.pts) break;
-             audio_pts = it->first;
-             audio = move(it->second);
-             pending_audio_frames.erase(it); 
-        }
+	{
+		// Add video.
+		AVPacket pkt;
+		memset(&pkt, 0, sizeof(pkt));
+		pkt.buf = nullptr;
+		pkt.data = reinterpret_cast<uint8_t *>(&data[0]);
+		pkt.size = data.size();
+		pkt.stream_index = 0;
+		if (task.frame_type == FRAME_IDR) {
+			pkt.flags = AV_PKT_FLAG_KEY;
+		} else {
+			pkt.flags = 0;
+		}
+		//pkt.duration = 1;
+		httpd->add_packet(pkt, task.pts + global_delay, task.dts + global_delay,
+				global_flags.uncompressed_video_to_http ? HTTPD::DESTINATION_FILE_ONLY : HTTPD::DESTINATION_FILE_AND_HTTP);
+	}
+	// Encode and add all audio frames up to and including the pts of this video frame.
+	for ( ;; ) {
+		int64_t audio_pts;
+		vector<float> audio;
+		{
+			unique_lock<mutex> lock(frame_queue_mutex);
+			frame_queue_nonempty.wait(lock, [this]{ return storage_thread_should_quit || !pending_audio_frames.empty(); });
+			if (storage_thread_should_quit && pending_audio_frames.empty()) return;
+			auto it = pending_audio_frames.begin();
+			if (it->first > task.pts) break;
+			audio_pts = it->first;
+			audio = move(it->second);
+			pending_audio_frames.erase(it); 
+		}
 
-        audio_frame->nb_samples = audio.size() / 2;
-        audio_frame->format = AV_SAMPLE_FMT_S32;
-        audio_frame->channel_layout = AV_CH_LAYOUT_STEREO;
+		audio_frame->nb_samples = audio.size() / 2;
+		audio_frame->format = AV_SAMPLE_FMT_S32;
+		audio_frame->channel_layout = AV_CH_LAYOUT_STEREO;
 
-        unique_ptr<int32_t[]> int_samples(new int32_t[audio.size()]);
-        int ret = avcodec_fill_audio_frame(audio_frame, 2, AV_SAMPLE_FMT_S32, (const uint8_t*)int_samples.get(), audio.size() * sizeof(int32_t), 1);
-        if (ret < 0) {
-            fprintf(stderr, "avcodec_fill_audio_frame() failed with %d\n", ret);
-            exit(1);
-        }
-        for (int i = 0; i < audio_frame->nb_samples * 2; ++i) {
-            if (audio[i] >= 1.0f) {
-                int_samples[i] = 2147483647;
-            } else if (audio[i] <= -1.0f) {
-                int_samples[i] = -2147483647;
-            } else {
-                int_samples[i] = lrintf(audio[i] * 2147483647.0f);
-            }
-        }
+		unique_ptr<int32_t[]> int_samples(new int32_t[audio.size()]);
+		int ret = avcodec_fill_audio_frame(audio_frame, 2, AV_SAMPLE_FMT_S32, (const uint8_t*)int_samples.get(), audio.size() * sizeof(int32_t), 1);
+		if (ret < 0) {
+			fprintf(stderr, "avcodec_fill_audio_frame() failed with %d\n", ret);
+			exit(1);
+		}
+		for (int i = 0; i < audio_frame->nb_samples * 2; ++i) {
+			if (audio[i] >= 1.0f) {
+				int_samples[i] = 2147483647;
+			} else if (audio[i] <= -1.0f) {
+				int_samples[i] = -2147483647;
+			} else {
+				int_samples[i] = lrintf(audio[i] * 2147483647.0f);
+			}
+		}
 
-        AVPacket pkt;
-        av_init_packet(&pkt);
-        pkt.data = nullptr;
-        pkt.size = 0;
-        int got_output;
-        avcodec_encode_audio2(context_audio, &pkt, audio_frame, &got_output);
-        if (got_output) {
-            pkt.stream_index = 1;
-            pkt.flags = AV_PKT_FLAG_KEY;
-            httpd->add_packet(pkt, audio_pts + global_delay, audio_pts + global_delay, HTTPD::DESTINATION_FILE_AND_HTTP);
-        }
-        // TODO: Delayed frames.
-        av_frame_unref(audio_frame);
-        av_free_packet(&pkt);
-        if (audio_pts == task.pts) break;
-    }
+		AVPacket pkt;
+		av_init_packet(&pkt);
+		pkt.data = nullptr;
+		pkt.size = 0;
+		int got_output;
+		avcodec_encode_audio2(context_audio, &pkt, audio_frame, &got_output);
+		if (got_output) {
+			pkt.stream_index = 1;
+			pkt.flags = AV_PKT_FLAG_KEY;
+			httpd->add_packet(pkt, audio_pts + global_delay, audio_pts + global_delay, HTTPD::DESTINATION_FILE_AND_HTTP);
+		}
+		// TODO: Delayed frames.
+		av_frame_unref(audio_frame);
+		av_free_packet(&pkt);
+		if (audio_pts == task.pts) break;
+	}
 }
 
 
