@@ -226,8 +226,13 @@ private:
 	                  int frame_type, int64_t pts, int64_t dts);
 	void storage_task_thread();
 	void encode_audio(const vector<float> &audio,
+	                  vector<float> *audio_queue,
 	                  int64_t audio_pts,
 	                  AVCodecContext *ctx);
+	void encode_audio_one_frame(const float *audio,
+	                            size_t num_samples,  // In each channel.
+				    int64_t audio_pts,
+				    AVCodecContext *ctx);
 	void storage_task_enqueue(storage_task task);
 	void save_codeddata(storage_task task);
 	int render_packedsequence();
@@ -275,6 +280,8 @@ private:
 	QSurface *surface;
 
 	AVCodecContext *context_audio;
+	vector<float> audio_queue;
+
 	AVFrame *audio_frame = nullptr;
 	HTTPD *httpd;
 	unique_ptr<FrameReorderer> reorderer;
@@ -1646,7 +1653,7 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 			pending_audio_frames.erase(it); 
 		}
 
-		encode_audio(audio, audio_pts, context_audio);
+		encode_audio(audio, &audio_queue, audio_pts, context_audio);
 
 		if (audio_pts == task.pts) break;
 	}
@@ -1654,10 +1661,38 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 
 void H264EncoderImpl::encode_audio(
 	const vector<float> &audio,
+	vector<float> *audio_queue,
 	int64_t audio_pts,
 	AVCodecContext *ctx)
 {
-	audio_frame->nb_samples = audio.size() / 2;
+	if (ctx->frame_size == 0) {
+		// No queueing needed.
+		assert(audio_queue->empty());
+		assert(audio.size() % 2 == 0);
+		encode_audio_one_frame(&audio[0], audio.size() / 2, audio_pts, ctx);
+		return;
+	}
+
+	audio_queue->insert(audio_queue->end(), audio.begin(), audio.end());
+	size_t sample_num;
+	for (sample_num = 0;
+	     sample_num + ctx->frame_size * 2 <= audio_queue->size();
+	     sample_num += ctx->frame_size * 2) {
+		encode_audio_one_frame(&(*audio_queue)[sample_num],
+		                       ctx->frame_size,
+		                       audio_pts,
+		                       ctx);
+	}
+	audio_queue->erase(audio_queue->begin(), audio_queue->begin() + sample_num);
+}
+
+void H264EncoderImpl::encode_audio_one_frame(
+	const float *audio,
+	size_t num_samples,
+	int64_t audio_pts,
+	AVCodecContext *ctx)
+{
+	audio_frame->nb_samples = num_samples;
 	audio_frame->channel_layout = AV_CH_LAYOUT_STEREO;
 
 	unique_ptr<float[]> planar_samples;
@@ -1665,21 +1700,21 @@ void H264EncoderImpl::encode_audio(
 
 	if (ctx->sample_fmt == AV_SAMPLE_FMT_FLTP) {
 		audio_frame->format = AV_SAMPLE_FMT_FLTP;
-		planar_samples.reset(new float[audio.size()]);
-		avcodec_fill_audio_frame(audio_frame, 2, AV_SAMPLE_FMT_FLTP, (const uint8_t*)planar_samples.get(), audio.size() * sizeof(float), 0);
-		for (int i = 0; i < audio_frame->nb_samples; ++i) {
+		planar_samples.reset(new float[num_samples * 2]);
+		avcodec_fill_audio_frame(audio_frame, 2, AV_SAMPLE_FMT_FLTP, (const uint8_t*)planar_samples.get(), num_samples * 2 * sizeof(float), 0);
+		for (size_t i = 0; i < num_samples; ++i) {
 			planar_samples[i] = audio[i * 2 + 0];
-			planar_samples[i + audio_frame->nb_samples] = audio[i * 2 + 1];
+			planar_samples[i + num_samples] = audio[i * 2 + 1];
 		}
 	} else {
 		assert(ctx->sample_fmt == AV_SAMPLE_FMT_S32);
-		int_samples.reset(new int32_t[audio.size()]);
-		int ret = avcodec_fill_audio_frame(audio_frame, 2, AV_SAMPLE_FMT_S32, (const uint8_t*)int_samples.get(), audio.size() * sizeof(int32_t), 1);
+		int_samples.reset(new int32_t[num_samples * 2]);
+		int ret = avcodec_fill_audio_frame(audio_frame, 2, AV_SAMPLE_FMT_S32, (const uint8_t*)int_samples.get(), num_samples * 2 * sizeof(int32_t), 1);
 		if (ret < 0) {
 			fprintf(stderr, "avcodec_fill_audio_frame() failed with %d\n", ret);
 			exit(1);
 		}
-		for (int i = 0; i < audio_frame->nb_samples * 2; ++i) {
+		for (size_t i = 0; i < num_samples * 2; ++i) {
 			if (audio[i] >= 1.0f) {
 				int_samples[i] = 2147483647;
 			} else if (audio[i] <= -1.0f) {
@@ -1695,7 +1730,7 @@ void H264EncoderImpl::encode_audio(
 	pkt.data = nullptr;
 	pkt.size = 0;
 	int got_output = 0;
-	avcodec_encode_audio2(context_audio, &pkt, audio_frame, &got_output);
+	avcodec_encode_audio2(ctx, &pkt, audio_frame, &got_output);
 	if (got_output) {
 		pkt.stream_index = 1;
 		pkt.flags = AV_PKT_FLAG_KEY;
