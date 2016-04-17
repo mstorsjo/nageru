@@ -1698,14 +1698,17 @@ void H264EncoderImpl::encode_audio(
 		return;
 	}
 
+	int64_t sample_offset = audio_queue->size();
+
 	audio_queue->insert(audio_queue->end(), audio.begin(), audio.end());
 	size_t sample_num;
 	for (sample_num = 0;
 	     sample_num + ctx->frame_size * 2 <= audio_queue->size();
 	     sample_num += ctx->frame_size * 2) {
+		int64_t adjusted_audio_pts = audio_pts + (int64_t(sample_num) - sample_offset) * TIMEBASE / (OUTPUT_FREQUENCY * 2);
 		encode_audio_one_frame(&(*audio_queue)[sample_num],
 		                       ctx->frame_size,
-		                       audio_pts,  // FIXME: Must be increased or decreased as needed.
+		                       adjusted_audio_pts,
 		                       ctx,
 		                       resampler,
 		                       destinations);
