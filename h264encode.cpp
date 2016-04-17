@@ -289,8 +289,8 @@ private:
 	AVCodecContext *context_audio_file;
 	AVCodecContext *context_audio_stream = nullptr;  // nullptr = don't code separate audio for stream.
 
-	AVAudioResampleContext *resampler_audio_file;
-	AVAudioResampleContext *resampler_audio_stream;
+	AVAudioResampleContext *resampler_audio_file = nullptr;
+	AVAudioResampleContext *resampler_audio_stream = nullptr;
 
 	vector<float> audio_queue_file;
 	vector<float> audio_queue_stream;
@@ -1851,7 +1851,6 @@ void init_audio_encoder(const string &codec_name, int bit_rate, AVCodecContext *
 
 	*ctx = context_audio;
 
-	// FIXME: These leak on close.
 	*resampler = avresample_alloc_context();
 	if (*resampler == nullptr) {
 		fprintf(stderr, "Allocating resampler failed.\n");
@@ -1929,8 +1928,10 @@ H264EncoderImpl::~H264EncoderImpl()
 {
 	shutdown();
 	av_frame_free(&audio_frame);
-
-	// TODO: Destroy context.
+	avresample_free(&resampler_audio_file);
+	avresample_free(&resampler_audio_stream);
+	avcodec_free_context(&context_audio_file);
+	avcodec_free_context(&context_audio_stream);
 }
 
 bool H264EncoderImpl::begin_frame(GLuint *y_tex, GLuint *cbcr_tex)
