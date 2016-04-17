@@ -70,7 +70,7 @@ void HTTPD::open_output_file(const string &filename)
 		exit(1);
 	}
 
-	file_mux.reset(new Mux(avctx, width, height, Mux::CODEC_H264));
+	file_mux.reset(new Mux(avctx, width, height, Mux::CODEC_H264, TIMEBASE));
 }
 
 void HTTPD::close_output_file()
@@ -94,7 +94,9 @@ int HTTPD::answer_to_connection(MHD_Connection *connection,
 {
 	AVOutputFormat *oformat = av_guess_format(global_flags.stream_mux_name.c_str(), nullptr, nullptr);
 	assert(oformat != nullptr);
-	HTTPD::Stream *stream = new HTTPD::Stream(oformat, width, height);
+
+	int time_base = global_flags.stream_coarse_timebase ? COARSE_TIMEBASE : TIMEBASE;
+	HTTPD::Stream *stream = new HTTPD::Stream(oformat, width, height, time_base);
 	{
 		unique_lock<mutex> lock(streams_mutex);
 		streams.insert(stream);
@@ -138,7 +140,7 @@ void HTTPD::request_completed(struct MHD_Connection *connection, void **con_cls,
 	}
 }
 
-HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec)
+HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec, int time_base)
 	: avctx(avctx)
 {
 	AVCodec *codec_video = avcodec_find_encoder((video_codec == CODEC_H264) ? AV_CODEC_ID_H264 : AV_CODEC_ID_RAWVIDEO);
@@ -147,7 +149,7 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec
 		fprintf(stderr, "avformat_new_stream() failed\n");
 		exit(1);
 	}
-	avstream_video->time_base = AVRational{1, TIMEBASE};
+	avstream_video->time_base = AVRational{1, time_base};
 	avstream_video->codec->codec_type = AVMEDIA_TYPE_VIDEO;
 	if (video_codec == CODEC_H264) {
 		avstream_video->codec->codec_id = AV_CODEC_ID_H264;
@@ -158,7 +160,7 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec
 	}
 	avstream_video->codec->width = width;
 	avstream_video->codec->height = height;
-	avstream_video->codec->time_base = AVRational{1, TIMEBASE};
+	avstream_video->codec->time_base = AVRational{1, time_base};
 	avstream_video->codec->ticks_per_frame = 1;  // or 2?
 
 	// Colorspace details. Closely correspond to settings in EffectChain_finalize,
@@ -181,13 +183,13 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec
 		fprintf(stderr, "avformat_new_stream() failed\n");
 		exit(1);
 	}
-	avstream_audio->time_base = AVRational{1, TIMEBASE};
+	avstream_audio->time_base = AVRational{1, time_base};
 	avstream_audio->codec->bit_rate = AUDIO_OUTPUT_BIT_RATE;
 	avstream_audio->codec->sample_rate = OUTPUT_FREQUENCY;
 	avstream_audio->codec->sample_fmt = AUDIO_OUTPUT_SAMPLE_FMT;
 	avstream_audio->codec->channels = 2;
 	avstream_audio->codec->channel_layout = AV_CH_LAYOUT_STEREO;
-	avstream_audio->codec->time_base = AVRational{1, TIMEBASE};
+	avstream_audio->codec->time_base = AVRational{1, time_base};
 	if (avctx->oformat->flags & AVFMT_GLOBALHEADER) {
 		avstream_audio->codec->flags = AV_CODEC_FLAG_GLOBAL_HEADER;
 	}
@@ -239,7 +241,7 @@ void HTTPD::Mux::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 	av_packet_unref(&pkt_copy);
 }
 
-HTTPD::Stream::Stream(AVOutputFormat *oformat, int width, int height)
+HTTPD::Stream::Stream(AVOutputFormat *oformat, int width, int height, int time_base)
 {
 	AVFormatContext *avctx = avformat_alloc_context();
 	avctx->oformat = oformat;
@@ -255,7 +257,7 @@ HTTPD::Stream::Stream(AVOutputFormat *oformat, int width, int height)
 
 	avctx->flags = AVFMT_FLAG_CUSTOM_IO;
 
-	mux.reset(new Mux(avctx, width, height, video_codec));
+	mux.reset(new Mux(avctx, width, height, video_codec, time_base));
 }
 
 ssize_t HTTPD::Stream::reader_callback_thunk(void *cls, uint64_t pos, char *buf, size_t max)

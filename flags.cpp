@@ -17,6 +17,8 @@ void usage()
 	fprintf(stderr, "                                    ($DISPLAY spec or /dev/dri/render* path)\n");
 	fprintf(stderr, "      --http-uncompressed-video   send uncompressed NV12 video to HTTP clients\n");
 	fprintf(stderr, "      --http-mux=NAME             mux to use for HTTP streams (default " DEFAULT_STREAM_MUX_NAME ")\n");
+	fprintf(stderr, "      --http-coarse-timebase      use less timebase for HTTP (recommended for muxers\n");
+	fprintf(stderr, "                                  that handle large pts poorly, like e.g. MP4)\n");
 	fprintf(stderr, "      --flat-audio                start with most audio processing turned off\n");
 	fprintf(stderr, "      --no-flush-pbos             do not explicitly signal texture data uploads\n");
 	fprintf(stderr, "                                    (will give display corruption, but makes it\n");
@@ -32,6 +34,7 @@ void parse_flags(int argc, char * const argv[])
 		{ "va-display", required_argument, 0, 1000 },
 		{ "http-uncompressed-video", no_argument, 0, 1001 },
 		{ "http-mux", required_argument, 0, 1004 },
+		{ "http-coarse-timebase", no_argument, 0, 1005 },
 		{ "flat-audio", no_argument, 0, 1002 },
 		{ "no-flush-pbos", no_argument, 0, 1003 },
 		{ 0, 0, 0, 0 }
@@ -58,6 +61,9 @@ void parse_flags(int argc, char * const argv[])
 			break;
 		case 1004:
 			global_flags.stream_mux_name = optarg;
+			break;
+		case 1005:
+			global_flags.stream_coarse_timebase = true;
 			break;
 		case 1002:
 			global_flags.flat_audio = true;

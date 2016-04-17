@@ -67,7 +67,7 @@ private:
 			CODEC_NV12,  // Uncompressed 4:2:0.
 		};
 
-		Mux(AVFormatContext *avctx, int width, int height, Codec video_codec);  // Takes ownership of avctx.
+		Mux(AVFormatContext *avctx, int width, int height, Codec video_codec, int time_base);  // Takes ownership of avctx.
 		~Mux();
 		void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts);
 
@@ -79,7 +79,7 @@ private:
 
 	class Stream {
 	public:
-		Stream(AVOutputFormat *oformat, int width, int height);
+		Stream(AVOutputFormat *oformat, int width, int height, int time_base);
 
 		static ssize_t reader_callback_thunk(void *cls, uint64_t pos, char *buf, size_t max);
 		ssize_t reader_callback(uint64_t pos, char *buf, size_t max);

@@ -14,4 +14,11 @@
 // going to 44100000; probably a bit excessive.
 #define TIMEBASE 60000
 
+// Some muxes, like MP4 (or at least avformat's implementation of it),
+// are not too fond of values above 2^31. At timebase 60000, that's only
+// about ten hours or so, so we define a coarser timebase that doesn't
+// get 59.94 precisely (so there will be a marginal amount of pts jitter),
+// but can do at least 50 and 60 precisely, and months of streaming.
+#define COARSE_TIMEBASE 300
+
 #endif  // !defined(_TIMEBASE_H)

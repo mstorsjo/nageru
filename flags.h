@@ -13,6 +13,7 @@ struct Flags {
 	bool flat_audio = false;
 	bool flush_pbos = true;
 	std::string stream_mux_name = DEFAULT_STREAM_MUX_NAME;
+	bool stream_coarse_timebase = false;
 };
 extern Flags global_flags;
 
