@@ -1750,12 +1750,12 @@ void H264EncoderImpl::encode_audio_one_frame(
 			dest->add_packet(pkt, audio_pts + global_delay(), audio_pts + global_delay());
 		}
 	}
+
+	av_freep(&audio_frame->data[0]);
+
 	// TODO: Delayed frames.
 	av_frame_unref(audio_frame);
 	av_free_packet(&pkt);
-
-	av_freep(&audio_frame->data[0]);
-	av_freep(&audio_frame->linesize[0]);
 }
 
 // this is weird. but it seems to put a new frame onto the queue
