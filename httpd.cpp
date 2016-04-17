@@ -177,7 +177,11 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec
 		avstream_video->codec->flags = AV_CODEC_FLAG_GLOBAL_HEADER;
 	}
 
-	AVCodec *codec_audio = avcodec_find_encoder(AUDIO_OUTPUT_CODEC);
+	AVCodec *codec_audio = avcodec_find_encoder_by_name(AUDIO_OUTPUT_CODEC_NAME);
+	if (codec_audio == nullptr) {
+		fprintf(stderr, "ERROR: Could not find codec '%s'\n", AUDIO_OUTPUT_CODEC_NAME);
+		exit(1);
+	}
 	avstream_audio = avformat_new_stream(avctx, codec_audio);
 	if (avstream_audio == nullptr) {
 		fprintf(stderr, "avformat_new_stream() failed\n");
@@ -186,7 +190,6 @@ HTTPD::Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec
 	avstream_audio->time_base = AVRational{1, time_base};
 	avstream_audio->codec->bit_rate = AUDIO_OUTPUT_BIT_RATE;
 	avstream_audio->codec->sample_rate = OUTPUT_FREQUENCY;
-	avstream_audio->codec->sample_fmt = AUDIO_OUTPUT_SAMPLE_FMT;
 	avstream_audio->codec->channels = 2;
 	avstream_audio->codec->channel_layout = AV_CH_LAYOUT_STEREO;
 	avstream_audio->codec->time_base = AVRational{1, time_base};

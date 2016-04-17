@@ -10,8 +10,7 @@
 // For deinterlacing. See also comments on InputState.
 #define FRAME_HISTORY_LENGTH 5
 
-#define AUDIO_OUTPUT_CODEC AV_CODEC_ID_PCM_S32LE
-#define AUDIO_OUTPUT_SAMPLE_FMT AV_SAMPLE_FMT_S32
+#define AUDIO_OUTPUT_CODEC_NAME "pcm_s32le"
 #define AUDIO_OUTPUT_BIT_RATE 0
 
 #define LOCAL_DUMP_PREFIX "record-"

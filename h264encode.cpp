@@ -212,12 +212,21 @@ private:
 		int64_t pts;
 	};
 
+	// So we never get negative dts.
+	int64_t global_delay() const {
+		return int64_t(ip_period - 1) * (TIMEBASE / MAX_FPS);
+	}
+
 	void encode_thread_func();
 	void encode_remaining_frames_as_p(int encoding_frame_num, int gop_start_display_frame_num, int64_t last_dts);
 	void add_packet_for_uncompressed_frame(int64_t pts, const uint8_t *data);
 	void encode_frame(PendingFrame frame, int encoding_frame_num, int display_frame_num, int gop_start_display_frame_num,
 	                  int frame_type, int64_t pts, int64_t dts);
 	void storage_task_thread();
+	void encode_audio(const vector<float> &audio,
+	                  int64_t audio_pts,
+	                  AVCodecContext *ctx,
+	                  HTTPD::PacketDestination destination);
 	void storage_task_enqueue(storage_task task);
 	void save_codeddata(storage_task task);
 	int render_packedsequence();
@@ -1590,8 +1599,6 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 
 	string data;
 
-	const int64_t global_delay = int64_t(ip_period - 1) * (TIMEBASE / MAX_FPS);  // So we never get negative dts.
-
 	va_status = vaMapBuffer(va_dpy, gl_surfaces[task.display_order % SURFACE_NUM].coded_buf, (void **)(&buf_list));
 	CHECK_VASTATUS(va_status, "vaMapBuffer");
 	while (buf_list != NULL) {
@@ -1614,7 +1621,7 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 			pkt.flags = 0;
 		}
 		//pkt.duration = 1;
-		httpd->add_packet(pkt, task.pts + global_delay, task.dts + global_delay,
+		httpd->add_packet(pkt, task.pts + global_delay(), task.dts + global_delay(),
 				global_flags.uncompressed_video_to_http ? HTTPD::DESTINATION_FILE_ONLY : HTTPD::DESTINATION_FILE_AND_HTTP);
 	}
 	// Encode and add all audio frames up to and including the pts of this video frame.
@@ -1632,11 +1639,35 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 			pending_audio_frames.erase(it); 
 		}
 
-		audio_frame->nb_samples = audio.size() / 2;
-		audio_frame->format = AV_SAMPLE_FMT_S32;
-		audio_frame->channel_layout = AV_CH_LAYOUT_STEREO;
+		encode_audio(audio, audio_pts, context_audio, HTTPD::DESTINATION_FILE_AND_HTTP);
 
-		unique_ptr<int32_t[]> int_samples(new int32_t[audio.size()]);
+		if (audio_pts == task.pts) break;
+	}
+}
+
+void H264EncoderImpl::encode_audio(
+	const vector<float> &audio,
+	int64_t audio_pts,
+	AVCodecContext *ctx,
+	HTTPD::PacketDestination destination)
+{
+	audio_frame->nb_samples = audio.size() / 2;
+	audio_frame->channel_layout = AV_CH_LAYOUT_STEREO;
+
+	unique_ptr<float[]> planar_samples;
+	unique_ptr<int32_t[]> int_samples;
+
+	if (ctx->sample_fmt == AV_SAMPLE_FMT_FLTP) {
+		audio_frame->format = AV_SAMPLE_FMT_FLTP;
+		planar_samples.reset(new float[audio.size()]);
+		avcodec_fill_audio_frame(audio_frame, 2, AV_SAMPLE_FMT_FLTP, (const uint8_t*)planar_samples.get(), audio.size() * sizeof(float), 0);
+		for (int i = 0; i < audio_frame->nb_samples; ++i) {
+			planar_samples[i] = audio[i * 2 + 0];
+			planar_samples[i + audio_frame->nb_samples] = audio[i * 2 + 1];
+		}
+	} else {
+		assert(ctx->sample_fmt == AV_SAMPLE_FMT_S32);
+		int_samples.reset(new int32_t[audio.size()]);
 		int ret = avcodec_fill_audio_frame(audio_frame, 2, AV_SAMPLE_FMT_S32, (const uint8_t*)int_samples.get(), audio.size() * sizeof(int32_t), 1);
 		if (ret < 0) {
 			fprintf(stderr, "avcodec_fill_audio_frame() failed with %d\n", ret);
@@ -1651,25 +1682,23 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 				int_samples[i] = lrintf(audio[i] * 2147483647.0f);
 			}
 		}
-
-		AVPacket pkt;
-		av_init_packet(&pkt);
-		pkt.data = nullptr;
-		pkt.size = 0;
-		int got_output;
-		avcodec_encode_audio2(context_audio, &pkt, audio_frame, &got_output);
-		if (got_output) {
-			pkt.stream_index = 1;
-			pkt.flags = AV_PKT_FLAG_KEY;
-			httpd->add_packet(pkt, audio_pts + global_delay, audio_pts + global_delay, HTTPD::DESTINATION_FILE_AND_HTTP);
-		}
-		// TODO: Delayed frames.
-		av_frame_unref(audio_frame);
-		av_free_packet(&pkt);
-		if (audio_pts == task.pts) break;
 	}
-}
 
+	AVPacket pkt;
+	av_init_packet(&pkt);
+	pkt.data = nullptr;
+	pkt.size = 0;
+	int got_output = 0;
+	avcodec_encode_audio2(context_audio, &pkt, audio_frame, &got_output);
+	if (got_output) {
+		pkt.stream_index = 1;
+		pkt.flags = AV_PKT_FLAG_KEY;
+		httpd->add_packet(pkt, audio_pts + global_delay(), audio_pts + global_delay(), destination);
+	}
+	// TODO: Delayed frames.
+	av_frame_unref(audio_frame);
+	av_free_packet(&pkt);
+}
 
 // this is weird. but it seems to put a new frame onto the queue
 void H264EncoderImpl::storage_task_enqueue(storage_task task)
@@ -1739,22 +1768,52 @@ int H264EncoderImpl::deinit_va()
     return 0;
 }
 
+namespace {
 
-H264EncoderImpl::H264EncoderImpl(QSurface *surface, const string &va_display, int width, int height, HTTPD *httpd)
-	: current_storage_frame(0), surface(surface), httpd(httpd)
+void init_audio_encoder(const string &codec_name, int bit_rate, AVCodecContext **ctx)
 {
-	AVCodec *codec_audio = avcodec_find_encoder(AUDIO_OUTPUT_CODEC);
-	context_audio = avcodec_alloc_context3(codec_audio);
-	context_audio->bit_rate = AUDIO_OUTPUT_BIT_RATE;
+	AVCodec *codec_audio = avcodec_find_encoder_by_name(codec_name.c_str());
+	if (codec_audio == nullptr) {
+		fprintf(stderr, "ERROR: Could not find codec '%s'\n", codec_name.c_str());
+		exit(1);
+	}
+
+	AVCodecContext *context_audio = avcodec_alloc_context3(codec_audio);
+	context_audio->bit_rate = bit_rate;
 	context_audio->sample_rate = OUTPUT_FREQUENCY;
-	context_audio->sample_fmt = AUDIO_OUTPUT_SAMPLE_FMT;
+
+	// Choose sample format; we currently only support these two
+	// (see encode_audio), so we're a bit picky.
+	const AVSampleFormat *ptr = codec_audio->sample_fmts;
+	for ( ; *ptr != -1; ++ptr) {
+		if (*ptr == AV_SAMPLE_FMT_FLTP || *ptr == AV_SAMPLE_FMT_S32) {
+			context_audio->sample_fmt = *ptr;
+			break;
+		}
+	}
+	if (*ptr == -1) {
+		fprintf(stderr, "ERROR: Audio codec does not support fltp or s32 sample formats\n");
+		exit(1);
+	}
+
 	context_audio->channels = 2;
 	context_audio->channel_layout = AV_CH_LAYOUT_STEREO;
 	context_audio->time_base = AVRational{1, TIMEBASE};
 	if (avcodec_open2(context_audio, codec_audio, NULL) < 0) {
-		fprintf(stderr, "Could not open codec\n");
+		fprintf(stderr, "Could not open codec '%s'\n", codec_name.c_str());
 		exit(1);
 	}
+
+	*ctx = context_audio;
+}
+
+}  // namespace
+
+H264EncoderImpl::H264EncoderImpl(QSurface *surface, const string &va_display, int width, int height, HTTPD *httpd)
+	: current_storage_frame(0), surface(surface), httpd(httpd)
+{
+	init_audio_encoder(AUDIO_OUTPUT_CODEC_NAME, AUDIO_OUTPUT_BIT_RATE, &context_audio);
+
 	audio_frame = av_frame_alloc();
 
 	frame_width = width;
@@ -2093,8 +2152,8 @@ void H264EncoderImpl::encode_frame(H264EncoderImpl::PendingFrame frame, int enco
 
 		if (global_flags.uncompressed_video_to_http) {
 			// Add uncompressed video. (Note that pts == dts here.)
-			const int64_t global_delay = int64_t(ip_period - 1) * (TIMEBASE / MAX_FPS);  // Needs to match audio.
-			pair<int64_t, const uint8_t *> output_frame = reorderer->reorder_frame(pts + global_delay, reinterpret_cast<uint8_t *>(surf->y_ptr));
+			// Delay needs to match audio.
+			pair<int64_t, const uint8_t *> output_frame = reorderer->reorder_frame(pts + global_delay(), reinterpret_cast<uint8_t *>(surf->y_ptr));
 			if (output_frame.second != nullptr) {
 				add_packet_for_uncompressed_frame(output_frame.first, output_frame.second);
 			}
