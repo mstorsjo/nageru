@@ -11,7 +11,7 @@
 #define FRAME_HISTORY_LENGTH 5
 
 #define AUDIO_OUTPUT_CODEC_NAME "pcm_s32le"
-#define AUDIO_OUTPUT_BIT_RATE 0
+#define DEFAULT_AUDIO_OUTPUT_BIT_RATE 0
 
 #define LOCAL_DUMP_PREFIX "record-"
 #define LOCAL_DUMP_SUFFIX ".nut"
@@ -29,5 +29,9 @@
 // but for nut, there's no flushing, so such a large mux buffer would cause
 // the output to be very uneven.
 #define MUX_BUFFER_SIZE 65536
+
+// In number of frames. Comes in addition to any internal queues in x264
+// (frame threading, lookahead, etc.).
+#define X264_QUEUE_LENGTH 50
 
 #endif  // !defined(_DEFS_H)

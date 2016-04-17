@@ -41,6 +41,7 @@ extern "C" {
 #include "flags.h"
 #include "httpd.h"
 #include "timebase.h"
+#include "x264encode.h"
 
 using namespace std;
 
@@ -290,6 +291,7 @@ private:
 	AVFrame *audio_frame = nullptr;
 	HTTPD *httpd;
 	unique_ptr<FrameReorderer> reorderer;
+	unique_ptr<X264Encoder> x264_encoder;  // nullptr if not using x264.
 
 	Display *x11_display = nullptr;
 
@@ -955,6 +957,9 @@ void H264EncoderImpl::enable_zerocopy_if_possible()
 {
 	if (global_flags.uncompressed_video_to_http) {
 		fprintf(stderr, "Disabling zerocopy H.264 encoding due to --uncompressed_video_to_http.\n");
+		use_zerocopy = false;
+	} else if (global_flags.x264_video_to_http) {
+		fprintf(stderr, "Disabling zerocopy H.264 encoding due to --x264_video_to_http.\n");
 		use_zerocopy = false;
 	} else {
 		use_zerocopy = true;
@@ -1639,7 +1644,8 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 		if (file_mux) {
 			file_mux->add_packet(pkt, task.pts + global_delay(), task.dts + global_delay());
 		}
-		if (!global_flags.uncompressed_video_to_http) {
+		if (!global_flags.uncompressed_video_to_http &&
+		    !global_flags.x264_video_to_http) {
 			httpd->add_packet(pkt, task.pts + global_delay(), task.dts + global_delay());
 		}
 	}
@@ -1884,8 +1890,12 @@ H264EncoderImpl::H264EncoderImpl(QSurface *surface, const string &va_display, in
 
 	//print_input();
 
-	if (global_flags.uncompressed_video_to_http) {
+	if (global_flags.uncompressed_video_to_http ||
+	    global_flags.x264_video_to_http) {
 		reorderer.reset(new FrameReorderer(ip_period - 1, frame_width, frame_height));
+	}
+	if (global_flags.x264_video_to_http) {
+		x264_encoder.reset(new X264Encoder(httpd));
 	}
 
 	init_va(va_display);
@@ -2161,11 +2171,17 @@ void H264EncoderImpl::encode_remaining_frames_as_p(int encoding_frame_num, int g
 		last_dts = dts;
 	}
 
-	if (global_flags.uncompressed_video_to_http) {
+	if (global_flags.uncompressed_video_to_http ||
+	    global_flags.x264_video_to_http) {
 		// Add frames left in reorderer.
 		while (!reorderer->empty()) {
 			pair<int64_t, const uint8_t *> output_frame = reorderer->get_first_frame();
-			add_packet_for_uncompressed_frame(output_frame.first, output_frame.second);
+			if (global_flags.uncompressed_video_to_http) {
+				add_packet_for_uncompressed_frame(output_frame.first, output_frame.second);
+			} else {
+				assert(global_flags.x264_video_to_http);
+				x264_encoder->add_frame(output_frame.first, output_frame.second);
+			}
 		}
 	}
 }
@@ -2234,12 +2250,18 @@ void H264EncoderImpl::encode_frame(H264EncoderImpl::PendingFrame frame, int enco
 		va_status = vaUnmapBuffer(va_dpy, surf->surface_image.buf);
 		CHECK_VASTATUS(va_status, "vaUnmapBuffer");
 
-		if (global_flags.uncompressed_video_to_http) {
+		if (global_flags.uncompressed_video_to_http ||
+		    global_flags.x264_video_to_http) {
 			// Add uncompressed video. (Note that pts == dts here.)
 			// Delay needs to match audio.
 			pair<int64_t, const uint8_t *> output_frame = reorderer->reorder_frame(pts + global_delay(), reinterpret_cast<uint8_t *>(surf->y_ptr));
 			if (output_frame.second != nullptr) {
-				add_packet_for_uncompressed_frame(output_frame.first, output_frame.second);
+				if (global_flags.uncompressed_video_to_http) {
+					add_packet_for_uncompressed_frame(output_frame.first, output_frame.second);
+				} else {
+					assert(global_flags.x264_video_to_http);
+					x264_encoder->add_frame(output_frame.first, output_frame.second);
+				}
 			}
 		}
 	}

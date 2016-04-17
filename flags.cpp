@@ -16,6 +16,7 @@ void usage()
 	fprintf(stderr, "  -v, --va-display=SPEC           VA-API device for H.264 encoding\n");
 	fprintf(stderr, "                                    ($DISPLAY spec or /dev/dri/render* path)\n");
 	fprintf(stderr, "      --http-uncompressed-video   send uncompressed NV12 video to HTTP clients\n");
+	fprintf(stderr, "      --http-x264-video           send x264-compressed video to HTTP clients\n");
 	fprintf(stderr, "      --http-mux=NAME             mux to use for HTTP streams (default " DEFAULT_STREAM_MUX_NAME ")\n");
 	fprintf(stderr, "      --http-audio-codec=NAME     audio codec to use for HTTP streams\n");
 	fprintf(stderr, "                                  (default is to use the same as for the recording)\n");
@@ -38,6 +39,7 @@ void parse_flags(int argc, char * const argv[])
 		{ "theme", required_argument, 0, 't' },
 		{ "va-display", required_argument, 0, 1000 },
 		{ "http-uncompressed-video", no_argument, 0, 1001 },
+		{ "http-x264-video", no_argument, 0, 1008 },
 		{ "http-mux", required_argument, 0, 1004 },
 		{ "http-coarse-timebase", no_argument, 0, 1005 },
 		{ "http-audio-codec", required_argument, 0, 1006 },
@@ -78,6 +80,9 @@ void parse_flags(int argc, char * const argv[])
 		case 1007:
 			global_flags.stream_audio_codec_bitrate = atoi(optarg) * 1000;
 			break;
+		case 1008:
+			global_flags.x264_video_to_http = true;
+			break;
 		case 1002:
 			global_flags.flat_audio = true;
 			break;
@@ -93,5 +98,11 @@ void parse_flags(int argc, char * const argv[])
 			usage();
 			exit(1);
 		}
+	}
+
+	if (global_flags.uncompressed_video_to_http &&
+	    global_flags.x264_video_to_http) {
+		fprintf(stderr, "ERROR: --http-uncompressed-video and --http-x264-video are mutually incompatible\n");
+		exit(1);
 	}
 }
