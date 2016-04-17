@@ -28,11 +28,11 @@ extern "C" {
 
 #include "mux.h"
 
-class HTTPD {
+class HTTPD : public PacketDestination {
 public:
 	HTTPD(int width, int height);
 	void start(int port);
-	void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts);
+	void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts) override;
 
 private:
 	static int answer_to_connection_thunk(void *cls, MHD_Connection *connection,
@@ -54,7 +54,7 @@ private:
 
 	class Stream {
 	public:
-		Stream(AVOutputFormat *oformat, int width, int height, int time_base);
+		Stream(AVOutputFormat *oformat, int width, int height, int time_base, int bit_rate);
 
 		static ssize_t reader_callback_thunk(void *cls, uint64_t pos, char *buf, size_t max);
 		ssize_t reader_callback(uint64_t pos, char *buf, size_t max);

@@ -67,8 +67,13 @@ int HTTPD::answer_to_connection(MHD_Connection *connection,
 	AVOutputFormat *oformat = av_guess_format(global_flags.stream_mux_name.c_str(), nullptr, nullptr);
 	assert(oformat != nullptr);
 
+	// TODO: This is an ugly place to have this logic.
+	const int bit_rate = global_flags.stream_audio_codec_name.empty() ?
+		DEFAULT_AUDIO_OUTPUT_BIT_RATE :
+		global_flags.stream_audio_codec_bitrate;
+
 	int time_base = global_flags.stream_coarse_timebase ? COARSE_TIMEBASE : TIMEBASE;
-	HTTPD::Stream *stream = new HTTPD::Stream(oformat, width, height, time_base);
+	HTTPD::Stream *stream = new HTTPD::Stream(oformat, width, height, time_base, bit_rate);
 	{
 		unique_lock<mutex> lock(streams_mutex);
 		streams.insert(stream);
@@ -112,7 +117,7 @@ void HTTPD::request_completed(struct MHD_Connection *connection, void **con_cls,
 	}
 }
 
-HTTPD::Stream::Stream(AVOutputFormat *oformat, int width, int height, int time_base)
+HTTPD::Stream::Stream(AVOutputFormat *oformat, int width, int height, int time_base, int bit_rate)
 {
 	AVFormatContext *avctx = avformat_alloc_context();
 	avctx->oformat = oformat;
@@ -128,7 +133,7 @@ HTTPD::Stream::Stream(AVOutputFormat *oformat, int width, int height, int time_b
 
 	avctx->flags = AVFMT_FLAG_CUSTOM_IO;
 
-	mux.reset(new Mux(avctx, width, height, video_codec, time_base));
+	mux.reset(new Mux(avctx, width, height, video_codec, time_base, bit_rate));
 }
 
 ssize_t HTTPD::Stream::reader_callback_thunk(void *cls, uint64_t pos, char *buf, size_t max)

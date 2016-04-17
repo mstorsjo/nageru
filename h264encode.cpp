@@ -228,11 +228,13 @@ private:
 	void encode_audio(const vector<float> &audio,
 	                  vector<float> *audio_queue,
 	                  int64_t audio_pts,
-	                  AVCodecContext *ctx);
+	                  AVCodecContext *ctx,
+			  const vector<PacketDestination *> &destinations);
 	void encode_audio_one_frame(const float *audio,
 	                            size_t num_samples,  // In each channel.
 				    int64_t audio_pts,
-				    AVCodecContext *ctx);
+				    AVCodecContext *ctx,
+				    const vector<PacketDestination *> &destinations);
 	void storage_task_enqueue(storage_task task);
 	void save_codeddata(storage_task task);
 	int render_packedsequence();
@@ -279,8 +281,11 @@ private:
 	map<int64_t, vector<float>> pending_audio_frames;  // under frame_queue_mutex
 	QSurface *surface;
 
-	AVCodecContext *context_audio;
-	vector<float> audio_queue;
+	AVCodecContext *context_audio_file;
+	AVCodecContext *context_audio_stream = nullptr;  // nullptr = don't code separate audio for stream.
+
+	vector<float> audio_queue_file;
+	vector<float> audio_queue_stream;
 
 	AVFrame *audio_frame = nullptr;
 	HTTPD *httpd;
@@ -1653,7 +1658,12 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 			pending_audio_frames.erase(it); 
 		}
 
-		encode_audio(audio, &audio_queue, audio_pts, context_audio);
+		if (context_audio_stream) {
+			encode_audio(audio, &audio_queue_file, audio_pts, context_audio_file, { file_mux.get() });
+			encode_audio(audio, &audio_queue_stream, audio_pts, context_audio_stream, { httpd });
+		} else {
+			encode_audio(audio, &audio_queue_file, audio_pts, context_audio_file, { httpd, file_mux.get() });
+		}
 
 		if (audio_pts == task.pts) break;
 	}
@@ -1663,13 +1673,14 @@ void H264EncoderImpl::encode_audio(
 	const vector<float> &audio,
 	vector<float> *audio_queue,
 	int64_t audio_pts,
-	AVCodecContext *ctx)
+	AVCodecContext *ctx,
+	const vector<PacketDestination *> &destinations)
 {
 	if (ctx->frame_size == 0) {
 		// No queueing needed.
 		assert(audio_queue->empty());
 		assert(audio.size() % 2 == 0);
-		encode_audio_one_frame(&audio[0], audio.size() / 2, audio_pts, ctx);
+		encode_audio_one_frame(&audio[0], audio.size() / 2, audio_pts, ctx, destinations);
 		return;
 	}
 
@@ -1681,7 +1692,8 @@ void H264EncoderImpl::encode_audio(
 		encode_audio_one_frame(&(*audio_queue)[sample_num],
 		                       ctx->frame_size,
 		                       audio_pts,
-		                       ctx);
+		                       ctx,
+		                       destinations);
 	}
 	audio_queue->erase(audio_queue->begin(), audio_queue->begin() + sample_num);
 }
@@ -1690,7 +1702,8 @@ void H264EncoderImpl::encode_audio_one_frame(
 	const float *audio,
 	size_t num_samples,
 	int64_t audio_pts,
-	AVCodecContext *ctx)
+	AVCodecContext *ctx,
+	const vector<PacketDestination *> &destinations)
 {
 	audio_frame->nb_samples = num_samples;
 	audio_frame->channel_layout = AV_CH_LAYOUT_STEREO;
@@ -1734,10 +1747,9 @@ void H264EncoderImpl::encode_audio_one_frame(
 	if (got_output) {
 		pkt.stream_index = 1;
 		pkt.flags = AV_PKT_FLAG_KEY;
-		if (file_mux) {
-			file_mux->add_packet(pkt, audio_pts + global_delay(), audio_pts + global_delay());
+		for (PacketDestination *dest : destinations) {
+			dest->add_packet(pkt, audio_pts + global_delay(), audio_pts + global_delay());
 		}
-		httpd->add_packet(pkt, audio_pts + global_delay(), audio_pts + global_delay());
 	}
 	// TODO: Delayed frames.
 	av_frame_unref(audio_frame);
@@ -1856,7 +1868,12 @@ void init_audio_encoder(const string &codec_name, int bit_rate, AVCodecContext *
 H264EncoderImpl::H264EncoderImpl(QSurface *surface, const string &va_display, int width, int height, HTTPD *httpd)
 	: current_storage_frame(0), surface(surface), httpd(httpd)
 {
-	init_audio_encoder(AUDIO_OUTPUT_CODEC_NAME, AUDIO_OUTPUT_BIT_RATE, &context_audio);
+	init_audio_encoder(AUDIO_OUTPUT_CODEC_NAME, DEFAULT_AUDIO_OUTPUT_BIT_RATE, &context_audio_file);
+
+	if (!global_flags.stream_audio_codec_name.empty()) {
+		init_audio_encoder(global_flags.stream_audio_codec_name,
+			global_flags.stream_audio_codec_bitrate, &context_audio_stream);
+	}
 
 	audio_frame = av_frame_alloc();
 
@@ -2071,7 +2088,7 @@ void H264EncoderImpl::open_output_file(const std::string &filename)
 		exit(1);
 	}
 
-	file_mux.reset(new Mux(avctx, frame_width, frame_height, Mux::CODEC_H264, TIMEBASE));
+	file_mux.reset(new Mux(avctx, frame_width, frame_height, Mux::CODEC_H264, TIMEBASE, DEFAULT_AUDIO_OUTPUT_BIT_RATE));
 }
 
 void H264EncoderImpl::close_output_file()

@@ -9,7 +9,7 @@
 
 using namespace std;
 
-Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec, int time_base)
+Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec, int time_base, int bit_rate)
 	: avctx(avctx)
 {
 	AVCodec *codec_video = avcodec_find_encoder((video_codec == CODEC_H264) ? AV_CODEC_ID_H264 : AV_CODEC_ID_RAWVIDEO);
@@ -57,7 +57,7 @@ Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec, int t
 		exit(1);
 	}
 	avstream_audio->time_base = AVRational{1, time_base};
-	avstream_audio->codec->bit_rate = AUDIO_OUTPUT_BIT_RATE;
+	avstream_audio->codec->bit_rate = bit_rate;
 	avstream_audio->codec->sample_rate = OUTPUT_FREQUENCY;
 	avstream_audio->codec->channels = 2;
 	avstream_audio->codec->channel_layout = AV_CH_LAYOUT_STEREO;
