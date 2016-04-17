@@ -133,7 +133,18 @@ HTTPD::Stream::Stream(AVOutputFormat *oformat, int width, int height, int time_b
 
 	avctx->flags = AVFMT_FLAG_CUSTOM_IO;
 
-	mux.reset(new Mux(avctx, width, height, video_codec, time_base, bit_rate));
+	// TODO: This is an ugly place to have this logic.
+	const string codec_name = global_flags.stream_audio_codec_name.empty() ?
+		AUDIO_OUTPUT_CODEC_NAME :
+		global_flags.stream_audio_codec_name;
+
+	AVCodec *codec_audio = avcodec_find_encoder_by_name(codec_name.c_str());
+	if (codec_audio == nullptr) {
+		fprintf(stderr, "ERROR: Could not find codec '%s'\n", codec_name.c_str());
+		exit(1);
+	}
+
+	mux.reset(new Mux(avctx, width, height, video_codec, codec_audio, time_base, bit_rate));
 }
 
 ssize_t HTTPD::Stream::reader_callback_thunk(void *cls, uint64_t pos, char *buf, size_t max)

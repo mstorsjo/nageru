@@ -9,7 +9,7 @@
 
 using namespace std;
 
-Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec, int time_base, int bit_rate)
+Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec, const AVCodec *codec_audio, int time_base, int bit_rate)
 	: avctx(avctx)
 {
 	AVCodec *codec_video = avcodec_find_encoder((video_codec == CODEC_H264) ? AV_CODEC_ID_H264 : AV_CODEC_ID_RAWVIDEO);
@@ -46,11 +46,6 @@ Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec, int t
 		avstream_video->codec->flags = AV_CODEC_FLAG_GLOBAL_HEADER;
 	}
 
-	AVCodec *codec_audio = avcodec_find_encoder_by_name(AUDIO_OUTPUT_CODEC_NAME);
-	if (codec_audio == nullptr) {
-		fprintf(stderr, "ERROR: Could not find codec '%s'\n", AUDIO_OUTPUT_CODEC_NAME);
-		exit(1);
-	}
 	avstream_audio = avformat_new_stream(avctx, codec_audio);
 	if (avstream_audio == nullptr) {
 		fprintf(stderr, "avformat_new_stream() failed\n");

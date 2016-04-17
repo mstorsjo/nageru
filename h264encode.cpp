@@ -10,10 +10,12 @@
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libavresample/avresample.h>
 #include <libavutil/channel_layout.h>
 #include <libavutil/frame.h>
 #include <libavutil/rational.h>
 #include <libavutil/samplefmt.h>
+#include <libavutil/opt.h>
 }
 #include <libdrm/drm_fourcc.h>
 #include <stdio.h>
@@ -230,11 +232,13 @@ private:
 	                  vector<float> *audio_queue,
 	                  int64_t audio_pts,
 	                  AVCodecContext *ctx,
+	                  AVAudioResampleContext *resampler,
 			  const vector<PacketDestination *> &destinations);
 	void encode_audio_one_frame(const float *audio,
 	                            size_t num_samples,  // In each channel.
 				    int64_t audio_pts,
 				    AVCodecContext *ctx,
+				    AVAudioResampleContext *resampler,
 				    const vector<PacketDestination *> &destinations);
 	void storage_task_enqueue(storage_task task);
 	void save_codeddata(storage_task task);
@@ -284,6 +288,9 @@ private:
 
 	AVCodecContext *context_audio_file;
 	AVCodecContext *context_audio_stream = nullptr;  // nullptr = don't code separate audio for stream.
+
+	AVAudioResampleContext *resampler_audio_file;
+	AVAudioResampleContext *resampler_audio_stream;
 
 	vector<float> audio_queue_file;
 	vector<float> audio_queue_stream;
@@ -1665,10 +1672,10 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 		}
 
 		if (context_audio_stream) {
-			encode_audio(audio, &audio_queue_file, audio_pts, context_audio_file, { file_mux.get() });
-			encode_audio(audio, &audio_queue_stream, audio_pts, context_audio_stream, { httpd });
+			encode_audio(audio, &audio_queue_file, audio_pts, context_audio_file, resampler_audio_file, { file_mux.get() });
+			encode_audio(audio, &audio_queue_stream, audio_pts, context_audio_stream, resampler_audio_stream, { httpd });
 		} else {
-			encode_audio(audio, &audio_queue_file, audio_pts, context_audio_file, { httpd, file_mux.get() });
+			encode_audio(audio, &audio_queue_file, audio_pts, context_audio_file, resampler_audio_file, { httpd, file_mux.get() });
 		}
 
 		if (audio_pts == task.pts) break;
@@ -1680,13 +1687,14 @@ void H264EncoderImpl::encode_audio(
 	vector<float> *audio_queue,
 	int64_t audio_pts,
 	AVCodecContext *ctx,
+	AVAudioResampleContext *resampler,
 	const vector<PacketDestination *> &destinations)
 {
 	if (ctx->frame_size == 0) {
 		// No queueing needed.
 		assert(audio_queue->empty());
 		assert(audio.size() % 2 == 0);
-		encode_audio_one_frame(&audio[0], audio.size() / 2, audio_pts, ctx, destinations);
+		encode_audio_one_frame(&audio[0], audio.size() / 2, audio_pts, ctx, resampler, destinations);
 		return;
 	}
 
@@ -1697,8 +1705,9 @@ void H264EncoderImpl::encode_audio(
 	     sample_num += ctx->frame_size * 2) {
 		encode_audio_one_frame(&(*audio_queue)[sample_num],
 		                       ctx->frame_size,
-		                       audio_pts,
+		                       audio_pts,  // FIXME: Must be increased or decreased as needed.
 		                       ctx,
+		                       resampler,
 		                       destinations);
 	}
 	audio_queue->erase(audio_queue->begin(), audio_queue->begin() + sample_num);
@@ -1709,39 +1718,23 @@ void H264EncoderImpl::encode_audio_one_frame(
 	size_t num_samples,
 	int64_t audio_pts,
 	AVCodecContext *ctx,
+	AVAudioResampleContext *resampler,
 	const vector<PacketDestination *> &destinations)
 {
 	audio_frame->nb_samples = num_samples;
 	audio_frame->channel_layout = AV_CH_LAYOUT_STEREO;
+	audio_frame->format = ctx->sample_fmt;
+	audio_frame->sample_rate = OUTPUT_FREQUENCY;
 
-	unique_ptr<float[]> planar_samples;
-	unique_ptr<int32_t[]> int_samples;
+	if (av_samples_alloc(audio_frame->data, nullptr, 2, num_samples, ctx->sample_fmt, 0) < 0) {
+		fprintf(stderr, "Could not allocate %ld samples.\n", num_samples);
+		exit(1);
+	}
 
-	if (ctx->sample_fmt == AV_SAMPLE_FMT_FLTP) {
-		audio_frame->format = AV_SAMPLE_FMT_FLTP;
-		planar_samples.reset(new float[num_samples * 2]);
-		avcodec_fill_audio_frame(audio_frame, 2, AV_SAMPLE_FMT_FLTP, (const uint8_t*)planar_samples.get(), num_samples * 2 * sizeof(float), 0);
-		for (size_t i = 0; i < num_samples; ++i) {
-			planar_samples[i] = audio[i * 2 + 0];
-			planar_samples[i + num_samples] = audio[i * 2 + 1];
-		}
-	} else {
-		assert(ctx->sample_fmt == AV_SAMPLE_FMT_S32);
-		int_samples.reset(new int32_t[num_samples * 2]);
-		int ret = avcodec_fill_audio_frame(audio_frame, 2, AV_SAMPLE_FMT_S32, (const uint8_t*)int_samples.get(), num_samples * 2 * sizeof(int32_t), 1);
-		if (ret < 0) {
-			fprintf(stderr, "avcodec_fill_audio_frame() failed with %d\n", ret);
-			exit(1);
-		}
-		for (size_t i = 0; i < num_samples * 2; ++i) {
-			if (audio[i] >= 1.0f) {
-				int_samples[i] = 2147483647;
-			} else if (audio[i] <= -1.0f) {
-				int_samples[i] = -2147483647;
-			} else {
-				int_samples[i] = lrintf(audio[i] * 2147483647.0f);
-			}
-		}
+	if (avresample_convert(resampler, audio_frame->data, 0, num_samples,
+	                       (uint8_t **)&audio, 0, num_samples) < 0) {
+		fprintf(stderr, "Audio conversion failed.\n");
+		exit(1);
 	}
 
 	AVPacket pkt;
@@ -1760,6 +1753,9 @@ void H264EncoderImpl::encode_audio_one_frame(
 	// TODO: Delayed frames.
 	av_frame_unref(audio_frame);
 	av_free_packet(&pkt);
+
+	av_freep(&audio_frame->data[0]);
+	av_freep(&audio_frame->linesize[0]);
 }
 
 // this is weird. but it seems to put a new frame onto the queue
@@ -1832,7 +1828,7 @@ int H264EncoderImpl::deinit_va()
 
 namespace {
 
-void init_audio_encoder(const string &codec_name, int bit_rate, AVCodecContext **ctx)
+void init_audio_encoder(const string &codec_name, int bit_rate, AVCodecContext **ctx, AVAudioResampleContext **resampler)
 {
 	AVCodec *codec_audio = avcodec_find_encoder_by_name(codec_name.c_str());
 	if (codec_audio == nullptr) {
@@ -1843,21 +1839,7 @@ void init_audio_encoder(const string &codec_name, int bit_rate, AVCodecContext *
 	AVCodecContext *context_audio = avcodec_alloc_context3(codec_audio);
 	context_audio->bit_rate = bit_rate;
 	context_audio->sample_rate = OUTPUT_FREQUENCY;
-
-	// Choose sample format; we currently only support these two
-	// (see encode_audio), so we're a bit picky.
-	const AVSampleFormat *ptr = codec_audio->sample_fmts;
-	for ( ; *ptr != -1; ++ptr) {
-		if (*ptr == AV_SAMPLE_FMT_FLTP || *ptr == AV_SAMPLE_FMT_S32) {
-			context_audio->sample_fmt = *ptr;
-			break;
-		}
-	}
-	if (*ptr == -1) {
-		fprintf(stderr, "ERROR: Audio codec does not support fltp or s32 sample formats\n");
-		exit(1);
-	}
-
+	context_audio->sample_fmt = codec_audio->sample_fmts[0];
 	context_audio->channels = 2;
 	context_audio->channel_layout = AV_CH_LAYOUT_STEREO;
 	context_audio->time_base = AVRational{1, TIMEBASE};
@@ -1867,6 +1849,25 @@ void init_audio_encoder(const string &codec_name, int bit_rate, AVCodecContext *
 	}
 
 	*ctx = context_audio;
+
+	// FIXME: These leak on close.
+	*resampler = avresample_alloc_context();
+	if (*resampler == nullptr) {
+		fprintf(stderr, "Allocating resampler failed.\n");
+		exit(1);
+	}
+
+	av_opt_set_int(*resampler, "in_channel_layout",  AV_CH_LAYOUT_STEREO,       0);
+	av_opt_set_int(*resampler, "out_channel_layout", AV_CH_LAYOUT_STEREO,       0);
+	av_opt_set_int(*resampler, "in_sample_rate",     OUTPUT_FREQUENCY,          0);
+	av_opt_set_int(*resampler, "out_sample_rate",    OUTPUT_FREQUENCY,          0);
+	av_opt_set_int(*resampler, "in_sample_fmt",      AV_SAMPLE_FMT_FLT,         0);
+	av_opt_set_int(*resampler, "out_sample_fmt",     context_audio->sample_fmt, 0);
+
+	if (avresample_open(*resampler) < 0) {
+		fprintf(stderr, "Could not open resample context.\n");
+		exit(1);
+	}
 }
 
 }  // namespace
@@ -1874,11 +1875,11 @@ void init_audio_encoder(const string &codec_name, int bit_rate, AVCodecContext *
 H264EncoderImpl::H264EncoderImpl(QSurface *surface, const string &va_display, int width, int height, HTTPD *httpd)
 	: current_storage_frame(0), surface(surface), httpd(httpd)
 {
-	init_audio_encoder(AUDIO_OUTPUT_CODEC_NAME, DEFAULT_AUDIO_OUTPUT_BIT_RATE, &context_audio_file);
+	init_audio_encoder(AUDIO_OUTPUT_CODEC_NAME, DEFAULT_AUDIO_OUTPUT_BIT_RATE, &context_audio_file, &resampler_audio_file);
 
 	if (!global_flags.stream_audio_codec_name.empty()) {
 		init_audio_encoder(global_flags.stream_audio_codec_name,
-			global_flags.stream_audio_codec_bitrate, &context_audio_stream);
+			global_flags.stream_audio_codec_bitrate, &context_audio_stream, &resampler_audio_stream);
 	}
 
 	audio_frame = av_frame_alloc();
@@ -2098,7 +2099,7 @@ void H264EncoderImpl::open_output_file(const std::string &filename)
 		exit(1);
 	}
 
-	file_mux.reset(new Mux(avctx, frame_width, frame_height, Mux::CODEC_H264, TIMEBASE, DEFAULT_AUDIO_OUTPUT_BIT_RATE));
+	file_mux.reset(new Mux(avctx, frame_width, frame_height, Mux::CODEC_H264, context_audio_file->codec, TIMEBASE, DEFAULT_AUDIO_OUTPUT_BIT_RATE));
 }
 
 void H264EncoderImpl::close_output_file()
