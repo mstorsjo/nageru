@@ -234,6 +234,7 @@ private:
 	int build_packed_slice_buffer(unsigned char **header_buffer);
 	int init_va(const string &va_display);
 	int deinit_va();
+	void enable_zerocopy_if_possible();
 	VADisplay va_open_display(const string &va_display);
 	void va_close_display(VADisplay va_dpy);
 	int setup_encode();
@@ -926,6 +927,16 @@ static const char *rc_to_string(int rc_mode)
     }
 }
 
+void H264EncoderImpl::enable_zerocopy_if_possible()
+{
+	if (global_flags.uncompressed_video_to_http) {
+		fprintf(stderr, "Disabling zerocopy H.264 encoding due to --uncompressed_video_to_http.\n");
+		use_zerocopy = false;
+	} else {
+		use_zerocopy = true;
+	}
+}
+
 VADisplay H264EncoderImpl::va_open_display(const string &va_display)
 {
 	if (va_display.empty()) {
@@ -934,11 +945,7 @@ VADisplay H264EncoderImpl::va_open_display(const string &va_display)
 			fprintf(stderr, "error: can't connect to X server!\n");
 			return NULL;
 		}
-		use_zerocopy = true;
-		if (global_flags.uncompressed_video_to_http) {
-			fprintf(stderr, "Disabling zerocopy H.264 encoding due to --uncompressed_video_to_http.\n");
-			use_zerocopy = false;
-		}
+		enable_zerocopy_if_possible();
 		return vaGetDisplay(x11_display);
 	} else if (va_display[0] != '/') {
 		x11_display = XOpenDisplay(va_display.c_str());
@@ -946,11 +953,7 @@ VADisplay H264EncoderImpl::va_open_display(const string &va_display)
 			fprintf(stderr, "error: can't connect to X server!\n");
 			return NULL;
 		}
-		use_zerocopy = true;
-		if (global_flags.uncompressed_video_to_http) {
-			fprintf(stderr, "Disabling zerocopy H.264 encoding due to --uncompressed_video_to_http.\n");
-			use_zerocopy = false;
-		}
+		enable_zerocopy_if_possible();
 		return vaGetDisplay(x11_display);
 	} else {
 		drm_fd = open(va_display.c_str(), O_RDWR);
