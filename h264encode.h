@@ -53,6 +53,10 @@ public:
 	RefCountedGLsync end_frame(int64_t pts, const std::vector<RefCountedFrame> &input_frames);
 	void shutdown();  // Blocking.
 
+	// You can only have one going at the same time.
+	void open_output_file(const std::string &filename);
+	void close_output_file();
+
 private:
 	std::unique_ptr<H264EncoderImpl> impl;
 };

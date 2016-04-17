@@ -198,6 +198,8 @@ public:
 	bool begin_frame(GLuint *y_tex, GLuint *cbcr_tex);
 	RefCountedGLsync end_frame(int64_t pts, const vector<RefCountedFrame> &input_frames);
 	void shutdown();
+	void open_output_file(const std::string &filename);
+	void close_output_file();
 
 private:
 	struct storage_task {
@@ -225,8 +227,7 @@ private:
 	void storage_task_thread();
 	void encode_audio(const vector<float> &audio,
 	                  int64_t audio_pts,
-	                  AVCodecContext *ctx,
-	                  HTTPD::PacketDestination destination);
+	                  AVCodecContext *ctx);
 	void storage_task_enqueue(storage_task task);
 	void save_codeddata(storage_task task);
 	int render_packedsequence();
@@ -335,6 +336,8 @@ private:
 	int frame_height;
 	int frame_width_mbaligned;
 	int frame_height_mbaligned;
+
+	unique_ptr<Mux> file_mux;  // To local disk.
 };
 
 // Supposedly vaRenderPicture() is supposed to destroy the buffer implicitly,
@@ -1621,8 +1624,12 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 			pkt.flags = 0;
 		}
 		//pkt.duration = 1;
-		httpd->add_packet(pkt, task.pts + global_delay(), task.dts + global_delay(),
-				global_flags.uncompressed_video_to_http ? HTTPD::DESTINATION_FILE_ONLY : HTTPD::DESTINATION_FILE_AND_HTTP);
+		if (file_mux) {
+			file_mux->add_packet(pkt, task.pts + global_delay(), task.dts + global_delay());
+		}
+		if (!global_flags.uncompressed_video_to_http) {
+			httpd->add_packet(pkt, task.pts + global_delay(), task.dts + global_delay());
+		}
 	}
 	// Encode and add all audio frames up to and including the pts of this video frame.
 	for ( ;; ) {
@@ -1639,7 +1646,7 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 			pending_audio_frames.erase(it); 
 		}
 
-		encode_audio(audio, audio_pts, context_audio, HTTPD::DESTINATION_FILE_AND_HTTP);
+		encode_audio(audio, audio_pts, context_audio);
 
 		if (audio_pts == task.pts) break;
 	}
@@ -1648,8 +1655,7 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 void H264EncoderImpl::encode_audio(
 	const vector<float> &audio,
 	int64_t audio_pts,
-	AVCodecContext *ctx,
-	HTTPD::PacketDestination destination)
+	AVCodecContext *ctx)
 {
 	audio_frame->nb_samples = audio.size() / 2;
 	audio_frame->channel_layout = AV_CH_LAYOUT_STEREO;
@@ -1693,7 +1699,10 @@ void H264EncoderImpl::encode_audio(
 	if (got_output) {
 		pkt.stream_index = 1;
 		pkt.flags = AV_PKT_FLAG_KEY;
-		httpd->add_packet(pkt, audio_pts + global_delay(), audio_pts + global_delay(), destination);
+		if (file_mux) {
+			file_mux->add_packet(pkt, audio_pts + global_delay(), audio_pts + global_delay());
+		}
+		httpd->add_packet(pkt, audio_pts + global_delay(), audio_pts + global_delay());
 	}
 	// TODO: Delayed frames.
 	av_frame_unref(audio_frame);
@@ -2012,6 +2021,29 @@ void H264EncoderImpl::shutdown()
 	is_shutdown = true;
 }
 
+void H264EncoderImpl::open_output_file(const std::string &filename)
+{
+	AVFormatContext *avctx = avformat_alloc_context();
+	avctx->oformat = av_guess_format(NULL, filename.c_str(), NULL);
+	assert(filename.size() < sizeof(avctx->filename) - 1);
+	strcpy(avctx->filename, filename.c_str());
+
+	string url = "file:" + filename;
+	int ret = avio_open2(&avctx->pb, url.c_str(), AVIO_FLAG_WRITE, &avctx->interrupt_callback, NULL);
+	if (ret < 0) {
+		char tmp[AV_ERROR_MAX_STRING_SIZE];
+		fprintf(stderr, "%s: avio_open2() failed: %s\n", filename.c_str(), av_make_error_string(tmp, sizeof(tmp), ret));
+		exit(1);
+	}
+
+	file_mux.reset(new Mux(avctx, frame_width, frame_height, Mux::CODEC_H264, TIMEBASE));
+}
+
+void H264EncoderImpl::close_output_file()
+{
+        file_mux.reset();
+}
+
 void H264EncoderImpl::encode_thread_func()
 {
 	int64_t last_dts = -1;
@@ -2095,7 +2127,7 @@ void H264EncoderImpl::add_packet_for_uncompressed_frame(int64_t pts, const uint8
 	pkt.size = frame_width * frame_height * 2;
 	pkt.stream_index = 0;
 	pkt.flags = AV_PKT_FLAG_KEY;
-	httpd->add_packet(pkt, pts, pts, HTTPD::DESTINATION_HTTP_ONLY);
+	httpd->add_packet(pkt, pts, pts);
 }
 
 namespace {
@@ -2223,4 +2255,12 @@ void H264Encoder::shutdown()
 	impl->shutdown();
 }
 
-// Real class.
+void H264Encoder::open_output_file(const std::string &filename)
+{
+	impl->open_output_file(filename);
+}
+
+void H264Encoder::close_output_file()
+{
+	impl->close_output_file();
+}

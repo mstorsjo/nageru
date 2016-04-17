@@ -42,40 +42,12 @@ void HTTPD::start(int port)
 	                 MHD_OPTION_END);
 }
 
-void HTTPD::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts, PacketDestination destination)
+void HTTPD::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 {
 	unique_lock<mutex> lock(streams_mutex);
-	if (destination != DESTINATION_FILE_ONLY) {
-		for (Stream *stream : streams) {
-			stream->add_packet(pkt, pts, dts);
-		}
+	for (Stream *stream : streams) {
+		stream->add_packet(pkt, pts, dts);
 	}
-	if (file_mux && destination != DESTINATION_HTTP_ONLY) {
-		file_mux->add_packet(pkt, pts, dts);
-	}
-}
-
-void HTTPD::open_output_file(const string &filename)
-{
-	AVFormatContext *avctx = avformat_alloc_context();
-	avctx->oformat = av_guess_format(NULL, filename.c_str(), NULL);
-	assert(filename.size() < sizeof(avctx->filename) - 1);
-	strcpy(avctx->filename, filename.c_str());
-
-	string url = "file:" + filename;
-	int ret = avio_open2(&avctx->pb, url.c_str(), AVIO_FLAG_WRITE, &avctx->interrupt_callback, NULL);
-	if (ret < 0) {
-		char tmp[AV_ERROR_MAX_STRING_SIZE];
-		fprintf(stderr, "%s: avio_open2() failed: %s\n", filename.c_str(), av_make_error_string(tmp, sizeof(tmp), ret));
-		exit(1);
-	}
-
-	file_mux.reset(new Mux(avctx, width, height, Mux::CODEC_H264, TIMEBASE));
-}
-
-void HTTPD::close_output_file()
-{
-	file_mux.reset();
 }
 
 int HTTPD::answer_to_connection_thunk(void *cls, MHD_Connection *connection,

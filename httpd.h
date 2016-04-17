@@ -1,8 +1,7 @@
 #ifndef _HTTPD_H
 #define _HTTPD_H
 
-// A class dealing with stream output, both to HTTP (thus the class name)
-// and to local output files. Since we generally have very few outputs
+// A class dealing with stream output to HTTP. Since we generally have very few outputs
 // (end clients are not meant to connect directly to our stream; it should be
 // transcoded by something else and then sent to a reflector), we don't need to
 // care a lot about performance. Thus, we solve this by the simplest possible
@@ -31,19 +30,9 @@ extern "C" {
 
 class HTTPD {
 public:
-	enum PacketDestination {
-		DESTINATION_FILE_ONLY,
-		DESTINATION_HTTP_ONLY,
-		DESTINATION_FILE_AND_HTTP
-	};
-
 	HTTPD(int width, int height);
 	void start(int port);
-	void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts, PacketDestination destination);
-
-	// You can only have one going at the same time.
-	void open_output_file(const std::string &filename);
-	void close_output_file();
+	void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts);
 
 private:
 	static int answer_to_connection_thunk(void *cls, MHD_Connection *connection,
@@ -88,7 +77,6 @@ private:
 	std::set<Stream *> streams;  // Not owned.
 
 	int width, height;
-	std::unique_ptr<Mux> file_mux;  // To local disk.
 };
 
 #endif  // !defined(_HTTPD_H)

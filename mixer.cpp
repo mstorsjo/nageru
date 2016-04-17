@@ -148,7 +148,6 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	  limiter(OUTPUT_FREQUENCY),
 	  compressor(OUTPUT_FREQUENCY)
 {
-	httpd.open_output_file(generate_local_dump_filename(/*frame=*/0).c_str());
 	httpd.start(9095);
 
 	CHECK(init_movit(MOVIT_SHADER_DIR, MOVIT_DEBUG_OFF));
@@ -178,6 +177,7 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	display_chain->finalize();
 
 	h264_encoder.reset(new H264Encoder(h264_encoder_surface, global_flags.va_display, WIDTH, HEIGHT, &httpd));
+	h264_encoder->open_output_file(generate_local_dump_filename(/*frame=*/0).c_str());
 
 	// First try initializing the PCI devices, then USB, until we have the desired number of cards.
 	unsigned num_pci_devices = 0, num_usb_devices = 0;
@@ -692,10 +692,10 @@ void Mixer::thread_func()
 		if (should_cut.exchange(false)) {  // Test and clear.
 			string filename = generate_local_dump_filename(frame);
 			printf("Starting new recording: %s\n", filename.c_str());
+			h264_encoder->close_output_file();
 			h264_encoder->shutdown();
-			httpd.close_output_file();
-			httpd.open_output_file(filename.c_str());
 			h264_encoder.reset(new H264Encoder(h264_encoder_surface, global_flags.va_display, WIDTH, HEIGHT, &httpd));
+			h264_encoder->open_output_file(filename.c_str());
 		}
 
 #if 0
