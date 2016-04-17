@@ -1843,6 +1843,7 @@ void init_audio_encoder(const string &codec_name, int bit_rate, AVCodecContext *
 	context_audio->channels = 2;
 	context_audio->channel_layout = AV_CH_LAYOUT_STEREO;
 	context_audio->time_base = AVRational{1, TIMEBASE};
+	context_audio->flags |= CODEC_FLAG_GLOBAL_HEADER;
 	if (avcodec_open2(context_audio, codec_audio, NULL) < 0) {
 		fprintf(stderr, "Could not open codec '%s'\n", codec_name.c_str());
 		exit(1);
