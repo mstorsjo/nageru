@@ -154,8 +154,6 @@ void X264Encoder::encode_frame(X264Encoder::QueuedFrame qf)
 		ptr += nal[i].i_payload;
 	}
 
-	printf("Got frame, keyframe = %d\n", pic.b_keyframe);
-
 	AVPacket pkt;
 	memset(&pkt, 0, sizeof(pkt));
 	pkt.buf = nullptr;
