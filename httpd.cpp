@@ -92,7 +92,7 @@ int HTTPD::answer_to_connection(MHD_Connection *connection,
 				const char *version, const char *upload_data,
 				size_t *upload_data_size, void **con_cls)
 {
-	AVOutputFormat *oformat = av_guess_format(STREAM_MUX_NAME, nullptr, nullptr);
+	AVOutputFormat *oformat = av_guess_format(global_flags.stream_mux_name.c_str(), nullptr, nullptr);
 	assert(oformat != nullptr);
 	HTTPD::Stream *stream = new HTTPD::Stream(oformat, width, height);
 	{

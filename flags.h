@@ -3,6 +3,8 @@
 
 #include <string>
 
+#include "defs.h"
+
 struct Flags {
 	int num_cards = 2;
 	std::string va_display;
@@ -10,6 +12,7 @@ struct Flags {
 	std::string theme_filename = "theme.lua";
 	bool flat_audio = false;
 	bool flush_pbos = true;
+	std::string stream_mux_name = DEFAULT_STREAM_MUX_NAME;
 };
 extern Flags global_flags;
 
