@@ -8,7 +8,7 @@ OBJS=glwidget.o main.o mainwindow.o vumeter.o lrameter.o vu_common.o correlation
 OBJS += glwidget.moc.o mainwindow.moc.o vumeter.moc.o lrameter.moc.o correlation_meter.moc.o aboutdialog.moc.o
 
 # Mixer objects
-OBJS += h264encode.o mixer.o bmusb/bmusb.o pbo_frame_allocator.o context.o ref_counted_frame.o theme.o resampling_queue.o httpd.o ebu_r128_proc.o flags.o image_input.o stereocompressor.o filter.o alsa_output.o correlation_measurer.o
+OBJS += h264encode.o mixer.o bmusb/bmusb.o pbo_frame_allocator.o context.o ref_counted_frame.o theme.o resampling_queue.o httpd.o mux.o ebu_r128_proc.o flags.o image_input.o stereocompressor.o filter.o alsa_output.o correlation_measurer.o
 
 # DeckLink
 OBJS += decklink_capture.o decklink/DeckLinkAPIDispatch.o

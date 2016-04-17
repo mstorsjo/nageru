@@ -27,6 +27,8 @@ extern "C" {
 #include <libavformat/avio.h>
 }
 
+#include "mux.h"
+
 class HTTPD {
 public:
 	enum PacketDestination {
@@ -60,22 +62,6 @@ private:
 
 	void request_completed(struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe);
 
-	class Mux {
-	public:
-		enum Codec {
-			CODEC_H264,
-			CODEC_NV12,  // Uncompressed 4:2:0.
-		};
-
-		Mux(AVFormatContext *avctx, int width, int height, Codec video_codec, int time_base);  // Takes ownership of avctx.
-		~Mux();
-		void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts);
-
-	private:
-		bool seen_keyframe = false;
-		AVFormatContext *avctx;
-		AVStream *avstream_video, *avstream_audio;
-	};
 
 	class Stream {
 	public:
