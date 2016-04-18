@@ -1,5 +1,6 @@
 #include <assert.h>
 
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -86,7 +87,10 @@ Mux::~Mux()
 void Mux::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 {
 	AVPacket pkt_copy;
-	av_copy_packet(&pkt_copy, &pkt);
+	if (av_copy_packet(&pkt_copy, &pkt) < 0) {
+		fprintf(stderr, "av_copy_packet() failed\n");
+		exit(1);
+	}
 	if (pkt.stream_index == 0) {
 		pkt_copy.pts = av_rescale_q(pts, AVRational{1, TIMEBASE}, avstream_video->time_base);
 		pkt_copy.dts = av_rescale_q(dts, AVRational{1, TIMEBASE}, avstream_video->time_base);
@@ -106,9 +110,12 @@ void Mux::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 		}
 	}
 
-	if (av_interleaved_write_frame(avctx, &pkt_copy) < 0) {
-		fprintf(stderr, "av_interleaved_write_frame() failed\n");
-		exit(1);
+	{
+		lock_guard<mutex> lock(ctx_mu);
+		if (av_interleaved_write_frame(avctx, &pkt_copy) < 0) {
+			fprintf(stderr, "av_interleaved_write_frame() failed\n");
+			exit(1);
+		}
 	}
 
 	av_packet_unref(&pkt_copy);

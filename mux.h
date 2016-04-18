@@ -9,6 +9,8 @@ extern "C" {
 #include <libavformat/avio.h>
 }
 
+#include <mutex>
+
 class KeyFrameSignalReceiver {
 public:
 	// Needs to automatically turn the flag off again after actually receiving data.
@@ -28,7 +30,8 @@ public:
 	void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts);
 
 private:
-	AVFormatContext *avctx;
+	std::mutex ctx_mu;
+	AVFormatContext *avctx;  // Protected by <ctx_mu>.
 	AVStream *avstream_video, *avstream_audio;
 	KeyFrameSignalReceiver *keyframe_signal_receiver;
 };
