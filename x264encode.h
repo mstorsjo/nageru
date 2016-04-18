@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 
+#include <atomic>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -33,15 +34,14 @@ class Mux;
 class X264Encoder {
 public:
 	X264Encoder(Mux *httpd);  // Does not take ownership.
+
+	// Called after the last frame. Will block; once this returns,
+	// the last data is flushed.
 	~X264Encoder();
 
 	// <data> is taken to be raw NV12 data of WIDTHxHEIGHT resolution.
 	// Does not block.
 	void add_frame(int64_t pts, const uint8_t *data);
-
-	// Called after the last frame. Will block; once this returns,
-	// the last data is flushed.
-	void end_encoding();
 
 private:
 	struct QueuedFrame {
@@ -60,6 +60,7 @@ private:
 	Mux *mux = nullptr;
 
 	std::thread encoder_thread;
+	std::atomic<bool> should_quit{false};
 	x264_t *x264;
 
 	// Protects everything below it.

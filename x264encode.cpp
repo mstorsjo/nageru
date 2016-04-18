@@ -25,7 +25,8 @@ X264Encoder::X264Encoder(Mux *mux)
 
 X264Encoder::~X264Encoder()
 {
-	// TODO: close x264
+	should_quit = true;
+	encoder_thread.join();
 }
 
 void X264Encoder::add_frame(int64_t pts, const uint8_t *data)
@@ -53,11 +54,6 @@ void X264Encoder::add_frame(int64_t pts, const uint8_t *data)
 	}
 }
 	
-void X264Encoder::end_encoding()
-{
-	// TODO
-}
-
 void X264Encoder::init_x264()
 {
 	x264_param_t param;
@@ -102,15 +98,24 @@ void X264Encoder::encoder_thread_func()
 	nice(5);  // Note that x264 further nices some of its threads.
 	init_x264();
 
-	for ( ;; ) {
+	bool frames_left;
+
+	do {
 		QueuedFrame qf;
 
 		// Wait for a queued frame, then dequeue it.
 		{
 			unique_lock<mutex> lock(mu);
-			queued_frames_nonempty.wait(lock, [this]() { return !queued_frames.empty(); });
-			qf = queued_frames.front();
-			queued_frames.pop();
+			queued_frames_nonempty.wait(lock, [this]() { return !queued_frames.empty() || should_quit; });
+			if (!queued_frames.empty()) {
+				qf = queued_frames.front();
+				queued_frames.pop();
+			} else {
+				qf.pts = -1;
+				qf.data = nullptr;
+			}
+
+			frames_left = !queued_frames.empty();
 		}
 
 		encode_frame(qf);
@@ -119,27 +124,35 @@ void X264Encoder::encoder_thread_func()
 			lock_guard<mutex> lock(mu);
 			free_frames.push(qf.data);
 		}
-	}
+
+		// We should quit only if the should_quit flag is set _and_ we have nothing
+		// in either queue.
+	} while (!should_quit || frames_left || x264_encoder_delayed_frames(x264) > 0);
+
+	x264_encoder_close(x264);
 }
 
 void X264Encoder::encode_frame(X264Encoder::QueuedFrame qf)
 {
-	x264_picture_t pic;
 	x264_nal_t *nal = nullptr;
 	int num_nal = 0;
+	x264_picture_t pic;
 
-	x264_picture_init(&pic);
+	if (qf.data) {
+		x264_picture_init(&pic);
 
-	// TODO: Delayed frames.
-	pic.i_pts = qf.pts;
-	pic.img.i_csp = X264_CSP_NV12;
-	pic.img.i_plane = 2;
-	pic.img.plane[0] = qf.data;
-	pic.img.i_stride[0] = WIDTH;
-	pic.img.plane[1] = qf.data + WIDTH * HEIGHT;
-	pic.img.i_stride[1] = WIDTH / 2 * sizeof(uint16_t);
+		pic.i_pts = qf.pts;
+		pic.img.i_csp = X264_CSP_NV12;
+		pic.img.i_plane = 2;
+		pic.img.plane[0] = qf.data;
+		pic.img.i_stride[0] = WIDTH;
+		pic.img.plane[1] = qf.data + WIDTH * HEIGHT;
+		pic.img.i_stride[1] = WIDTH / 2 * sizeof(uint16_t);
 
-	x264_encoder_encode(x264, &nal, &num_nal, &pic, &pic);
+		x264_encoder_encode(x264, &nal, &num_nal, &pic, &pic);
+	} else {
+		x264_encoder_encode(x264, &nal, &num_nal, nullptr, &pic);
+	}
 
 	// We really need one AVPacket for the entire frame, it seems,
 	// so combine it all.
