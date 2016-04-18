@@ -17,6 +17,8 @@ void usage()
 	fprintf(stderr, "                                    ($DISPLAY spec or /dev/dri/render* path)\n");
 	fprintf(stderr, "      --http-uncompressed-video   send uncompressed NV12 video to HTTP clients\n");
 	fprintf(stderr, "      --http-x264-video           send x264-compressed video to HTTP clients\n");
+	fprintf(stderr, "      --x264-preset               x264 quality preset (default " X264_DEFAULT_PRESET ")\n");
+	fprintf(stderr, "      --x264-tune                 x264 tuning (default " X264_DEFAULT_TUNE ", can be blank)\n");
 	fprintf(stderr, "      --http-mux=NAME             mux to use for HTTP streams (default " DEFAULT_STREAM_MUX_NAME ")\n");
 	fprintf(stderr, "      --http-audio-codec=NAME     audio codec to use for HTTP streams\n");
 	fprintf(stderr, "                                  (default is to use the same as for the recording)\n");
@@ -40,6 +42,8 @@ void parse_flags(int argc, char * const argv[])
 		{ "va-display", required_argument, 0, 1000 },
 		{ "http-uncompressed-video", no_argument, 0, 1001 },
 		{ "http-x264-video", no_argument, 0, 1008 },
+		{ "x264-preset", required_argument, 0, 1009 },
+		{ "x264-tune", required_argument, 0, 1010 },
 		{ "http-mux", required_argument, 0, 1004 },
 		{ "http-coarse-timebase", no_argument, 0, 1005 },
 		{ "http-audio-codec", required_argument, 0, 1006 },
@@ -82,6 +86,12 @@ void parse_flags(int argc, char * const argv[])
 			break;
 		case 1008:
 			global_flags.x264_video_to_http = true;
+			break;
+		case 1009:
+			global_flags.x264_preset = optarg;
+			break;
+		case 1010:
+			global_flags.x264_tune = optarg;
 			break;
 		case 1002:
 			global_flags.flat_audio = true;

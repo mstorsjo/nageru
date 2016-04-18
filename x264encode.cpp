@@ -2,6 +2,7 @@
 #include <unistd.h>
 
 #include "defs.h"
+#include "flags.h"
 #include "mux.h"
 #include "timebase.h"
 #include "x264encode.h"
@@ -60,7 +61,7 @@ void X264Encoder::end_encoding()
 void X264Encoder::init_x264()
 {
 	x264_param_t param;
-	x264_param_default_preset(&param, "ultrafast", "film");  // TODO: flags
+	x264_param_default_preset(&param, global_flags.x264_preset.c_str(), global_flags.x264_tune.c_str());
 
 	param.i_width = WIDTH;
 	param.i_height = HEIGHT;

@@ -28,10 +28,13 @@
 // For mov, you want this at 10MB or so (for the reason mentioned above),
 // but for nut, there's no flushing, so such a large mux buffer would cause
 // the output to be very uneven.
-#define MUX_BUFFER_SIZE 65536
+#define MUX_BUFFER_SIZE 10485760
 
 // In number of frames. Comes in addition to any internal queues in x264
 // (frame threading, lookahead, etc.).
 #define X264_QUEUE_LENGTH 50
+
+#define X264_DEFAULT_PRESET "ultrafast"
+#define X264_DEFAULT_TUNE "film"
 
 #endif  // !defined(_DEFS_H)

@@ -17,6 +17,8 @@ struct Flags {
 	bool stream_coarse_timebase = false;
 	std::string stream_audio_codec_name;  // Blank = use the same as for the recording.
 	int stream_audio_codec_bitrate = DEFAULT_AUDIO_OUTPUT_BIT_RATE;  // Ignored if stream_audio_codec_name is blank.
+	std::string x264_preset = X264_DEFAULT_PRESET;
+	std::string x264_tune = X264_DEFAULT_TUNE;
 };
 extern Flags global_flags;
 
