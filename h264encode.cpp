@@ -304,6 +304,16 @@ private:
 	vector<float> audio_queue_file;
 	vector<float> audio_queue_stream;
 
+	unique_ptr<Mux> stream_mux;  // To HTTP.
+	unique_ptr<Mux> file_mux;  // To local disk.
+
+	// While Mux object is constructing, <stream_mux_writing_header> is true,
+	// and the header is being collected into stream_mux_header.
+	bool stream_mux_writing_header;
+	string stream_mux_header;
+
+	bool stream_mux_writing_keyframes = false;
+
 	AVFrame *audio_frame = nullptr;
 	HTTPD *httpd;
 	unique_ptr<FrameReorderer> reorderer;
@@ -366,16 +376,6 @@ private:
 	int frame_height;
 	int frame_width_mbaligned;
 	int frame_height_mbaligned;
-
-	unique_ptr<Mux> stream_mux;  // To HTTP.
-	unique_ptr<Mux> file_mux;  // To local disk.
-
-	// While Mux object is constructing, <stream_mux_writing_header> is true,
-	// and the header is being collected into stream_mux_header.
-	bool stream_mux_writing_header;
-	string stream_mux_header;
-
-	bool stream_mux_writing_keyframes = false;
 };
 
 // Supposedly vaRenderPicture() is supposed to destroy the buffer implicitly,
@@ -2094,6 +2094,7 @@ void H264EncoderImpl::shutdown()
 		frame_queue_nonempty.notify_all();
 	}
 	encode_thread.join();
+	x264_encoder.reset();
 	{
 		unique_lock<mutex> lock(storage_task_queue_mutex);
 		storage_thread_should_quit = true;
