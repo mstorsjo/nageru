@@ -57,12 +57,9 @@ int HTTPD::answer_to_connection(MHD_Connection *connection,
 {
 	// See if the URL ends in “.metacube”.
 	HTTPD::Stream::Framing framing;
-	printf("url=[%s]\n", url);
 	if (strstr(url, ".metacube") == url + strlen(url) - strlen(".metacube")) {
-		printf("metacube\n");
 		framing = HTTPD::Stream::FRAMING_METACUBE;
 	} else {
-		printf("raw\n");
 		framing = HTTPD::Stream::FRAMING_RAW;
 	}
 
