@@ -4,16 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavutil/channel_layout.h>
-#include <libavutil/mathematics.h>
-#include <libavutil/mem.h>
-#include <libavutil/pixfmt.h>
-#include <libavutil/rational.h>
-#include <libavutil/samplefmt.h>
-}
-
 #include <vector>
 
 #include "httpd.h"
@@ -27,8 +17,7 @@ struct MHD_Response;
 
 using namespace std;
 
-HTTPD::HTTPD(int width, int height)
-	: width(width), height(height)
+HTTPD::HTTPD()
 {
 }
 
@@ -42,11 +31,11 @@ void HTTPD::start(int port)
 	                 MHD_OPTION_END);
 }
 
-void HTTPD::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
+void HTTPD::add_data(const char *buf, size_t size, bool keyframe)
 {
 	unique_lock<mutex> lock(streams_mutex);
 	for (Stream *stream : streams) {
-		stream->add_packet(pkt, pts, dts);
+		stream->add_data(buf, size, keyframe ? Stream::DATA_TYPE_KEYFRAME : Stream::DATA_TYPE_OTHER);
 	}
 }
 
@@ -64,16 +53,8 @@ int HTTPD::answer_to_connection(MHD_Connection *connection,
 				const char *version, const char *upload_data,
 				size_t *upload_data_size, void **con_cls)
 {
-	AVOutputFormat *oformat = av_guess_format(global_flags.stream_mux_name.c_str(), nullptr, nullptr);
-	assert(oformat != nullptr);
-
-	// TODO: This is an ugly place to have this logic.
-	const int bit_rate = global_flags.stream_audio_codec_name.empty() ?
-		DEFAULT_AUDIO_OUTPUT_BIT_RATE :
-		global_flags.stream_audio_codec_bitrate;
-
-	int time_base = global_flags.stream_coarse_timebase ? COARSE_TIMEBASE : TIMEBASE;
-	HTTPD::Stream *stream = new HTTPD::Stream(oformat, width, height, time_base, bit_rate);
+	HTTPD::Stream *stream = new HTTPD::Stream;
+	stream->add_data(header.data(), header.size(), Stream::DATA_TYPE_HEADER);
 	{
 		unique_lock<mutex> lock(streams_mutex);
 		streams.insert(stream);
@@ -117,36 +98,6 @@ void HTTPD::request_completed(struct MHD_Connection *connection, void **con_cls,
 	}
 }
 
-HTTPD::Stream::Stream(AVOutputFormat *oformat, int width, int height, int time_base, int bit_rate)
-{
-	AVFormatContext *avctx = avformat_alloc_context();
-	avctx->oformat = oformat;
-	uint8_t *buf = (uint8_t *)av_malloc(MUX_BUFFER_SIZE);
-	avctx->pb = avio_alloc_context(buf, MUX_BUFFER_SIZE, 1, this, nullptr, &HTTPD::Stream::write_packet_thunk, nullptr);
-
-	Mux::Codec video_codec;
-	if (global_flags.uncompressed_video_to_http) {
-		video_codec = Mux::CODEC_NV12;
-	} else {
-		video_codec = Mux::CODEC_H264;
-	}
-
-	avctx->flags = AVFMT_FLAG_CUSTOM_IO;
-
-	// TODO: This is an ugly place to have this logic.
-	const string codec_name = global_flags.stream_audio_codec_name.empty() ?
-		AUDIO_OUTPUT_CODEC_NAME :
-		global_flags.stream_audio_codec_name;
-
-	AVCodec *codec_audio = avcodec_find_encoder_by_name(codec_name.c_str());
-	if (codec_audio == nullptr) {
-		fprintf(stderr, "ERROR: Could not find codec '%s'\n", codec_name.c_str());
-		exit(1);
-	}
-
-	mux.reset(new Mux(avctx, width, height, video_codec, codec_audio, time_base, bit_rate));
-}
-
 ssize_t HTTPD::Stream::reader_callback_thunk(void *cls, uint64_t pos, char *buf, size_t max)
 {
 	HTTPD::Stream *stream = (HTTPD::Stream *)cls;
@@ -184,22 +135,20 @@ ssize_t HTTPD::Stream::reader_callback(uint64_t pos, char *buf, size_t max)
 	return ret;
 }
 
-void HTTPD::Stream::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
+void HTTPD::Stream::add_data(const char *buf, size_t buf_size, HTTPD::Stream::DataType data_type)
 {
-	mux->add_packet(pkt, pts, dts);
-}
+	if (buf_size == 0) {
+		return;
+	}
+	if (data_type == DATA_TYPE_KEYFRAME) {
+		seen_keyframe = true;
+	} else if (data_type == DATA_TYPE_OTHER && !seen_keyframe) {
+		// Start sending only once we see a keyframe.
+		return;
+	}
 
-int HTTPD::Stream::write_packet_thunk(void *opaque, uint8_t *buf, int buf_size)
-{
-	HTTPD::Stream *stream = (HTTPD::Stream *)opaque;
-	return stream->write_packet(buf, buf_size);
-}
-
-int HTTPD::Stream::write_packet(uint8_t *buf, int buf_size)
-{
 	unique_lock<mutex> lock(buffer_mutex);
-	buffered_data.emplace_back((char *)buf, buf_size);
+	buffered_data.emplace_back(buf, buf_size);
 	has_buffered_data.notify_all();	
-	return buf_size;
 }
 

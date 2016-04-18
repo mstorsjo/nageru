@@ -9,8 +9,8 @@
 
 using namespace std;
 
-Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec, const AVCodec *codec_audio, int time_base, int bit_rate)
-	: avctx(avctx)
+Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec, const AVCodec *codec_audio, int time_base, int bit_rate, KeyFrameSignalReceiver *keyframe_signal_receiver)
+	: avctx(avctx), keyframe_signal_receiver(keyframe_signal_receiver)
 {
 	AVCodec *codec_video = avcodec_find_encoder((video_codec == CODEC_H264) ? AV_CODEC_ID_H264 : AV_CODEC_ID_RAWVIDEO);
 	avstream_video = avformat_new_stream(avctx, codec_video);
@@ -70,6 +70,9 @@ Mux::Mux(AVFormatContext *avctx, int width, int height, Codec video_codec, const
 		fprintf(stderr, "avformat_write_header() failed\n");
 		exit(1);
 	}
+
+	// Make sure the header is written before the constructor exits.
+	avio_flush(avctx->pb);
 }
 
 Mux::~Mux()
@@ -82,12 +85,6 @@ Mux::~Mux()
 
 void Mux::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 {
-	if (!seen_keyframe && !(pkt.stream_index == 0 && (pkt.flags & AV_PKT_FLAG_KEY))) {
-		// Wait until we see the first (video) key frame.
-		return;
-	}
-	seen_keyframe = true;
-
 	AVPacket pkt_copy;
 	av_copy_packet(&pkt_copy, &pkt);
 	if (pkt.stream_index == 0) {
@@ -100,6 +97,15 @@ void Mux::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 		assert(false);
 	}
 
+	if (keyframe_signal_receiver) {
+		if (pkt.flags & AV_PKT_FLAG_KEY) {
+			if (avctx->oformat->flags & AVFMT_ALLOW_FLUSH) {
+				av_write_frame(avctx, nullptr);
+			}
+			keyframe_signal_receiver->signal_keyframe();
+		}
+	}
+
 	if (av_interleaved_write_frame(avctx, &pkt_copy) < 0) {
 		fprintf(stderr, "av_interleaved_write_frame() failed\n");
 		exit(1);
@@ -107,4 +113,3 @@ void Mux::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 
 	av_packet_unref(&pkt_copy);
 }
-

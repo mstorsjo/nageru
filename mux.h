@@ -9,28 +9,28 @@ extern "C" {
 #include <libavformat/avio.h>
 }
 
-class PacketDestination {
+class KeyFrameSignalReceiver {
 public:
-	virtual ~PacketDestination() {}
-	virtual void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts) = 0;
+	// Needs to automatically turn the flag off again after actually receiving data.
+	virtual void signal_keyframe() = 0;
 };
 
-class Mux : public PacketDestination {
+class Mux {
 public:
 	enum Codec {
 		CODEC_H264,
 		CODEC_NV12,  // Uncompressed 4:2:0.
 	};
 
-	// Takes ownership of avctx.
-	Mux(AVFormatContext *avctx, int width, int height, Codec video_codec, const AVCodec *codec_audio, int time_base, int bit_rate);
+	// Takes ownership of avctx. <keyframe_signal_receiver> can be nullptr.
+	Mux(AVFormatContext *avctx, int width, int height, Codec video_codec, const AVCodec *codec_audio, int time_base, int bit_rate, KeyFrameSignalReceiver *keyframe_signal_receiver);
 	~Mux();
-	void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts) override;
+	void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts);
 
 private:
-	bool seen_keyframe = false;
 	AVFormatContext *avctx;
 	AVStream *avstream_video, *avstream_audio;
+	KeyFrameSignalReceiver *keyframe_signal_receiver;
 };
 
 #endif  // !defined(_MUX_H)

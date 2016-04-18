@@ -28,11 +28,11 @@ extern "C" {
 #include "x264.h"
 }
 
-class HTTPD;
+class Mux;
 
 class X264Encoder {
 public:
-	X264Encoder(HTTPD *httpd);  // Does not take ownership.
+	X264Encoder(Mux *httpd);  // Does not take ownership.
 	~X264Encoder();
 
 	// <data> is taken to be raw NV12 data of WIDTHxHEIGHT resolution.
@@ -57,7 +57,7 @@ private:
 	// pool.
 	std::unique_ptr<uint8_t[]> frame_pool;
 
-	HTTPD *httpd = nullptr;
+	Mux *mux = nullptr;
 
 	std::thread encoder_thread;
 	x264_t *x264;

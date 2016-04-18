@@ -1,11 +1,7 @@
 #ifndef _HTTPD_H
 #define _HTTPD_H
 
-// A class dealing with stream output to HTTP. Since we generally have very few outputs
-// (end clients are not meant to connect directly to our stream; it should be
-// transcoded by something else and then sent to a reflector), we don't need to
-// care a lot about performance. Thus, we solve this by the simplest possible
-// way, namely having one ffmpeg mux per output.
+// A class dealing with stream output to HTTP.
 
 #include <microhttpd.h>
 #include <stddef.h>
@@ -20,19 +16,17 @@
 
 struct MHD_Connection;
 
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
-#include <libavformat/avio.h>
-}
-
-#include "mux.h"
-
-class HTTPD : public PacketDestination {
+class HTTPD {
 public:
-	HTTPD(int width, int height);
+	HTTPD();
+
+	// Should be called before start().
+	void set_header(const std::string &data) {
+		header = data;
+	}
+
 	void start(int port);
-	void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts) override;
+	void add_data(const char *buf, size_t size, bool keyframe);
 
 private:
 	static int answer_to_connection_thunk(void *cls, MHD_Connection *connection,
@@ -54,29 +48,27 @@ private:
 
 	class Stream {
 	public:
-		Stream(AVOutputFormat *oformat, int width, int height, int time_base, int bit_rate);
-
 		static ssize_t reader_callback_thunk(void *cls, uint64_t pos, char *buf, size_t max);
 		ssize_t reader_callback(uint64_t pos, char *buf, size_t max);
 
-		void add_packet(const AVPacket &pkt, int64_t pts, int64_t dts);
+		enum DataType {
+			DATA_TYPE_HEADER,
+			DATA_TYPE_KEYFRAME,
+			DATA_TYPE_OTHER
+		};
+		void add_data(const char *buf, size_t size, DataType data_type);
 
 	private:
-		static int write_packet_thunk(void *opaque, uint8_t *buf, int buf_size);
-		int write_packet(uint8_t *buf, int buf_size);
-
 		std::mutex buffer_mutex;
 		std::condition_variable has_buffered_data;
 		std::deque<std::string> buffered_data;  // Protected by <mutex>.
 		size_t used_of_buffered_data = 0;  // How many bytes of the first element of <buffered_data> that is already used. Protected by <mutex>.
-
-		std::unique_ptr<Mux> mux;  // Must come last to be destroyed before buffered_data, since the destructor can write bytes.
+		size_t seen_keyframe = false;
 	};
 
 	std::mutex streams_mutex;
 	std::set<Stream *> streams;  // Not owned.
-
-	int width, height;
+	std::string header;
 };
 
 #endif  // !defined(_HTTPD_H)

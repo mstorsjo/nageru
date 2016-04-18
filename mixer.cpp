@@ -139,7 +139,7 @@ void QueueLengthPolicy::update_policy(int queue_length)
 }
 
 Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
-	: httpd(WIDTH, HEIGHT),
+	: httpd(),
 	  num_cards(num_cards),
 	  mixer_surface(create_surface(format)),
 	  h264_encoder_surface(create_surface(format)),
@@ -148,8 +148,6 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 	  limiter(OUTPUT_FREQUENCY),
 	  compressor(OUTPUT_FREQUENCY)
 {
-	httpd.start(9095);
-
 	CHECK(init_movit(MOVIT_SHADER_DIR, MOVIT_DEBUG_OFF));
 	check_error();
 
@@ -178,6 +176,9 @@ Mixer::Mixer(const QSurfaceFormat &format, unsigned num_cards)
 
 	h264_encoder.reset(new H264Encoder(h264_encoder_surface, global_flags.va_display, WIDTH, HEIGHT, &httpd));
 	h264_encoder->open_output_file(generate_local_dump_filename(/*frame=*/0).c_str());
+
+	// Start listening for clients only once H264Encoder has written its header, if any.
+	httpd.start(9095);
 
 	// First try initializing the PCI devices, then USB, until we have the desired number of cards.
 	unsigned num_pci_devices = 0, num_usb_devices = 0;

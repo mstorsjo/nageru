@@ -1,7 +1,8 @@
 #include <string.h>
+#include <unistd.h>
 
 #include "defs.h"
-#include "httpd.h"
+#include "mux.h"
 #include "timebase.h"
 #include "x264encode.h"
 
@@ -11,8 +12,8 @@ extern "C" {
 
 using namespace std;
 
-X264Encoder::X264Encoder(HTTPD *httpd)
-	: httpd(httpd)
+X264Encoder::X264Encoder(Mux *mux)
+	: mux(mux)
 {
 	frame_pool.reset(new uint8_t[WIDTH * HEIGHT * 2 * X264_QUEUE_LENGTH]);
 	for (unsigned i = 0; i < X264_QUEUE_LENGTH; ++i) {
@@ -166,5 +167,5 @@ void X264Encoder::encode_frame(X264Encoder::QueuedFrame qf)
 		pkt.flags = 0;
 	}
 
-	httpd->add_packet(pkt, pic.i_pts, pic.i_dts);
+	mux->add_packet(pkt, pic.i_pts, pic.i_dts);
 }	
