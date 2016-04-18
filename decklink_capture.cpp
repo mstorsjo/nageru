@@ -72,9 +72,9 @@ size_t memcpy_interleaved_fastpath(uint8_t *dest1, uint8_t *dest2, const uint8_t
 	assert(((limit - src) % 64) == 0);
 
 #if __AVX2__
-	const __restrict __m256i *in = (const __m256i *)src;
-	__restrict __m256i *out1 = (__m256i *)dest1;
-	__restrict __m256i *out2 = (__m256i *)dest2;
+	const __m256i * __restrict in = (const __m256i *)src;
+	__m256i * __restrict out1 = (__m256i *)dest1;
+	__m256i * __restrict out2 = (__m256i *)dest2;
 
 	__m256i shuffle_cw = _mm256_set_epi8(
 		15, 13, 11, 9, 7, 5, 3, 1, 14, 12, 10, 8, 6, 4, 2, 0,
@@ -102,9 +102,9 @@ size_t memcpy_interleaved_fastpath(uint8_t *dest1, uint8_t *dest2, const uint8_t
 		consumed += 64;
 	}
 #else
-	const __restrict __m128i *in = (const __m128i *)src;
-	__restrict __m128i *out1 = (__m128i *)dest1;
-	__restrict __m128i *out2 = (__m128i *)dest2;
+	const __m128i * __restrict in = (const __m128i *)src;
+	__m128i * __restrict out1 = (__m128i *)dest1;
+	__m128i * __restrict out2 = (__m128i *)dest2;
 
 	__m128i mask_lower_byte = _mm_set1_epi16(0x00ff);
 	while (in < (const __m128i *)limit) {
