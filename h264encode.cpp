@@ -245,6 +245,12 @@ private:
 				    AVCodecContext *ctx,
 				    AVAudioResampleContext *resampler,
 				    const vector<Mux *> &muxes);
+	void encode_last_audio(vector<float> *audio_queue,
+	                       int64_t audio_pts,
+			       AVCodecContext *ctx,
+			       AVAudioResampleContext *resampler,
+			       const vector<Mux *> &muxes);
+	void encode_remaining_audio();
 	void storage_task_enqueue(storage_task task);
 	void save_codeddata(storage_task task);
 	int render_packedsequence();
@@ -293,6 +299,7 @@ private:
 
 	map<int, PendingFrame> pending_video_frames;  // under frame_queue_mutex
 	map<int64_t, vector<float>> pending_audio_frames;  // under frame_queue_mutex
+	int64_t last_audio_pts = 0;  // The first pts after all audio we've encoded.
 	QSurface *surface;
 
 	AVCodecContext *context_audio_file;
@@ -1694,6 +1701,7 @@ void H264EncoderImpl::save_codeddata(storage_task task)
 		} else {
 			encode_audio(audio, &audio_queue_file, audio_pts, context_audio_file, resampler_audio_file, { stream_mux.get(), file_mux.get() });
 		}
+		last_audio_pts = audio_pts + audio.size() * TIMEBASE / (OUTPUT_FREQUENCY * 2);
 
 		if (audio_pts == task.pts) break;
 	}
@@ -1741,6 +1749,7 @@ void H264EncoderImpl::encode_audio_one_frame(
 	AVAudioResampleContext *resampler,
 	const vector<Mux *> &muxes)
 {
+	audio_frame->pts = audio_pts + global_delay();
 	audio_frame->nb_samples = num_samples;
 	audio_frame->channel_layout = AV_CH_LAYOUT_STEREO;
 	audio_frame->format = ctx->sample_fmt;
@@ -1767,15 +1776,49 @@ void H264EncoderImpl::encode_audio_one_frame(
 		pkt.stream_index = 1;
 		pkt.flags = 0;
 		for (Mux *mux : muxes) {
-			mux->add_packet(pkt, audio_pts + global_delay(), audio_pts + global_delay());
+			mux->add_packet(pkt, pkt.pts, pkt.dts);
 		}
 	}
 
 	av_freep(&audio_frame->data[0]);
 
-	// TODO: Delayed frames.
 	av_frame_unref(audio_frame);
 	av_free_packet(&pkt);
+}
+
+void H264EncoderImpl::encode_last_audio(
+	vector<float> *audio_queue,
+	int64_t audio_pts,
+	AVCodecContext *ctx,
+	AVAudioResampleContext *resampler,
+	const vector<Mux *> &muxes)
+{
+	if (!audio_queue->empty()) {
+		// Last frame can be whatever size we want.
+		assert(audio_queue->size() % 2 == 0);
+		encode_audio_one_frame(&(*audio_queue)[0], audio_queue->size() / 2, audio_pts, ctx, resampler, muxes);
+		audio_queue->clear();
+	}
+
+	if (ctx->codec->capabilities & AV_CODEC_CAP_DELAY) {
+		// Collect any delayed frames.
+		for ( ;; ) {
+			int got_output = 0;
+			AVPacket pkt;
+			av_init_packet(&pkt);
+			pkt.data = nullptr;
+			pkt.size = 0;
+			avcodec_encode_audio2(ctx, &pkt, nullptr, &got_output);
+			if (!got_output) break;
+
+			pkt.stream_index = 1;
+			pkt.flags = 0;
+			for (Mux *mux : muxes) {
+				mux->add_packet(pkt, pkt.pts, pkt.dts);
+			}
+			av_free_packet(&pkt);
+		}
+	}
 }
 
 // this is weird. but it seems to put a new frame onto the queue
@@ -2224,6 +2267,7 @@ void H264EncoderImpl::encode_thread_func()
 				// but nobody else uses it at this point, since we're shutting down,
 				// so there's no contention.
 				encode_remaining_frames_as_p(encoding_frame_num, gop_start_display_frame_num, last_dts);
+				encode_remaining_audio();
 				return;
 			} else {
 				frame = move(pending_video_frames[display_frame_num]);
@@ -2273,6 +2317,32 @@ void H264EncoderImpl::encode_remaining_frames_as_p(int encoding_frame_num, int g
 				x264_encoder->add_frame(output_frame.first, output_frame.second);
 			}
 		}
+	}
+}
+
+void H264EncoderImpl::encode_remaining_audio()
+{
+	// This really ought to be empty by now, but just to be sure...
+	for (auto &pending_frame : pending_audio_frames) {
+		int64_t audio_pts = pending_frame.first;
+		vector<float> audio = move(pending_frame.second);
+
+		if (context_audio_stream) {
+			encode_audio(audio, &audio_queue_file, audio_pts, context_audio_file, resampler_audio_file, { file_mux.get() });
+			encode_audio(audio, &audio_queue_stream, audio_pts, context_audio_stream, resampler_audio_stream, { stream_mux.get() });
+		} else {
+			encode_audio(audio, &audio_queue_file, audio_pts, context_audio_file, resampler_audio_file, { stream_mux.get(), file_mux.get() });
+		}
+		last_audio_pts = audio_pts + audio.size() * TIMEBASE / (OUTPUT_FREQUENCY * 2);
+	}
+	pending_audio_frames.clear();
+
+	// Encode any leftover audio in the queues, and also any delayed frames.
+	if (context_audio_stream) {
+		encode_last_audio(&audio_queue_file, last_audio_pts, context_audio_file, resampler_audio_file, { file_mux.get() });
+		encode_last_audio(&audio_queue_stream, last_audio_pts, context_audio_stream, resampler_audio_stream, { stream_mux.get() });
+	} else {
+		encode_last_audio(&audio_queue_file, last_audio_pts, context_audio_file, resampler_audio_file, { stream_mux.get(), file_mux.get() });
 	}
 }
 
