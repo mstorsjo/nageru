@@ -8,6 +8,7 @@
 
 #include <epoxy/gl.h>
 #include <memory>
+#include <mutex>
 
 typedef std::shared_ptr<__GLsync> RefCountedGLsyncBase;
 
@@ -16,7 +17,23 @@ public:
 	RefCountedGLsync() {}
 
 	RefCountedGLsync(GLenum condition, GLbitfield flags) 
-		: RefCountedGLsyncBase(glFenceSync(condition, flags), glDeleteSync) {}
+		: RefCountedGLsyncBase(locked_glFenceSync(condition, flags), glDeleteSync) {}
+
+private:
+	// These are to work around apitrace bug #446.
+	static GLsync locked_glFenceSync(GLenum condition, GLbitfield flags)
+	{
+		std::lock_guard<std::mutex> lock(fence_lock);
+		return glFenceSync(condition, flags);
+	}
+
+	static void locked_glDeleteSync(GLsync sync)
+	{
+		std::lock_guard<std::mutex> lock(fence_lock);
+		glDeleteSync(sync);
+	}
+
+	static std::mutex fence_lock;
 };
 
 #endif  // !defined(_REF_COUNTED_GL_SYNC_H)
