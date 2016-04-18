@@ -48,6 +48,12 @@ private:
 
 	class Stream {
 	public:
+		enum Framing {
+			FRAMING_RAW,
+			FRAMING_METACUBE
+		};
+		Stream(Framing framing) : framing(framing) {}
+
 		static ssize_t reader_callback_thunk(void *cls, uint64_t pos, char *buf, size_t max);
 		ssize_t reader_callback(uint64_t pos, char *buf, size_t max);
 
@@ -59,6 +65,8 @@ private:
 		void add_data(const char *buf, size_t size, DataType data_type);
 
 	private:
+		Framing framing;
+
 		std::mutex buffer_mutex;
 		std::condition_variable has_buffered_data;
 		std::deque<std::string> buffered_data;  // Protected by <mutex>.

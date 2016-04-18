@@ -1,3 +1,4 @@
+#include <arpa/inet.h>
 #include <assert.h>
 #include <microhttpd.h>
 #include <stdio.h>
@@ -10,6 +11,7 @@
 
 #include "defs.h"
 #include "flags.h"
+#include "metacube2.h"
 #include "timebase.h"
 
 struct MHD_Connection;
@@ -53,7 +55,18 @@ int HTTPD::answer_to_connection(MHD_Connection *connection,
 				const char *version, const char *upload_data,
 				size_t *upload_data_size, void **con_cls)
 {
-	HTTPD::Stream *stream = new HTTPD::Stream;
+	// See if the URL ends in “.metacube”.
+	HTTPD::Stream::Framing framing;
+	printf("url=[%s]\n", url);
+	if (strstr(url, ".metacube") == url + strlen(url) - strlen(".metacube")) {
+		printf("metacube\n");
+		framing = HTTPD::Stream::FRAMING_METACUBE;
+	} else {
+		printf("raw\n");
+		framing = HTTPD::Stream::FRAMING_RAW;
+	}
+
+	HTTPD::Stream *stream = new HTTPD::Stream(framing);
 	stream->add_data(header.data(), header.size(), Stream::DATA_TYPE_HEADER);
 	{
 		unique_lock<mutex> lock(streams_mutex);
@@ -64,6 +77,11 @@ int HTTPD::answer_to_connection(MHD_Connection *connection,
 	// Does not strictly have to be equal to MUX_BUFFER_SIZE.
 	MHD_Response *response = MHD_create_response_from_callback(
 		(size_t)-1, MUX_BUFFER_SIZE, &HTTPD::Stream::reader_callback_thunk, stream, &HTTPD::free_stream);
+
+	// TODO: Content-type?
+	if (framing == HTTPD::Stream::FRAMING_METACUBE) {
+		MHD_add_response_header(response, "Content-encoding", "metacube");
+	}
 	int ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
 	//MHD_destroy_response(response);
 
@@ -148,6 +166,21 @@ void HTTPD::Stream::add_data(const char *buf, size_t buf_size, HTTPD::Stream::Da
 	}
 
 	unique_lock<mutex> lock(buffer_mutex);
+
+	if (framing == FRAMING_METACUBE) {
+		metacube2_block_header hdr;
+		memcpy(hdr.sync, METACUBE2_SYNC, sizeof(hdr.sync));
+		hdr.size = htonl(buf_size);
+		int flags = 0;
+		if (data_type == DATA_TYPE_HEADER) {
+			flags |= METACUBE_FLAGS_HEADER;
+		} else if (data_type == DATA_TYPE_OTHER) {
+			flags |= METACUBE_FLAGS_NOT_SUITABLE_FOR_STREAM_START;
+		}
+		hdr.flags = htons(flags);
+		hdr.csum = htons(metacube2_compute_crc(&hdr));
+		buffered_data.emplace_back((char *)&hdr, sizeof(hdr));
+	}
 	buffered_data.emplace_back(buf, buf_size);
 	has_buffered_data.notify_all();	
 }
