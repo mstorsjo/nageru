@@ -26,6 +26,7 @@ X264Encoder::X264Encoder(Mux *mux)
 X264Encoder::~X264Encoder()
 {
 	should_quit = true;
+	queued_frames_nonempty.notify_all();
 	encoder_thread.join();
 }
 
