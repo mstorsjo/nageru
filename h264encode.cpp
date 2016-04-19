@@ -987,10 +987,10 @@ static const char *rc_to_string(int rc_mode)
 void H264EncoderImpl::enable_zerocopy_if_possible()
 {
 	if (global_flags.uncompressed_video_to_http) {
-		fprintf(stderr, "Disabling zerocopy H.264 encoding due to --uncompressed_video_to_http.\n");
+		fprintf(stderr, "Disabling zerocopy H.264 encoding due to --http-uncompressed-video.\n");
 		use_zerocopy = false;
 	} else if (global_flags.x264_video_to_http) {
-		fprintf(stderr, "Disabling zerocopy H.264 encoding due to --x264_video_to_http.\n");
+		fprintf(stderr, "Disabling zerocopy H.264 encoding due to --http-x264-video.\n");
 		use_zerocopy = false;
 	} else {
 		use_zerocopy = true;
