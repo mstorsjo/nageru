@@ -103,13 +103,28 @@ void Mux::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 
 	if (keyframe_signal_receiver) {
 		if (pkt.flags & AV_PKT_FLAG_KEY) {
+			// Make sure any queued packets, that are to be written before the
+			// current packet, actually get sent to the muxer, before flushing.
+			// If the audio stream is ahead (i.e., the audio stream has some queued packets,
+			// but the video stream doesn't), this works perfectly. If it is behind,
+			// the next fragment will start with audio packets overlapping the previous
+			// fragment's video data.
+			AVPacket flush_pkt = pkt_copy;
+			flush_pkt.buf = nullptr;
+			flush_pkt.data = nullptr;
+			flush_pkt.size = 0;
+			flush_pkt.flags |= AV_PKT_FLAG_SENTINEL;
+			av_interleaved_write_frame(avctx, &flush_pkt);
+
 			if (avctx->oformat->flags & AVFMT_SIGNAL_EMPTY_PKT) {
 				// Signal the timestamps of the next packet to be written before flushing
 				AVPacket next_pkt = pkt_copy;
 				next_pkt.buf = nullptr;
 				next_pkt.data = nullptr;
 				next_pkt.size = 0;
-				av_interleaved_write_frame(avctx, &next_pkt);
+				// If the interleave queues are flushed above, write this directly to the
+				// muxer, past the interleave queues.
+				av_write_frame(avctx, &next_pkt);
 			}
 
 			av_write_frame(avctx, nullptr);
