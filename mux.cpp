@@ -103,9 +103,7 @@ void Mux::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 
 	if (keyframe_signal_receiver) {
 		if (pkt.flags & AV_PKT_FLAG_KEY) {
-			if (avctx->oformat->flags & AVFMT_ALLOW_FLUSH) {
-				av_write_frame(avctx, nullptr);
-			}
+			av_write_frame(avctx, nullptr);
 			keyframe_signal_receiver->signal_keyframe();
 		}
 	}
