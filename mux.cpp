@@ -103,6 +103,15 @@ void Mux::add_packet(const AVPacket &pkt, int64_t pts, int64_t dts)
 
 	if (keyframe_signal_receiver) {
 		if (pkt.flags & AV_PKT_FLAG_KEY) {
+			if (avctx->oformat->flags & AVFMT_SIGNAL_EMPTY_PKT) {
+				// Signal the timestamps of the next packet to be written before flushing
+				AVPacket next_pkt = pkt_copy;
+				next_pkt.buf = nullptr;
+				next_pkt.data = nullptr;
+				next_pkt.size = 0;
+				av_interleaved_write_frame(avctx, &next_pkt);
+			}
+
 			av_write_frame(avctx, nullptr);
 			keyframe_signal_receiver->signal_keyframe();
 		}
